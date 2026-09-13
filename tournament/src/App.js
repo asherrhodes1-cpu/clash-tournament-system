@@ -677,6 +677,12 @@ export default function TournamentApp() {
                 >
                   Dashboard
                 </button>
+                <button
+                  onClick={() => setCurrentPage('profile')}
+                  className="hover:text-neutral-300 transition"
+                >
+                  Profile
+                </button>
                 {currentUser.isStaff && (
                   <button
                     onClick={() => setCurrentPage('create')}
@@ -724,6 +730,15 @@ export default function TournamentApp() {
                   className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
                 >
                   Dashboard
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentPage('profile');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                >
+                  Profile
                 </button>
                 {currentUser.isStaff && (
                   <button
@@ -851,6 +866,10 @@ export default function TournamentApp() {
             onUpdateFlagStatus={handleUpdateFlagStatus}
             onAddResponse={handleAddFlagResponse}
           />
+        )}
+
+        {currentPage === 'profile' && currentUser && (
+          <ProfilePage user={currentUser} tournaments={tournaments} />
         )}
       </div>
 
@@ -1154,6 +1173,8 @@ function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onSta
   const userTournaments = tournaments.filter(t => t.createdBy === user.username || t.players.includes(user.username));
   const pendingMatches = userMatches
     .filter(m => m.status === 'waiting_for_opponent' || m.status === 'pending' || m.status === 'scheduled' || m.status === 'active');
+  const openTournaments = tournaments.filter(t => t.status !== 'completed');
+  const pastTournaments = tournaments.filter(t => t.status === 'completed');
 
   return (
     <div className="space-y-8">
@@ -1179,10 +1200,10 @@ function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onSta
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
         <h2 className="text-2xl font-bold mb-4">Available Tournaments</h2>
         <div className="space-y-3">
-          {tournaments.length === 0 ? (
+          {openTournaments.length === 0 ? (
             <p className="text-gray-400">No tournaments yet. Create one to get started!</p>
           ) : (
-            tournaments.map(tournament => (
+            openTournaments.map(tournament => (
               <TournamentCard
                 key={tournament.id}
                 tournament={tournament}
@@ -1195,6 +1216,81 @@ function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onSta
             ))
           )}
         </div>
+      </div>
+
+      {pastTournaments.length > 0 && (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <h2 className="text-2xl font-bold mb-4">Past Tournaments</h2>
+          <div className="space-y-3">
+            {pastTournaments.map(tournament => (
+              <TournamentCard
+                key={tournament.id}
+                tournament={tournament}
+                user={user}
+                onJoin={onJoinTournament}
+                onStart={onStartTournament}
+                onDelete={onDeleteTournament}
+                onView={() => onSelectTournament(tournament.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function medalFor(place) {
+  return place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : '🎖️';
+}
+
+function ProfilePage({ user, tournaments }) {
+  const placed = tournaments
+    .filter(t => t.status === 'completed' && t.placements && t.placements[user.username])
+    .sort((a, b) => a.placements[user.username] - b.placements[user.username]);
+
+  const championships = placed.filter(t => t.placements[user.username] === 1).length;
+  const runnerUps = placed.filter(t => t.placements[user.username] === 2).length;
+
+  return (
+    <div className="space-y-8">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <h1 className="text-3xl font-bold mb-1">{user.username}</h1>
+        <p className="text-gray-400">{user.clashTag}</p>
+        <div className="mt-4 grid grid-cols-3 gap-4">
+          <div>
+            <p className="text-sm text-gray-400">Tournaments Placed</p>
+            <p className="text-2xl font-bold">{placed.length}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-400">Championships</p>
+            <p className="text-2xl font-bold">🥇 {championships}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-400">Runner-up Finishes</p>
+            <p className="text-2xl font-bold">🥈 {runnerUps}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <h2 className="text-xl font-bold mb-4">Achievements</h2>
+        {placed.length === 0 ? (
+          <p className="text-gray-400 text-sm">No completed tournaments yet. Finish one to earn your first badge!</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {placed.map(t => (
+              <div key={t.id} className="bg-gray-700 rounded p-4 flex items-center gap-3">
+                <span className="text-3xl">{medalFor(t.placements[user.username])}</span>
+                <div>
+                  <p className="font-bold">{ordinal(t.placements[user.username])} place</p>
+                  <p className="text-sm text-gray-300">{t.name}</p>
+                  <p className="text-xs text-gray-500">Champion: {t.champion}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1231,6 +1327,9 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         <div className="text-sm text-gray-300 mt-1">
           <p>Creator: {tournament.createdBy}</p>
           <p>Players: {tournament.players.length} | Status: <span className="text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
+          {tournament.status === 'completed' && tournament.champion && (
+            <p>🏆 Champion: <span className="text-white font-bold">{tournament.champion}</span></p>
+          )}
           {tournament.signupDeadline && (
             <p>Deadline: {getDeadlineDisplay()}</p>
           )}

@@ -164,6 +164,30 @@ async function handleTimeouts(tournamentRef, matches) {
   if (hasWrites) await batch.commit();
 }
 
+// Places the champion at #1, then groups every eliminated player by the round
+// they lost in (later round = better placement), tying players from the same
+// round at the same place - e.g. both semifinal losers place 3rd.
+function computePlacements(champion, matches) {
+  const placements = { [champion]: 1 };
+  const rounds = [...new Set(matches.map((m) => m.round))].sort((a, b) => b - a);
+
+  let nextPlace = 2;
+  for (const round of rounds) {
+    const losers = [...new Set(
+      matches
+        .filter((m) => m.round === round && m.status === 'completed' && m.winner)
+        .map((m) => (m.winner === m.player1 ? m.player2 : m.player1))
+        .filter((p) => p && p !== 'BYE' && !(p in placements))
+    )];
+
+    if (losers.length === 0) continue;
+    losers.forEach((p) => { placements[p] = nextPlace; });
+    nextPlace += losers.length;
+  }
+
+  return placements;
+}
+
 async function handleRoundAdvancement(tournamentRef, tournament, matches) {
   const roundNumbers = [...new Set(matches.map((m) => m.round))];
 
@@ -184,7 +208,8 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
       .filter((w) => w && !(tournament.removedPlayers || []).includes(w));
 
     if (winners.length === 1) {
-      await tournamentRef.update({ status: 'completed', champion: winners[0] });
+      const placements = computePlacements(winners[0], matches);
+      await tournamentRef.update({ status: 'completed', champion: winners[0], placements });
       return;
     }
 
