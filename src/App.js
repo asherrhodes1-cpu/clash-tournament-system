@@ -831,8 +831,8 @@ export default function TournamentApp() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center gap-2">
-                <Trophy className="w-8 h-8 text-yellow-500" />
-                <span className="font-bold text-xl hidden sm:inline">Clash Tournaments</span>
+                <img src="/logo.png" alt="Logo" className="w-8 h-8" />
+                <span className="font-bold text-xl hidden sm:inline">MercifulAj</span>
               </div>
 
               <div className="hidden md:flex items-center gap-6">
@@ -1145,8 +1145,8 @@ function LoginPage({ onLogin }) {
     return (
       <div className="max-w-md mx-auto mt-20">
         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
-          <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-2">
-            <Trophy className="w-8 h-8 text-yellow-500" />
+          <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-3">
+            <img src="/logo.png" alt="Logo" className="w-10 h-10" />
             Create Account
           </h1>
 
@@ -1240,9 +1240,9 @@ function LoginPage({ onLogin }) {
   return (
     <div className="max-w-md mx-auto mt-20">
       <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
-        <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-2">
-          <Trophy className="w-8 h-8 text-yellow-500" />
-          Clash Tournaments
+        <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-3">
+          <img src="/logo.png" alt="Logo" className="w-10 h-10" />
+          MercifulAj
         </h1>
 
         {error && (
@@ -1379,7 +1379,7 @@ function DashboardPage({ user, tournaments, onJoinTournament, onStartTournament,
   );
 }
 
-function TournamentCard({ tournament, user, onJoin, onStart, onView }) {
+function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView }) {
   const isCreator = tournament.createdBy === user.username;
   const hasJoined = tournament.players.includes(user.username);
   const now = new Date();
@@ -1404,8 +1404,8 @@ function TournamentCard({ tournament, user, onJoin, onStart, onView }) {
   };
 
   return (
-    <div className="bg-gray-700 rounded p-4 flex justify-between items-center">
-      <div className="flex-1">
+    <div className="bg-gray-700 rounded p-4 flex justify-between items-center flex-wrap gap-4">
+      <div className="flex-1 min-w-0">
         <h3 className="font-bold text-lg">{tournament.name}</h3>
         <div className="text-sm text-gray-300 mt-1">
           <p>Creator: {tournament.createdBy}</p>
@@ -1415,7 +1415,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onView }) {
           )}
         </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         {canJoin && (
           <button
             onClick={() => onJoin(tournament.id)}
@@ -1447,6 +1447,15 @@ function TournamentCard({ tournament, user, onJoin, onStart, onView }) {
         >
           View
         </button>
+        {isCreator && user.isStaff && (
+          <button
+            onClick={() => onDelete(tournament.id)}
+            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm transition"
+            title="Delete tournament"
+          >
+            🗑️ Delete
+          </button>
+        )}
       </div>
     </div>
   );
