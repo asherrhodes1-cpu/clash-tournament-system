@@ -33,6 +33,36 @@ export function generateSeededBracket(players, playerStats) {
   return pairs;
 }
 
+function nextPowerOfTwo(n) {
+  let p = 1;
+  while (p < n) p *= 2;
+  return p;
+}
+
+// Seeds round 1 of the winners bracket for a double-elimination tournament.
+// Unlike generateSeededBracket (which just byes off one odd leftover), this
+// pads all the way up to a power of two so the bracket has a fixed, known
+// number of winners-bracket rounds - the losers-bracket routing depends on
+// that being fixed and known in advance.
+export function seedDoubleEliminationBracket(players, playerStats) {
+  const bracketSize = nextPowerOfTwo(players.length);
+  const sorted = [...players].sort((a, b) => {
+    const aStats = playerStats[a] || { bestBuilderBaseTrophies: 0 };
+    const bStats = playerStats[b] || { bestBuilderBaseTrophies: 0 };
+    return bStats.bestBuilderBaseTrophies - aStats.bestBuilderBaseTrophies;
+  });
+
+  const slots = [...sorted];
+  while (slots.length < bracketSize) slots.push('BYE');
+
+  const pairs = [];
+  for (let i = 0; i < slots.length; i += 2) {
+    pairs.push([slots[i], slots[i + 1]]);
+  }
+
+  return { pairs, bracketSize };
+}
+
 export function getTimeRemaining(startTime) {
   if (!startTime) return null;
   const now = new Date().getTime();

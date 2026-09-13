@@ -1295,6 +1295,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
   const [uploading, setUploading] = useState(false);
   const [showVerifyForm, setShowVerifyForm] = useState(false);
   const [verifyClashTag, setVerifyClashTag] = useState('');
+  const [editingVerifyTag, setEditingVerifyTag] = useState(false);
   const [verifyApiToken, setVerifyApiToken] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState('');
@@ -1352,7 +1353,8 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
     e.preventDefault();
     setVerifyError('');
 
-    if (!verifyClashTag.trim().startsWith('#')) {
+    const tagToVerify = editingVerifyTag ? verifyClashTag.trim().toUpperCase() : profile?.clashTag;
+    if (!tagToVerify || !tagToVerify.startsWith('#')) {
       setVerifyError('Clash tag must start with #');
       return;
     }
@@ -1363,8 +1365,9 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
 
     setVerifying(true);
     try {
-      await verifyClashAccount({ clashTag: verifyClashTag.trim().toUpperCase(), apiToken: verifyApiToken.trim() });
+      await verifyClashAccount({ clashTag: tagToVerify, apiToken: verifyApiToken.trim() });
       setShowVerifyForm(false);
+      setEditingVerifyTag(false);
       setVerifyClashTag('');
       setVerifyApiToken('');
     } catch (err) {
@@ -1459,33 +1462,34 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
         </div>
 
         <div className="mt-4 p-3 bg-gray-700 rounded">
-          {profile?.clashVerified ? (
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="text-sm">
-                <span className="text-white font-bold">✓ Verified Clash Account</span>
-                <span className="text-gray-300 ml-3">Builder Hall {profile.builderHallLevel}</span>
-                <span className="text-gray-300 ml-3">{profile.bestBuilderBaseTrophies} best trophies</span>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className={`text-sm font-bold ${profile?.clashVerified ? 'text-white' : 'text-gray-400 font-normal'}`}>
+              {profile?.clashVerified ? '✓ Verified Clash Account' : 'Clash of Clans account not verified'}
+            </span>
+            {isOwnProfile && (
+              <button
+                onClick={() => setShowVerifyForm(!showVerifyForm)}
+                className={
+                  profile?.clashVerified
+                    ? 'text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition'
+                    : 'text-xs bg-white hover:bg-neutral-200 text-black font-bold px-2 py-1 rounded transition'
+                }
+              >
+                {profile?.clashVerified ? 'Re-verify' : 'Verify Now'}
+              </button>
+            )}
+          </div>
+
+          {profile?.clashVerified && (
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="bg-gray-800 rounded p-3 text-center">
+                <p className="text-xs text-gray-400 uppercase tracking-wide">Builder Hall</p>
+                <p className="text-xl font-bold text-white mt-1">{profile.builderHallLevel}</p>
               </div>
-              {isOwnProfile && (
-                <button
-                  onClick={() => setShowVerifyForm(!showVerifyForm)}
-                  className="text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition"
-                >
-                  Re-verify
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <span className="text-sm text-gray-400">Clash of Clans account not verified</span>
-              {isOwnProfile && (
-                <button
-                  onClick={() => setShowVerifyForm(!showVerifyForm)}
-                  className="text-xs bg-white hover:bg-neutral-200 text-black font-bold px-2 py-1 rounded transition"
-                >
-                  Verify Now
-                </button>
-              )}
+              <div className="bg-gray-800 rounded p-3 text-center">
+                <p className="text-xs text-gray-400 uppercase tracking-wide">Best Trophies</p>
+                <p className="text-xl font-bold text-white mt-1">{profile.bestBuilderBaseTrophies}</p>
+              </div>
             </div>
           )}
 
@@ -1494,13 +1498,26 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
               {verifyError && (
                 <div className="p-2 bg-neutral-800 border border-white rounded text-white text-xs">{verifyError}</div>
               )}
-              <input
-                type="text"
-                value={verifyClashTag}
-                onChange={(e) => setVerifyClashTag(e.target.value.toUpperCase())}
-                placeholder="e.g., #ABC123XYZ"
-                className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white"
-              />
+              {editingVerifyTag ? (
+                <input
+                  type="text"
+                  value={verifyClashTag}
+                  onChange={(e) => setVerifyClashTag(e.target.value.toUpperCase())}
+                  placeholder="e.g., #ABC123XYZ"
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white"
+                />
+              ) : (
+                <p className="text-xs text-gray-400">
+                  Verifying <span className="text-white font-bold">{profile?.clashTag || 'no tag on file'}</span>.{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setEditingVerifyTag(true); setVerifyClashTag(profile?.clashTag || ''); }}
+                    className="underline hover:text-white"
+                  >
+                    Wrong tag?
+                  </button>
+                </p>
+              )}
               <input
                 type="text"
                 value={verifyApiToken}
@@ -1521,7 +1538,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowVerifyForm(false); setVerifyError(''); }}
+                  onClick={() => { setShowVerifyForm(false); setEditingVerifyTag(false); setVerifyError(''); }}
                   className="border border-gray-600 hover:border-white px-3 py-1 rounded text-sm transition"
                 >
                   Cancel
@@ -1761,7 +1778,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
               className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
             >
               <option value="single_elimination">Single Elimination</option>
-              <option value="double_elimination">Double Elimination (Coming Soon)</option>
+              <option value="double_elimination">Double Elimination</option>
             </select>
           </div>
 
@@ -1848,6 +1865,21 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
   };
 
   const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b);
+  const isDoubleElim = tournament.format === 'double_elimination';
+  const bracketOrder = { winners: 0, losers: 1, grand_final: 2 };
+  const bracketSections = isDoubleElim
+    ? [...new Set(matches.map(m => `${m.bracket}:${m.round}`))]
+        .map(key => {
+          const [bracket, round] = key.split(':');
+          return { bracket, round: parseInt(round, 10) };
+        })
+        .sort((a, b) => (bracketOrder[a.bracket] - bracketOrder[b.bracket]) || (a.round - b.round))
+    : null;
+  const sectionLabel = ({ bracket, round }) => {
+    if (bracket === 'winners') return `Winners Bracket — Round ${round}`;
+    if (bracket === 'losers') return `Losers Bracket — Round ${round}`;
+    return round === 1 ? 'Grand Final' : 'Grand Final — Bracket Reset';
+  };
 
   return (
     <div className="space-y-8">
@@ -1917,7 +1949,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       )}
 
       {tournament.status === 'completed' && tournament.champion && (
-        <TournamentResults tournament={tournament} matches={matches} onViewProfile={onViewProfile} />
+        <TournamentResults tournament={tournament} onViewProfile={onViewProfile} />
       )}
 
       <div className="flex items-center justify-between">
@@ -1943,7 +1975,28 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       </div>
 
       {viewMode === 'bracket' ? (
-        <BracketView matches={matches} rounds={rounds} />
+        <BracketView matches={matches} rounds={rounds} isDoubleElim={isDoubleElim} bracketSize={tournament.bracketSize} />
+      ) : isDoubleElim ? (
+        bracketSections.map(({ bracket, round }) => (
+          <div key={`${bracket}-${round}`} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 className="text-xl font-bold mb-4">{sectionLabel({ bracket, round })}</h2>
+            <div className="space-y-3">
+              {matches
+                .filter(m => m.bracket === bracket && m.round === round)
+                .map(match => (
+                  <MatchCard
+                    key={match.id}
+                    match={match}
+                    user={user}
+                    onSelectMatch={() => onSelectMatch(match.id)}
+                    onPlayerReady={() => onPlayerReady(match.id)}
+                    onFlagMatch={() => onFlagMatch(match.id)}
+                    onViewProfile={onViewProfile}
+                  />
+                ))}
+            </div>
+          </div>
+        ))
       ) : (
         rounds.map(round => (
           <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
@@ -1976,33 +2029,21 @@ function ordinal(n) {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
-function buildStandings(tournament, matches) {
-  if (!tournament.champion) return [];
+function buildStandings(tournament) {
+  if (!tournament.placements) return [];
 
-  const standings = [{ place: 1, players: [tournament.champion] }];
-  const placedSoFar = new Set([tournament.champion]);
-  const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => b - a);
-
-  let nextPlace = 2;
-  for (const round of rounds) {
-    const losers = [...new Set(
-      matches
-        .filter(m => m.round === round && m.status === 'completed' && m.winner)
-        .map(m => (m.winner === m.player1 ? m.player2 : m.player1))
-        .filter(p => p && p !== 'BYE' && !placedSoFar.has(p))
-    )];
-
-    if (losers.length === 0) continue;
-    losers.forEach(p => placedSoFar.add(p));
-    standings.push({ place: nextPlace, players: losers });
-    nextPlace += losers.length;
+  const byPlace = {};
+  for (const [player, place] of Object.entries(tournament.placements)) {
+    (byPlace[place] ||= []).push(player);
   }
 
-  return standings;
+  return Object.entries(byPlace)
+    .map(([place, players]) => ({ place: parseInt(place, 10), players }))
+    .sort((a, b) => a.place - b.place);
 }
 
-function TournamentResults({ tournament, matches, onViewProfile }) {
-  const standings = buildStandings(tournament, matches);
+function TournamentResults({ tournament, onViewProfile }) {
+  const standings = buildStandings(tournament);
 
   return (
     <div className="bg-gray-800 rounded-lg border-2 border-white p-6">
@@ -2033,38 +2074,85 @@ function TournamentResults({ tournament, matches, onViewProfile }) {
   );
 }
 
-function BracketView({ matches, rounds }) {
-  const maxRound = Math.max(...rounds);
+function BracketColumns({ matches, rounds, labelForRound }) {
+  const maxRound = rounds.length ? Math.max(...rounds) : 0;
+
+  return (
+    <div className="flex gap-8 min-w-max pb-2">
+      {rounds.map(round => (
+        <div key={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
+          <h3 className="text-center font-bold text-gray-400 mb-2">
+            {labelForRound ? labelForRound(round, maxRound) : (round === maxRound ? 'Final' : `Round ${round}`)}
+          </h3>
+          {matches.filter(m => m.round === round).map(match => (
+            <div key={match.id} className="bg-gray-700 rounded border border-gray-600 p-2 text-sm space-y-1">
+              {[match.player1, match.player2].map((p, idx) => {
+                const isWinner = match.status === 'completed' && match.winner === p;
+                return (
+                  <div
+                    key={idx}
+                    className={`flex justify-between items-center px-2 py-1 rounded ${
+                      isWinner ? 'bg-white text-black font-bold' : 'text-gray-300'
+                    }`}
+                  >
+                    <span>{p || 'TBD'}</span>
+                    {isWinner && <span>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
+  if (isDoubleElim) {
+    const k = Math.round(Math.log2(bracketSize || 2));
+    const totalLbRounds = Math.max(2 * (k - 1), 1);
+
+    const wbMatches = matches.filter(m => m.bracket === 'winners');
+    const lbMatches = matches.filter(m => m.bracket === 'losers');
+    const gfMatches = matches.filter(m => m.bracket === 'grand_final');
+    const wbRounds = [...new Set(wbMatches.map(m => m.round))].sort((a, b) => a - b);
+    const lbRounds = [...new Set(lbMatches.map(m => m.round))].sort((a, b) => a - b);
+    const gfRounds = [...new Set(gfMatches.map(m => m.round))].sort((a, b) => a - b);
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+          <h3 className="font-bold mb-4">Winners Bracket</h3>
+          <BracketColumns
+            matches={wbMatches}
+            rounds={wbRounds}
+            labelForRound={(r) => (r === k ? 'Winners Final' : `Round ${r}`)}
+          />
+        </div>
+        {lbRounds.length > 0 && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+            <h3 className="font-bold mb-4">Losers Bracket</h3>
+            <BracketColumns
+              matches={lbMatches}
+              rounds={lbRounds}
+              labelForRound={(r) => (r === totalLbRounds ? 'Losers Final' : `Round ${r}`)}
+            />
+          </div>
+        )}
+        {gfRounds.length > 0 && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+            <h3 className="font-bold mb-4">Grand Final</h3>
+            <BracketColumns matches={gfMatches} rounds={gfRounds} labelForRound={(r) => (r === 1 ? 'Game 1' : 'Bracket Reset')} />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
-      <div className="flex gap-8 min-w-max pb-2">
-        {rounds.map(round => (
-          <div key={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
-            <h3 className="text-center font-bold text-gray-400 mb-2">
-              {round === maxRound ? 'Final' : `Round ${round}`}
-            </h3>
-            {matches.filter(m => m.round === round).map(match => (
-              <div key={match.id} className="bg-gray-700 rounded border border-gray-600 p-2 text-sm space-y-1">
-                {[match.player1, match.player2].map((p, idx) => {
-                  const isWinner = match.status === 'completed' && match.winner === p;
-                  return (
-                    <div
-                      key={idx}
-                      className={`flex justify-between items-center px-2 py-1 rounded ${
-                        isWinner ? 'bg-white text-black font-bold' : 'text-gray-300'
-                      }`}
-                    >
-                      <span>{p || 'TBD'}</span>
-                      {isWinner && <span>✓</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      <BracketColumns matches={matches} rounds={rounds} />
     </div>
   );
 }

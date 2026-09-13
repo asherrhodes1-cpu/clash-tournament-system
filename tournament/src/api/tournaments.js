@@ -16,7 +16,7 @@ import {
   collectionGroup,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { generateSeededBracket } from '../utils';
+import { generateSeededBracket, seedDoubleEliminationBracket } from '../utils';
 import { fetchClashPlayerData } from './clash';
 
 const TOURNAMENTS = 'tournaments';
@@ -192,47 +192,90 @@ export async function startTournament(tournament) {
       }
     }
 
-    const bracket = generateSeededBracket(tournament.players, playerStats);
     const now = Date.now();
     const batch = writeBatch(db);
+    const isDoubleElim = tournament.format === 'double_elimination';
 
-    bracket.forEach((pair, idx) => {
-      const isBye = pair[1] === 'BYE';
-      const matchId = `${tournament.id}-${idx}`;
-      batch.set(matchRef(tournament.id, matchId), {
-        id: matchId,
-        tournamentId: tournament.id,
-        player1: pair[0],
-        player2: pair[1],
-        player1Tag: playerStats[pair[0]]?.tag || '',
-        player2Tag: playerStats[pair[1]]?.tag || '',
-        player1Stats: playerStats[pair[0]] || null,
-        player2Stats: playerStats[pair[1]] || null,
-        round: 1,
-        status: isBye ? 'completed' : 'pending',
-        winner: isBye ? pair[0] : null,
-        completedAt: isBye ? now : null,
-        player1Ready: false,
-        player2Ready: false,
-        player1ReadyTime: null,
-        player2ReadyTime: null,
-        scheduledStartTime: null,
-        winner1Vote: null,
-        winner2Vote: null,
-        player1VoteTime: null,
-        player2VoteTime: null,
-        player1ScreenshotPath: null,
-        player2ScreenshotPath: null,
+    if (isDoubleElim) {
+      const { pairs, bracketSize } = seedDoubleEliminationBracket(tournament.players, playerStats);
+
+      pairs.forEach((pair, idx) => {
+        const isBye = pair[1] === 'BYE';
+        const matchId = `wb-r1-${idx}`;
+        batch.set(matchRef(tournament.id, matchId), {
+          id: matchId,
+          tournamentId: tournament.id,
+          player1: pair[0],
+          player2: pair[1],
+          player1Tag: playerStats[pair[0]]?.tag || '',
+          player2Tag: playerStats[pair[1]]?.tag || '',
+          player1Stats: playerStats[pair[0]] || null,
+          player2Stats: playerStats[pair[1]] || null,
+          round: 1,
+          bracket: 'winners',
+          status: isBye ? 'completed' : 'pending',
+          winner: isBye ? pair[0] : null,
+          completedAt: isBye ? now : null,
+          player1Ready: false,
+          player2Ready: false,
+          player1ReadyTime: null,
+          player2ReadyTime: null,
+          scheduledStartTime: null,
+          winner1Vote: null,
+          winner2Vote: null,
+          player1VoteTime: null,
+          player2VoteTime: null,
+          player1ScreenshotPath: null,
+          player2ScreenshotPath: null,
+        });
       });
-    });
 
-    batch.update(tournamentRef(tournament.id), {
-      status: 'in_progress',
-      // Firestore doesn't allow arrays nested directly inside arrays, so store
-      // pairs as objects instead of the [player1, player2] tuples used internally.
-      bracket: bracket.map(([player1, player2]) => ({ player1, player2 })),
-      playerStats,
-    });
+      batch.update(tournamentRef(tournament.id), {
+        status: 'in_progress',
+        bracketSize,
+        playerStats,
+      });
+    } else {
+      const bracket = generateSeededBracket(tournament.players, playerStats);
+
+      bracket.forEach((pair, idx) => {
+        const isBye = pair[1] === 'BYE';
+        const matchId = `${tournament.id}-${idx}`;
+        batch.set(matchRef(tournament.id, matchId), {
+          id: matchId,
+          tournamentId: tournament.id,
+          player1: pair[0],
+          player2: pair[1],
+          player1Tag: playerStats[pair[0]]?.tag || '',
+          player2Tag: playerStats[pair[1]]?.tag || '',
+          player1Stats: playerStats[pair[0]] || null,
+          player2Stats: playerStats[pair[1]] || null,
+          round: 1,
+          status: isBye ? 'completed' : 'pending',
+          winner: isBye ? pair[0] : null,
+          completedAt: isBye ? now : null,
+          player1Ready: false,
+          player2Ready: false,
+          player1ReadyTime: null,
+          player2ReadyTime: null,
+          scheduledStartTime: null,
+          winner1Vote: null,
+          winner2Vote: null,
+          player1VoteTime: null,
+          player2VoteTime: null,
+          player1ScreenshotPath: null,
+          player2ScreenshotPath: null,
+        });
+      });
+
+      batch.update(tournamentRef(tournament.id), {
+        status: 'in_progress',
+        // Firestore doesn't allow arrays nested directly inside arrays, so store
+        // pairs as objects instead of the [player1, player2] tuples used internally.
+        bracket: bracket.map(([player1, player2]) => ({ player1, player2 })),
+        playerStats,
+      });
+    }
 
     await batch.commit();
   } catch (err) {

@@ -250,7 +250,11 @@ exports.advanceTournaments = onSchedule('every 5 minutes', async () => {
     const matches = matchesSnap.docs.map((d) => d.data());
 
     await handleTimeouts(tournamentDoc.ref, matches);
-    await handleRoundAdvancement(tournamentDoc.ref, tournament, matches);
+    if (tournament.format === 'double_elimination') {
+      await handleDoubleEliminationAdvancement(tournamentDoc.ref, tournament, matches);
+    } else {
+      await handleRoundAdvancement(tournamentDoc.ref, tournament, matches);
+    }
   }
 });
 
@@ -404,4 +408,207 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
       await batch.commit();
     }
   }
+}
+
+// ============================================================================
+// Double elimination. Every player must lose twice to be eliminated: a
+// winners-bracket (WB) loss drops a player into the losers bracket (LB)
+// instead of ending their run. LB rounds alternate between "drop-in" rounds
+// (LB survivors face freshly-dropped WB losers) and pure consolidation
+// rounds (LB survivors just play each other) - which round is which is
+// fixed by round number, not by arrival order, so it stays correct even
+// though WB and LB advance independently, tick by tick.
+//
+// WB round r's losers always feed LB round (r === 1 ? 1 : 2*(r-1)).
+// LB round 2j (even) is a drop-in round; LB round 2j-1 (odd, j>1) is pure
+// consolidation of LB round (2j-2)'s survivors.
+// ============================================================================
+function buildBracketMatchDoc({ id, tournamentId, player1, player2, round, bracket, playerStats }) {
+  const now = Date.now();
+  const isBye = player1 === 'BYE' || player2 === 'BYE';
+  const winner = isBye ? (player1 === 'BYE' ? player2 : player1) : null;
+  return {
+    id,
+    tournamentId,
+    player1,
+    player2,
+    player1Tag: playerStats?.[player1]?.tag || '',
+    player2Tag: playerStats?.[player2]?.tag || '',
+    player1Stats: playerStats?.[player1] || null,
+    player2Stats: playerStats?.[player2] || null,
+    round,
+    bracket,
+    status: isBye ? 'completed' : 'pending',
+    winner,
+    completedAt: isBye ? now : null,
+    player1Ready: false,
+    player2Ready: false,
+    player1ReadyTime: null,
+    player2ReadyTime: null,
+    scheduledStartTime: null,
+    winner1Vote: null,
+    winner2Vote: null,
+    player1VoteTime: null,
+    player2VoteTime: null,
+    player1ScreenshotPath: null,
+    player2ScreenshotPath: null,
+  };
+}
+
+function pairUpWithBye(players) {
+  const pairs = [];
+  for (let i = 0; i + 1 < players.length; i += 2) {
+    pairs.push([players[i], players[i + 1]]);
+  }
+  if (players.length % 2 === 1) {
+    pairs.push([players[players.length - 1], 'BYE']);
+  }
+  return pairs;
+}
+
+// Champion/runner-up from the decisive grand final match, then everyone else
+// grouped by the losers-bracket round they were finally eliminated in.
+function computeDoubleEliminationPlacements(matches) {
+  const gfMatches = matches
+    .filter((m) => m.bracket === 'grand_final' && m.status === 'completed' && m.winner)
+    .sort((a, b) => b.round - a.round);
+  if (gfMatches.length === 0) return {};
+
+  const decisive = gfMatches[0];
+  const champion = decisive.winner;
+  const runnerUp = decisive.winner === decisive.player1 ? decisive.player2 : decisive.player1;
+  const placements = { [champion]: 1, [runnerUp]: 2 };
+
+  const lbRounds = [...new Set(matches.filter((m) => m.bracket === 'losers').map((m) => m.round))].sort((a, b) => b - a);
+  let nextPlace = 3;
+  for (const round of lbRounds) {
+    const losers = [...new Set(
+      matches
+        .filter((m) => m.bracket === 'losers' && m.round === round && m.status === 'completed' && m.winner)
+        .map((m) => (m.winner === m.player1 ? m.player2 : m.player1))
+        .filter((p) => p && p !== 'BYE' && !(p in placements))
+    )];
+    if (losers.length === 0) continue;
+    losers.forEach((p) => { placements[p] = nextPlace; });
+    nextPlace += losers.length;
+  }
+  return placements;
+}
+
+async function handleDoubleEliminationAdvancement(tournamentRef, tournament, matches) {
+  const bracketSize = tournament.bracketSize || 2;
+  const k = Math.round(Math.log2(bracketSize));
+  const totalLbRounds = Math.max(2 * (k - 1), 1);
+  const playerStats = tournament.playerStats || {};
+  const batch = db.batch();
+  let hasWrites = false;
+
+  const matchDocRef = (id) => tournamentRef.collection('matches').doc(id);
+  const roundMatches = (bracket, round) => matches.filter((m) => m.bracket === bracket && m.round === round);
+  const existsRound = (bracket, round) => roundMatches(bracket, round).length > 0;
+  const roundComplete = (bracket, round) => {
+    const rm = roundMatches(bracket, round);
+    return rm.length > 0 && rm.every((m) => TERMINAL_STATUSES.includes(m.status));
+  };
+  const winnersOf = (bracket, round) =>
+    roundMatches(bracket, round).filter((m) => m.status === 'completed' && m.winner).map((m) => m.winner);
+  const realLosersOf = (bracket, round) =>
+    roundMatches(bracket, round)
+      .filter((m) => m.status === 'completed' && m.winner && m.player1 !== 'BYE' && m.player2 !== 'BYE')
+      .map((m) => (m.winner === m.player1 ? m.player2 : m.player1));
+
+  function createRound(bracket, round, players) {
+    if (existsRound(bracket, round) || players.length === 0) return;
+    const prefix = bracket === 'winners' ? 'wb' : bracket === 'losers' ? 'lb' : 'gf';
+    pairUpWithBye(players).forEach(([p1, p2], idx) => {
+      const id = `${prefix}-r${round}-${idx}`;
+      batch.set(matchDocRef(id), buildBracketMatchDoc({
+        id, tournamentId: tournament.id, player1: p1, player2: p2, round, bracket, playerStats,
+      }));
+    });
+    hasWrites = true;
+  }
+
+  // --- Winners bracket: advance rounds, and drop each round's real losers
+  // into their fixed losers-bracket destination as soon as it's ready. ---
+  for (let r = 1; r <= k; r++) {
+    if (!roundComplete('winners', r)) break;
+
+    const winners = winnersOf('winners', r);
+    const losers = realLosersOf('winners', r);
+
+    if (r < k && !existsRound('winners', r + 1)) {
+      createRound('winners', r + 1, winners);
+    }
+
+    if (losers.length > 0) {
+      const targetLbRound = r === 1 ? 1 : 2 * (r - 1);
+      if (!existsRound('losers', targetLbRound)) {
+        if (r === 1) {
+          createRound('losers', 1, losers);
+        } else {
+          const priorLbRound = targetLbRound - 1;
+          if (roundComplete('losers', priorLbRound)) {
+            const survivors = winnersOf('losers', priorLbRound);
+            createRound('losers', targetLbRound, [...survivors, ...losers]);
+          }
+          // else: prior LB round still in progress - retry on a later tick.
+        }
+      }
+    }
+  }
+
+  // --- Losers bracket: pure consolidation rounds (odd rounds beyond LB1)
+  // only ever need the prior LB round's survivors, never new WB losers. ---
+  const lbRoundNumbers = [...new Set(matches.filter((m) => m.bracket === 'losers').map((m) => m.round))].sort((a, b) => a - b);
+  for (const r of lbRoundNumbers) {
+    const nextRound = r + 1;
+    if (nextRound > totalLbRounds) continue;
+    if (nextRound % 2 === 0) continue; // even/drop-in rounds are handled above
+    if (!roundComplete('losers', r) || existsRound('losers', nextRound)) continue;
+
+    const survivors = winnersOf('losers', r);
+    if (survivors.length > 1) createRound('losers', nextRound, survivors);
+  }
+
+  // --- Grand final(s) ---
+  let wbChampion = null;
+  if (roundComplete('winners', k)) {
+    const finalWinners = winnersOf('winners', k);
+    if (finalWinners.length === 1) wbChampion = finalWinners[0];
+  }
+
+  let lbChampion = null;
+  if (roundComplete('losers', totalLbRounds)) {
+    const finalSurvivors = winnersOf('losers', totalLbRounds);
+    if (finalSurvivors.length === 1) lbChampion = finalSurvivors[0];
+  }
+
+  if (wbChampion && lbChampion && !existsRound('grand_final', 1)) {
+    createRound('grand_final', 1, [wbChampion, lbChampion]);
+  }
+
+  if (tournament.status !== 'completed' && roundComplete('grand_final', 1)) {
+    const gf1 = roundMatches('grand_final', 1)[0];
+    if (gf1.status === 'completed' && gf1.winner === gf1.player1) {
+      const placements = computeDoubleEliminationPlacements(matches);
+      batch.update(tournamentRef, { status: 'completed', champion: gf1.winner, placements });
+      hasWrites = true;
+    } else if (gf1.status === 'completed' && !existsRound('grand_final', 2)) {
+      // The losers-bracket player won game one - since both finalists now
+      // have exactly one loss, a bracket-reset decider is required.
+      createRound('grand_final', 2, [gf1.player1, gf1.player2]);
+    }
+  }
+
+  if (tournament.status !== 'completed' && roundComplete('grand_final', 2)) {
+    const gf2 = roundMatches('grand_final', 2)[0];
+    if (gf2.status === 'completed' && gf2.winner) {
+      const placements = computeDoubleEliminationPlacements(matches.concat(gf2));
+      batch.update(tournamentRef, { status: 'completed', champion: gf2.winner, placements });
+      hasWrites = true;
+    }
+  }
+
+  if (hasWrites) await batch.commit();
 }
