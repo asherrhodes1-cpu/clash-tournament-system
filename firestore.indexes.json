@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "matches",
-      "queryScope": "COLLECTION_GROUP",
+      "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "round", "order": "ASCENDING" },
         { "fieldPath": "id", "order": "ASCENDING" }
