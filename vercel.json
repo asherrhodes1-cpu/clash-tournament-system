@@ -1,4 +1,5 @@
 {
+  "installCommand": "cd tournament && npm install",
   "buildCommand": "cd tournament && npm run build",
   "outputDirectory": "tournament/build",
   "rewrites": [
