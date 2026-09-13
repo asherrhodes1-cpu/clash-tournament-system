@@ -16,7 +16,8 @@ import {
   collectionGroup,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { fetchClashPlayerData, generateSeededBracket } from '../utils';
+import { generateSeededBracket } from '../utils';
+import { fetchClashPlayerData } from './clash';
 
 const TOURNAMENTS = 'tournaments';
 const TERMINAL_STATUSES = ['completed', 'disputed', 'needs_staff_review'];
@@ -90,18 +91,31 @@ export async function createTournament(tournamentData, createdBy) {
     status: 'signups_open',
     createdAt: new Date().toISOString(),
     removedPlayers: [],
+    requiredBuilderHallLevel: tournamentData.requiredBuilderHallLevel || null,
+    minBestTrophies: tournamentData.minBestTrophies || null,
   });
   return id;
 }
 
-export async function joinTournament(tournament, username) {
+export async function joinTournament(tournament, user) {
   if (tournament.signupDeadline && new Date(tournament.signupDeadline) < new Date()) {
     throw new Error('Signups for this tournament have closed');
   }
-  if (tournament.players.includes(username)) return;
+  if (tournament.players.includes(user.username)) return;
+
+  if (tournament.requiredBuilderHallLevel != null && user.builderHallLevel !== tournament.requiredBuilderHallLevel) {
+    throw new Error(
+      `This tournament requires Builder Hall ${tournament.requiredBuilderHallLevel}. Your verified Builder Hall is ${user.builderHallLevel ?? 'unverified'}.`
+    );
+  }
+  if (tournament.minBestTrophies != null && (user.bestBuilderBaseTrophies ?? -1) < tournament.minBestTrophies) {
+    throw new Error(
+      `This tournament requires at least ${tournament.minBestTrophies} best trophies. Yours: ${user.bestBuilderBaseTrophies ?? 'unverified'}.`
+    );
+  }
 
   await updateDoc(tournamentRef(tournament.id), {
-    players: arrayUnion(username),
+    players: arrayUnion(user.username),
   });
 }
 

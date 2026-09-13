@@ -8,6 +8,9 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const STAFF_INVITE_CODE = defineSecret('STAFF_INVITE_CODE');
+const CLASH_API_KEY = defineSecret('CLASH_API_KEY');
+const CLASH_RELAY_SECRET = defineSecret('CLASH_RELAY_SECRET');
+const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
 const TERMINAL_STATUSES = ['completed', 'disputed', 'needs_staff_review'];
@@ -17,11 +20,56 @@ function usernameToEmail(username) {
 }
 
 // ============================================================================
+// Clash of Clans verification helpers. Player API tokens (from in-game
+// Settings > More Settings) prove ownership of a tag via Supercell's
+// /verifytoken endpoint - separate from our developer API key, which
+// authenticates our server to the API generally.
+// ============================================================================
+async function callClashApi(path, options = {}) {
+  return fetch(`${CLASH_RELAY_URL}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${CLASH_API_KEY.value()}`,
+      'X-Relay-Secret': CLASH_RELAY_SECRET.value(),
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options.headers,
+    },
+  });
+}
+
+async function verifyAndFetchClashPlayer(cleanTag, apiToken) {
+  const verifyResp = await callClashApi(`/v1/players/%23${cleanTag}/verifytoken`, {
+    method: 'POST',
+    body: JSON.stringify({ token: apiToken }),
+  });
+  if (!verifyResp.ok) {
+    throw new HttpsError('invalid-argument', 'Could not verify that Clash of Clans tag - double check it and try again.');
+  }
+  const verifyData = await verifyResp.json();
+  if (verifyData.status !== 'ok') {
+    throw new HttpsError('invalid-argument', 'That API token does not match the given player tag.');
+  }
+
+  const playerResp = await callClashApi(`/v1/players/%23${cleanTag}`);
+  if (!playerResp.ok) {
+    throw new HttpsError('internal', 'Verified, but failed to fetch player stats. Please try again.');
+  }
+  const data = await playerResp.json();
+  return {
+    builderHallLevel: data.builderHallLevel || 0,
+    bestBuilderBaseTrophies: data.bestBuilderBaseTrophies || 0,
+  };
+}
+
+// ============================================================================
 // signUp — creates an account. If a valid invite code is supplied, the account
 // is marked staff. The invite code itself never reaches the client bundle.
+// The player's Clash of Clans tag is verified via their in-game API token
+// before the account is created, and their Builder Hall level and best
+// Builder Base trophies are recorded from that verified lookup.
 // ============================================================================
-exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE] }, async (request) => {
-  const { username, password, clashTag, inviteCode } = request.data || {};
+exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE, CLASH_API_KEY, CLASH_RELAY_SECRET] }, async (request) => {
+  const { username, password, clashTag, apiToken, inviteCode } = request.data || {};
 
   if (!username || typeof username !== 'string' || username.trim().length < 3) {
     throw new HttpsError('invalid-argument', 'Username must be at least 3 characters');
@@ -32,6 +80,12 @@ exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE] }, async (request) => {
   if (!clashTag || typeof clashTag !== 'string' || !clashTag.startsWith('#')) {
     throw new HttpsError('invalid-argument', 'Clash tag must start with #');
   }
+  if (!apiToken || typeof apiToken !== 'string' || apiToken.trim().length < 5) {
+    throw new HttpsError('invalid-argument', 'Your Clash of Clans API token is required');
+  }
+
+  const cleanTag = clashTag.trim().toUpperCase().replace(/^#/, '');
+  const clashStats = await verifyAndFetchClashPlayer(cleanTag, apiToken.trim());
 
   const usernameLower = username.trim().toLowerCase();
   const usernameDocRef = db.collection('usernames').doc(usernameLower);
@@ -61,9 +115,12 @@ exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE] }, async (request) => {
     await db.collection('users').doc(userRecord.uid).set({
       username: username.trim(),
       usernameLower,
-      clashTag: clashTag.toUpperCase(),
+      clashTag: `#${cleanTag}`,
       isStaff,
       createdAt: new Date().toISOString(),
+      clashVerified: true,
+      builderHallLevel: clashStats.builderHallLevel,
+      bestBuilderBaseTrophies: clashStats.bestBuilderBaseTrophies,
     });
 
     await usernameDocRef.set({ uid: userRecord.uid, username: username.trim() });
@@ -81,6 +138,37 @@ exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE] }, async (request) => {
   }
 
   return { success: true, isStaff };
+});
+
+// ============================================================================
+// verifyClashAccount — lets an already-signed-in user (retroactively) verify
+// or re-verify their own Clash of Clans tag via their in-game API token, the
+// same way signUp does. Needed for accounts created before this existed.
+// ============================================================================
+exports.verifyClashAccount = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be signed in');
+  }
+
+  const { clashTag, apiToken } = request.data || {};
+  if (!clashTag || typeof clashTag !== 'string' || !clashTag.startsWith('#')) {
+    throw new HttpsError('invalid-argument', 'Clash tag must start with #');
+  }
+  if (!apiToken || typeof apiToken !== 'string' || apiToken.trim().length < 5) {
+    throw new HttpsError('invalid-argument', 'API token is required');
+  }
+
+  const cleanTag = clashTag.trim().toUpperCase().replace(/^#/, '');
+  const clashStats = await verifyAndFetchClashPlayer(cleanTag, apiToken.trim());
+
+  await db.collection('users').doc(request.auth.uid).update({
+    clashTag: `#${cleanTag}`,
+    clashVerified: true,
+    builderHallLevel: clashStats.builderHallLevel,
+    bestBuilderBaseTrophies: clashStats.bestBuilderBaseTrophies,
+  });
+
+  return { success: true, ...clashStats };
 });
 
 // ============================================================================
@@ -105,6 +193,47 @@ exports.adminResetPassword = onCall(async (request) => {
 
   await admin.auth().updateUser(usernameDoc.data().uid, { password: newPassword });
   return { success: true };
+});
+
+// ============================================================================
+// fetchClashPlayer — looks up a player's stats from the real Clash of Clans
+// API. Supercell whitelists API keys by IP and Cloud Functions have no fixed
+// outbound IP, so this calls a small relay (a droplet with a static IP) that
+// forwards the request on to Supercell with the real key attached.
+// ============================================================================
+exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be signed in');
+  }
+
+  const { playerTag } = request.data || {};
+  if (!playerTag || typeof playerTag !== 'string') {
+    throw new HttpsError('invalid-argument', 'playerTag is required');
+  }
+
+  const cleanTag = playerTag.startsWith('#') ? playerTag.slice(1) : playerTag;
+  const response = await fetch(`${CLASH_RELAY_URL}/v1/players/%23${cleanTag}`, {
+    headers: {
+      Authorization: `Bearer ${CLASH_API_KEY.value()}`,
+      'X-Relay-Secret': CLASH_RELAY_SECRET.value(),
+    },
+  });
+
+  if (!response.ok) {
+    logger.warn('fetchClashPlayer: relay/API returned', response.status);
+    return { found: false };
+  }
+
+  const data = await response.json();
+  return {
+    found: true,
+    name: data.name,
+    tag: data.tag,
+    bestBuilderBaseTrophies: data.bestBuilderBaseTrophies || 0,
+    builderBaseTrophies: data.builderBaseTrophies || 0,
+    builderBaseHall: data.builderHallLevel || 0,
+    townHallLevel: data.townHallLevel,
+  };
 });
 
 // ============================================================================

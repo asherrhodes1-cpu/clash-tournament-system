@@ -1,31 +1,4 @@
 // Pure helpers with no storage dependency, shared between App.js and the api/ modules.
-// Left exactly as they behaved before the Firebase migration.
-
-export async function fetchClashPlayerData(playerTag) {
-  try {
-    const cleanTag = playerTag.startsWith('#') ? playerTag.slice(1) : playerTag;
-    const response = await fetch(`https://api.clashofclans.com/v1/players/%23${cleanTag}`);
-
-    if (!response.ok) {
-      console.error('Player not found');
-      return null;
-    }
-
-    const data = await response.json();
-
-    return {
-      name: data.name,
-      tag: data.tag,
-      bestBuilderBaseTrophies: data.bestBuildersHall || 0,
-      builderBaseTrophies: data.builderBaseTrophies || 0,
-      builderBaseHall: data.builderHallLevel || 0,
-      townHallLevel: data.townHallLevel,
-    };
-  } catch (error) {
-    console.error('Error fetching player data:', error);
-    return null;
-  }
-}
 
 export function generateSeededBracket(players, playerStats) {
   const sorted = [...players].sort((a, b) => {

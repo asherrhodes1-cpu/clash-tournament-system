@@ -3,7 +3,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '../firebase';
 
@@ -16,8 +16,8 @@ function usernameToEmail(username) {
 const signUpCallable = httpsCallable(functions, 'signUp');
 const adminResetPasswordCallable = httpsCallable(functions, 'adminResetPassword');
 
-export async function signUp({ username, password, clashTag, inviteCode }) {
-  await signUpCallable({ username, password, clashTag, inviteCode: inviteCode || null });
+export async function signUp({ username, password, clashTag, apiToken, inviteCode }) {
+  await signUpCallable({ username, password, clashTag, apiToken, inviteCode: inviteCode || null });
   await signInWithEmailAndPassword(auth, usernameToEmail(username), password);
 }
 
@@ -38,9 +38,19 @@ export function adminResetPassword({ username, newPassword }) {
 }
 
 // Subscribes to auth state and calls onChange with either null (signed out) or
-// { username, clashTag, isStaff } matching the shape the rest of the app expects.
+// { uid, username, clashTag, isStaff, builderHallLevel, bestBuilderBaseTrophies,
+// clashVerified } matching the shape the rest of the app expects. Stays live
+// on the user's own Firestore doc so re-verifying a Clash account updates
+// immediately without needing to log back in.
 export function subscribeToAuthState(onChange) {
-  return onAuthStateChanged(auth, async (user) => {
+  let unsubscribeDoc = null;
+
+  const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    if (unsubscribeDoc) {
+      unsubscribeDoc();
+      unsubscribeDoc = null;
+    }
+
     if (!user) {
       onChange(null);
       return;
@@ -50,9 +60,22 @@ export function subscribeToAuthState(onChange) {
     const username = tokenResult.claims.username;
     const isStaff = !!tokenResult.claims.isStaff;
 
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    const clashTag = userDoc.exists() ? userDoc.data().clashTag : '';
-
-    onChange({ uid: user.uid, username, clashTag, isStaff });
+    unsubscribeDoc = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+      const data = snap.exists() ? snap.data() : {};
+      onChange({
+        uid: user.uid,
+        username,
+        isStaff,
+        clashTag: data.clashTag || '',
+        clashVerified: !!data.clashVerified,
+        builderHallLevel: data.builderHallLevel ?? null,
+        bestBuilderBaseTrophies: data.bestBuilderBaseTrophies ?? null,
+      });
+    });
   });
+
+  return () => {
+    unsubscribeAuth();
+    if (unsubscribeDoc) unsubscribeDoc();
+  };
 }

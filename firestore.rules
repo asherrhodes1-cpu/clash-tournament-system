@@ -33,7 +33,18 @@ service cloud.firestore {
       allow create, delete: if isStaff();
       allow update: if isStaff() ||
         (isSignedIn() && resource.data.status == 'signups_open'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players']));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players'])
+          && meetsJoinRequirements());
+
+      // A player may only join a tournament if their verified Clash of Clans
+      // stats satisfy the Builder Hall / trophy requirements staff set on it.
+      function meetsJoinRequirements() {
+        let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        let bhReq = resource.data.get('requiredBuilderHallLevel', null);
+        let trophyReq = resource.data.get('minBestTrophies', null);
+        return (bhReq == null || profile.get('builderHallLevel', -1) == bhReq)
+            && (trophyReq == null || profile.get('bestBuilderBaseTrophies', -1) >= trophyReq);
+      }
 
       match /matches/{matchId} {
         allow read: if isSignedIn();

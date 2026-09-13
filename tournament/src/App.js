@@ -19,6 +19,7 @@ import {
 import { subscribeToFlags, createFlag, updateFlagStatus, addFlagResponse } from './api/flags';
 import { uploadMatchScreenshot, getScreenshotUrl, uploadProfilePicture, getProfilePictureUrl } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
+import { verifyClashAccount } from './api/clash';
 import { getTimeRemainingDisplay } from './utils';
 
 // ============================================================================
@@ -586,7 +587,7 @@ export default function TournamentApp() {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
     try {
-      await joinTournament(tournament, currentUser.username);
+      await joinTournament(tournament, currentUser);
     } catch (err) {
       alert(err.message);
     }
@@ -936,6 +937,7 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [clashTag, setClashTag] = useState('');
+  const [apiToken, setApiToken] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -979,12 +981,18 @@ function LoginPage() {
       return;
     }
 
+    if (!apiToken.trim()) {
+      setError('Your Clash of Clans API token is required');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await signUp({
         username,
         password,
         clashTag: clashTag.toUpperCase(),
+        apiToken: apiToken.trim(),
         inviteCode: inviteCode.trim(),
       });
     } catch (err) {
@@ -1084,6 +1092,22 @@ function LoginPage() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium mb-2">Clash of Clans API Token</label>
+              <input
+                type="text"
+                value={apiToken}
+                onChange={(e) => setApiToken(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
+                placeholder="Paste your API token"
+                required
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                In Clash of Clans: Settings → More Settings → scroll down to "API Token" → tap Show → copy and paste it here.
+                This proves the tag above is really yours and unlocks your verified Builder Hall level and best trophies.
+              </p>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium mb-2">Staff Invite Code (optional)</label>
               <input
                 type="password"
@@ -1111,6 +1135,7 @@ function LoginPage() {
                 setPassword('');
                 setConfirmPassword('');
                 setClashTag('');
+                setApiToken('');
                 setInviteCode('');
               }}
               className="w-full bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded transition"
@@ -1268,6 +1293,11 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
   const [editingBio, setEditingBio] = useState(false);
   const [bioDraft, setBioDraft] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [showVerifyForm, setShowVerifyForm] = useState(false);
+  const [verifyClashTag, setVerifyClashTag] = useState('');
+  const [verifyApiToken, setVerifyApiToken] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
 
   const isOwnProfile = currentUser.username === username;
 
@@ -1315,6 +1345,32 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
       setEditingBio(false);
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    setVerifyError('');
+
+    if (!verifyClashTag.trim().startsWith('#')) {
+      setVerifyError('Clash tag must start with #');
+      return;
+    }
+    if (!verifyApiToken.trim()) {
+      setVerifyError('API token is required');
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      await verifyClashAccount({ clashTag: verifyClashTag.trim().toUpperCase(), apiToken: verifyApiToken.trim() });
+      setShowVerifyForm(false);
+      setVerifyClashTag('');
+      setVerifyApiToken('');
+    } catch (err) {
+      setVerifyError(err.message);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -1402,6 +1458,79 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
           )}
         </div>
 
+        <div className="mt-4 p-3 bg-gray-700 rounded">
+          {profile?.clashVerified ? (
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="text-sm">
+                <span className="text-white font-bold">✓ Verified Clash Account</span>
+                <span className="text-gray-300 ml-3">Builder Hall {profile.builderHallLevel}</span>
+                <span className="text-gray-300 ml-3">{profile.bestBuilderBaseTrophies} best trophies</span>
+              </div>
+              {isOwnProfile && (
+                <button
+                  onClick={() => setShowVerifyForm(!showVerifyForm)}
+                  className="text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition"
+                >
+                  Re-verify
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-sm text-gray-400">Clash of Clans account not verified</span>
+              {isOwnProfile && (
+                <button
+                  onClick={() => setShowVerifyForm(!showVerifyForm)}
+                  className="text-xs bg-white hover:bg-neutral-200 text-black font-bold px-2 py-1 rounded transition"
+                >
+                  Verify Now
+                </button>
+              )}
+            </div>
+          )}
+
+          {isOwnProfile && showVerifyForm && (
+            <form onSubmit={handleVerify} className="mt-3 space-y-2 border-t border-gray-600 pt-3">
+              {verifyError && (
+                <div className="p-2 bg-neutral-800 border border-white rounded text-white text-xs">{verifyError}</div>
+              )}
+              <input
+                type="text"
+                value={verifyClashTag}
+                onChange={(e) => setVerifyClashTag(e.target.value.toUpperCase())}
+                placeholder="e.g., #ABC123XYZ"
+                className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white"
+              />
+              <input
+                type="text"
+                value={verifyApiToken}
+                onChange={(e) => setVerifyApiToken(e.target.value)}
+                placeholder="Paste your API token"
+                className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white"
+              />
+              <p className="text-xs text-gray-400">
+                In Clash of Clans: Settings → More Settings → scroll down to "API Token" → tap Show → copy and paste it here.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={verifying}
+                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-1 rounded text-sm transition disabled:opacity-50"
+                >
+                  {verifying ? 'Verifying...' : 'Submit'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowVerifyForm(false); setVerifyError(''); }}
+                  className="border border-gray-600 hover:border-white px-3 py-1 rounded text-sm transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
         <div className="mt-6 grid grid-cols-3 gap-4">
           <div>
             <p className="text-sm text-gray-400">Tournaments Placed</p>
@@ -1451,7 +1580,14 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
   const hasJoined = tournament.players.includes(user.username);
   const now = new Date();
   const deadlinePassed = tournament.signupDeadline && new Date(tournament.signupDeadline) < now;
-  const canJoin = !hasJoined && !isCreator && tournament.status === 'signups_open' && !deadlinePassed;
+
+  const bhOk = tournament.requiredBuilderHallLevel == null || user.builderHallLevel === tournament.requiredBuilderHallLevel;
+  const trophyOk = tournament.minBestTrophies == null || (user.bestBuilderBaseTrophies ?? -1) >= tournament.minBestTrophies;
+  const meetsRequirements = bhOk && trophyOk;
+  const hasRequirements = tournament.requiredBuilderHallLevel != null || tournament.minBestTrophies != null;
+
+  const canJoin = !hasJoined && !isCreator && tournament.status === 'signups_open' && !deadlinePassed && meetsRequirements;
+  const blockedByRequirements = !hasJoined && !isCreator && tournament.status === 'signups_open' && !deadlinePassed && !meetsRequirements;
 
   const formatStatus = (status) => {
     return status
@@ -1480,6 +1616,16 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
           {tournament.status === 'completed' && tournament.champion && (
             <p>🏆 Champion: <span className="text-white font-bold">{tournament.champion}</span></p>
           )}
+          {hasRequirements && (
+            <p>
+              Requires:{' '}
+              <span className="text-white">
+                {tournament.requiredBuilderHallLevel != null && `Builder Hall ${tournament.requiredBuilderHallLevel}`}
+                {tournament.requiredBuilderHallLevel != null && tournament.minBestTrophies != null && ' · '}
+                {tournament.minBestTrophies != null && `${tournament.minBestTrophies}+ best trophies`}
+              </span>
+            </p>
+          )}
           {tournament.signupDeadline && (
             <p>Deadline: {getDeadlineDisplay()}</p>
           )}
@@ -1493,6 +1639,14 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
           >
             Join
           </button>
+        )}
+        {blockedByRequirements && (
+          <span
+            className="bg-neutral-800 border-2 border-white text-white px-4 py-2 rounded text-sm"
+            title="You don't meet this tournament's Builder Hall / trophy requirements"
+          >
+            Doesn't Meet Requirements
+          </span>
         )}
         {hasJoined && !isCreator && tournament.status === 'signups_open' && (
           <span className="bg-neutral-800 border border-neutral-600 text-white px-4 py-2 rounded text-sm">Joined ✓</span>
@@ -1536,6 +1690,8 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   const [description, setDescription] = useState('');
   const [format, setFormat] = useState('single_elimination');
   const [signupDeadline, setSignupDeadline] = useState('');
+  const [requiredBuilderHallLevel, setRequiredBuilderHallLevel] = useState('');
+  const [minBestTrophies, setMinBestTrophies] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
@@ -1557,6 +1713,8 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
       description,
       format,
       signupDeadline: signupDeadline || null,
+      requiredBuilderHallLevel: requiredBuilderHallLevel ? parseInt(requiredBuilderHallLevel, 10) : null,
+      minBestTrophies: minBestTrophies ? parseInt(minBestTrophies, 10) : null,
     });
   };
 
@@ -1617,6 +1775,37 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
             />
             <p className="text-xs text-gray-400 mt-1">Leave blank to allow signups indefinitely</p>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Required Builder Hall (Optional)</label>
+              <select
+                value={requiredBuilderHallLevel}
+                onChange={(e) => setRequiredBuilderHallLevel(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
+              >
+                <option value="">No restriction</option>
+                {Array.from({ length: 10 }, (_, i) => i + 1).map(level => (
+                  <option key={level} value={level}>Builder Hall {level} only</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Minimum Best Trophies (Optional)</label>
+              <input
+                type="number"
+                min="0"
+                value={minBestTrophies}
+                onChange={(e) => setMinBestTrophies(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
+                placeholder="e.g., 4000"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 -mt-3">
+            Only players with a verified Clash of Clans account meeting these requirements can join. Leave blank for no restriction.
+          </p>
 
           <div className="flex gap-4">
             <button
