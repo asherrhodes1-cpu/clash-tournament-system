@@ -524,6 +524,47 @@ export default function TournamentApp() {
     }
   };
 
+  const handleRemovePlayer = (tournamentId, username) => {
+    if (!window.confirm(`Remove ${username} from this tournament? This cannot be undone.`)) {
+      return;
+    }
+
+    const updated = tournaments.map(t => {
+      if (t.id !== tournamentId) return t;
+
+      if (t.status === 'signups_open') {
+        return { ...t, players: t.players.filter(p => p !== username) };
+      }
+
+      const now = new Date().getTime();
+      const updatedMatches = t.matches.map(m => {
+        const isInMatch = m.player1 === username || m.player2 === username;
+        const isUnresolved = !['completed', 'disputed', 'needs_staff_review'].includes(m.status);
+        if (!isInMatch || !isUnresolved) return m;
+
+        const opponent = m.player1 === username ? m.player2 : m.player1;
+        return {
+          ...m,
+          status: 'completed',
+          winner: opponent === 'BYE' ? null : opponent,
+          resolvedBy: currentUser.username,
+          resolvedReason: 'player_removed',
+          completedAt: now,
+        };
+      });
+
+      return {
+        ...t,
+        players: t.players.filter(p => p !== username),
+        removedPlayers: [...(t.removedPlayers || []), username],
+        matches: updatedMatches,
+      };
+    });
+
+    setTournaments(updated);
+    saveData(updated);
+  };
+
   const handleStartTournament = async (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
@@ -653,7 +694,7 @@ export default function TournamentApp() {
   };
 
   const handleResolveDispute = (matchId, winner) => {
-    setTournaments(prev => prev.map(t => {
+    const updated = tournaments.map(t => {
       const updatedMatches = t.matches.map(m => {
         if (m.id === matchId) {
           return {
@@ -661,13 +702,15 @@ export default function TournamentApp() {
             status: 'completed',
             winner,
             resolvedBy: currentUser.username,
+            completedAt: new Date().getTime(),
           };
         }
         return m;
       });
       return { ...t, matches: updatedMatches };
-    }));
-    saveData(tournaments);
+    });
+    setTournaments(updated);
+    saveData(updated);
   };
 
   const handleMatchTimeout = (tournamentId, matchId, resolution) => {
@@ -780,7 +823,8 @@ export default function TournamentApp() {
               if (!alreadyHasNextRound) {
                 const winners = roundMatches
                   .filter(m => m.status === 'completed')
-                  .map(m => m.winner);
+                  .map(m => m.winner)
+                  .filter(w => w && !(tournament.removedPlayers || []).includes(w));
 
                 if (winners.length === 1) {
                   setTournaments(prev => prev.map(t => {
@@ -984,6 +1028,7 @@ export default function TournamentApp() {
             onSelectMatch={() => setCurrentPage('match')}
             onReportMatch={handleReportMatch}
             onResolveDispute={handleResolveDispute}
+            onRemovePlayer={handleRemovePlayer}
             onPlayerReady={handlePlayerReady}
             setCurrentPage={setCurrentPage}
             tournaments={tournaments}
@@ -1597,7 +1642,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, user, setCurrentPage, tournaments, onReportMatch, onPlayerReady, onFlagMatch }) {
+function TournamentPage({ tournament, user, setCurrentPage, tournaments, onReportMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer }) {
   if (!tournament) {
     return (
       <div className="text-center">
@@ -1649,8 +1694,31 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
         )}
       </div>
 
-      {user.isStaff && tournament.matches.filter(m => m.status === 'disputed').length > 0 && (
-        <DisputeReview tournament={tournament} user={user} setCurrentPage={setCurrentPage} />
+      {user.isStaff && (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+          <h2 className="text-xl font-bold mb-4">Players ({tournament.players.length})</h2>
+          {tournament.players.length === 0 ? (
+            <p className="text-gray-400 text-sm">No players yet</p>
+          ) : (
+            <div className="space-y-2">
+              {tournament.players.map(player => (
+                <div key={player} className="flex items-center justify-between bg-gray-700 rounded px-4 py-2">
+                  <span>{player}</span>
+                  <button
+                    onClick={() => onRemovePlayer(tournament.id, player)}
+                    className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-xs transition"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {user.isStaff && tournament.matches.filter(m => m.status === 'disputed' || m.status === 'needs_staff_review').length > 0 && (
+        <DisputeReview tournament={tournament} user={user} setCurrentPage={setCurrentPage} onResolveDispute={onResolveDispute} />
       )}
 
       {rounds.map(round => (
@@ -1996,7 +2064,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
   );
 }
 
-function DisputeReview({ tournament, user, setCurrentPage }) {
+function DisputeReview({ tournament, user, setCurrentPage, onResolveDispute }) {
   const [expandedDispute, setExpandedDispute] = useState(null);
   const disputes = tournament.matches.filter(m => m.status === 'disputed');
   const noReports = tournament.matches.filter(m => m.status === 'needs_staff_review');
@@ -2050,10 +2118,16 @@ function DisputeReview({ tournament, user, setCurrentPage }) {
                 )}
               </div>
               <div className="flex gap-2 ml-4">
-                <button className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition">
+                <button
+                  onClick={() => onResolveDispute(dispute.id, dispute.winner1Vote)}
+                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition"
+                >
                   Accept {dispute.winner1Vote}
                 </button>
-                <button className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition">
+                <button
+                  onClick={() => onResolveDispute(dispute.id, dispute.winner2Vote)}
+                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition"
+                >
                   Accept {dispute.winner2Vote}
                 </button>
               </div>
@@ -2075,9 +2149,20 @@ function DisputeReview({ tournament, user, setCurrentPage }) {
                   Timed out: {new Date(match.timeoutAt).toLocaleString()}
                 </p>
               </div>
-              <button className="border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition">
-                Review & Decide
-              </button>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => onResolveDispute(match.id, match.player1)}
+                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition"
+                >
+                  Award to {match.player1}
+                </button>
+                <button
+                  onClick={() => onResolveDispute(match.id, match.player2)}
+                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition"
+                >
+                  Award to {match.player2}
+                </button>
+              </div>
             </div>
           </div>
         ))}
