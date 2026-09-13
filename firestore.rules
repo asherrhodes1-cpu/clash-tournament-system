@@ -48,6 +48,15 @@ service cloud.firestore {
       }
     }
 
+    // Collection-group read rule: the dashboard's "Pending Matches" stat queries
+    // across every tournament's matches subcollection at once via
+    // collectionGroup('matches'). The nested rule above only applies when
+    // Firestore can scope the query to one known tournament - a true collection
+    // group query needs this wildcard form to be granted read access at all.
+    match /{path=**}/matches/{matchId} {
+      allow read: if isSignedIn();
+    }
+
     match /flags/{flagId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.createdBy == myUsername()
