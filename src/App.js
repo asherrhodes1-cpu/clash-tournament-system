@@ -489,17 +489,9 @@ export default function TournamentApp() {
     setCurrentPage('dashboard');
   };
 
-  const handleDeleteTournament = (tournamentId) => {
-    if (window.confirm('Are you sure you want to delete this tournament? This cannot be undone.')) {
-      setTournaments(prev => prev.filter(t => t.id !== tournamentId));
-      const updated = tournaments.filter(t => t.id !== tournamentId);
-      saveData(updated);
-      setCurrentPage('dashboard');
-    }
-  };
+  const handleJoinTournament = (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     
-    // Check if signup deadline has passed
     if (tournament.signupDeadline && new Date(tournament.signupDeadline) < new Date()) {
       alert('Signups for this tournament have closed');
       return;
@@ -514,6 +506,15 @@ export default function TournamentApp() {
       return t;
     }));
     saveData(tournaments);
+  };
+
+  const handleDeleteTournament = (tournamentId) => {
+    if (window.confirm('Are you sure you want to delete this tournament? This cannot be undone.')) {
+      setTournaments(prev => prev.filter(t => t.id !== tournamentId));
+      const updated = tournaments.filter(t => t.id !== tournamentId);
+      saveData(updated);
+      setCurrentPage('dashboard');
+    }
   };
 
   const handleStartTournament = async (tournamentId) => {
@@ -831,7 +832,7 @@ export default function TournamentApp() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center gap-2">
-                <img src="/logo.png" alt="Logo" className="w-8 h-8" />
+                <Trophy className="w-8 h-8 text-yellow-500" />
                 <span className="font-bold text-xl hidden sm:inline">MercifulAj</span>
               </div>
 
@@ -1146,7 +1147,7 @@ function LoginPage({ onLogin }) {
       <div className="max-w-md mx-auto mt-20">
         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
           <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-3">
-            <img src="/logo.png" alt="Logo" className="w-10 h-10" />
+            <Trophy className="w-10 h-10 text-yellow-500" />
             Create Account
           </h1>
 
@@ -1241,7 +1242,7 @@ function LoginPage({ onLogin }) {
     <div className="max-w-md mx-auto mt-20">
       <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
         <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-3">
-          <img src="/logo.png" alt="Logo" className="w-10 h-10" />
+          <Trophy className="w-10 h-10 text-yellow-500" />
           MercifulAj
         </h1>
 
