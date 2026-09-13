@@ -827,12 +827,14 @@ export default function TournamentApp() {
                 >
                   Dashboard
                 </button>
-                <button
-                  onClick={() => setCurrentPage('create')}
-                  className="hover:text-yellow-500 transition"
-                >
-                  Create Tournament
-                </button>
+                {currentUser.isStaff && (
+                  <button
+                    onClick={() => setCurrentPage('create')}
+                    className="hover:text-yellow-500 transition"
+                  >
+                    Create Tournament
+                  </button>
+                )}
                 {currentUser.isStaff && (
                   <button
                     onClick={() => setCurrentPage('staff_dashboard')}
