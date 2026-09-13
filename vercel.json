@@ -1,13 +1,3 @@
 {
-  "buildCommand": "cd tournament && npm run build",
-  "routes": [
-    {
-      "src": "/tournaments/(.*)",
-      "dest": "/tournament/build/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/$1"
-    }
-  ]
+  "buildCommand": "cd tournament && npm run build"
 }
