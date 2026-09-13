@@ -1391,6 +1391,8 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
 }
 
 function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer }) {
+  const [viewMode, setViewMode] = useState('list');
+
   if (!tournament) {
     return (
       <div className="text-center">
@@ -1469,25 +1471,145 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         <DisputeReview matches={matches} onResolveDispute={onResolveDispute} />
       )}
 
-      {rounds.map(round => (
-        <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-          <h2 className="text-xl font-bold mb-4">Round {round}</h2>
-          <div className="space-y-3">
-            {matches
-              .filter(m => m.round === round)
-              .map(match => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  user={user}
-                  onSelectMatch={() => onSelectMatch(match.id)}
-                  onPlayerReady={() => onPlayerReady(match.id)}
-                  onFlagMatch={() => onFlagMatch(match.id)}
-                />
-              ))}
-          </div>
+      {tournament.status === 'completed' && tournament.champion && (
+        <TournamentResults tournament={tournament} matches={matches} />
+      )}
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">Bracket</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-1 rounded text-sm border transition ${
+              viewMode === 'list' ? 'bg-white text-black border-white' : 'border-gray-600 text-gray-300 hover:border-white'
+            }`}
+          >
+            List
+          </button>
+          <button
+            onClick={() => setViewMode('bracket')}
+            className={`px-3 py-1 rounded text-sm border transition ${
+              viewMode === 'bracket' ? 'bg-white text-black border-white' : 'border-gray-600 text-gray-300 hover:border-white'
+            }`}
+          >
+            Bracket
+          </button>
         </div>
-      ))}
+      </div>
+
+      {viewMode === 'bracket' ? (
+        <BracketView matches={matches} rounds={rounds} />
+      ) : (
+        rounds.map(round => (
+          <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 className="text-xl font-bold mb-4">Round {round}</h2>
+            <div className="space-y-3">
+              {matches
+                .filter(m => m.round === round)
+                .map(match => (
+                  <MatchCard
+                    key={match.id}
+                    match={match}
+                    user={user}
+                    onSelectMatch={() => onSelectMatch(match.id)}
+                    onPlayerReady={() => onPlayerReady(match.id)}
+                    onFlagMatch={() => onFlagMatch(match.id)}
+                  />
+                ))}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+function buildStandings(tournament, matches) {
+  if (!tournament.champion) return [];
+
+  const standings = [{ place: 1, players: [tournament.champion] }];
+  const placedSoFar = new Set([tournament.champion]);
+  const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => b - a);
+
+  let nextPlace = 2;
+  for (const round of rounds) {
+    const losers = [...new Set(
+      matches
+        .filter(m => m.round === round && m.status === 'completed' && m.winner)
+        .map(m => (m.winner === m.player1 ? m.player2 : m.player1))
+        .filter(p => p && p !== 'BYE' && !placedSoFar.has(p))
+    )];
+
+    if (losers.length === 0) continue;
+    losers.forEach(p => placedSoFar.add(p));
+    standings.push({ place: nextPlace, players: losers });
+    nextPlace += losers.length;
+  }
+
+  return standings;
+}
+
+function TournamentResults({ tournament, matches }) {
+  const standings = buildStandings(tournament, matches);
+
+  return (
+    <div className="bg-gray-800 rounded-lg border-2 border-white p-6">
+      <div className="text-center mb-6">
+        <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Tournament Complete</p>
+        <h2 className="text-2xl font-bold">🏆 {tournament.champion} wins {tournament.name}!</h2>
+      </div>
+      <div className="space-y-2">
+        {standings.map(({ place, players }) => (
+          <div key={place} className="flex items-center justify-between bg-gray-700 rounded px-4 py-3">
+            <span className="font-bold text-white">
+              {place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'} {ordinal(place)} place
+            </span>
+            <span className="text-gray-200">{players.join(', ')}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BracketView({ matches, rounds }) {
+  const maxRound = Math.max(...rounds);
+
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+      <div className="flex gap-8 min-w-max pb-2">
+        {rounds.map(round => (
+          <div key={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
+            <h3 className="text-center font-bold text-gray-400 mb-2">
+              {round === maxRound ? 'Final' : `Round ${round}`}
+            </h3>
+            {matches.filter(m => m.round === round).map(match => (
+              <div key={match.id} className="bg-gray-700 rounded border border-gray-600 p-2 text-sm space-y-1">
+                {[match.player1, match.player2].map((p, idx) => {
+                  const isWinner = match.status === 'completed' && match.winner === p;
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex justify-between items-center px-2 py-1 rounded ${
+                        isWinner ? 'bg-white text-black font-bold' : 'text-gray-300'
+                      }`}
+                    >
+                      <span>{p || 'TBD'}</span>
+                      {isWinner && <span>✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1672,6 +1794,11 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
       return;
     }
 
+    const confirmed = window.confirm(
+      `Confirm: ${winner} won this match?\n\nSubmitting a false result will result in immediate removal from this tournament and a ban from future tournaments.`
+    );
+    if (!confirmed) return;
+
     setSelectedWinner(winner);
     setTimeout(async () => {
       try {
@@ -1775,6 +1902,10 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
             <p className="text-sm text-gray-300 mb-4">
               Based on the match, who won?
             </p>
+
+            <div className="mb-4 p-3 bg-neutral-800 border border-white rounded text-xs text-gray-300">
+              ⚠️ Submitting a false result will result in immediate removal from this tournament and a ban from future tournaments.
+            </div>
 
             <div className="space-y-2">
               <button
