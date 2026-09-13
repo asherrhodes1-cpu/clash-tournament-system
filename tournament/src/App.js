@@ -162,6 +162,8 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
   const handleStatusChange = (flagId, newStatus) => {
     onUpdateFlagStatus(flagId, newStatus);
     refreshFlags();
+    const updatedFlags = JSON.parse(localStorage.getItem('flags') || '[]');
+    setSelectedFlag(updatedFlags.find(f => f.id === flagId) || null);
   };
 
   const handleAddResponse = (flagId) => {
@@ -498,21 +500,22 @@ export default function TournamentApp() {
 
   const handleJoinTournament = (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
-    
+
     if (tournament.signupDeadline && new Date(tournament.signupDeadline) < new Date()) {
       alert('Signups for this tournament have closed');
       return;
     }
 
-    setTournaments(prev => prev.map(t => {
+    const updated = tournaments.map(t => {
       if (t.id === tournamentId) {
         if (!t.players.includes(currentUser.username)) {
           return { ...t, players: [...t.players, currentUser.username] };
         }
       }
       return t;
-    }));
-    saveData(tournaments);
+    });
+    setTournaments(updated);
+    saveData(updated);
   };
 
   const handleDeleteTournament = (tournamentId) => {
@@ -587,31 +590,36 @@ export default function TournamentApp() {
     }
 
     const bracket = generateSeededBracket(tournament.players, playerStats);
-    const firstRoundMatches = bracket.map((pair, idx) => ({
-      id: `${tournamentId}-${idx}`,
-      tournamentId,
-      player1: pair[0],
-      player2: pair[1],
-      player1Tag: playerStats[pair[0]]?.tag || '',
-      player2Tag: playerStats[pair[1]]?.tag || '',
-      player1Stats: playerStats[pair[0]] || null,
-      player2Stats: playerStats[pair[1]] || null,
-      round: 1,
-      status: 'pending',
-      player1Ready: false,
-      player2Ready: false,
-      player1ReadyTime: null,
-      player2ReadyTime: null,
-      scheduledStartTime: null,
-      winner1Vote: null,
-      winner2Vote: null,
-      player1VoteTime: null,
-      player2VoteTime: null,
-      player1Screenshot: null,
-      player2Screenshot: null,
-    }));
+    const firstRoundMatches = bracket.map((pair, idx) => {
+      const isBye = pair[1] === 'BYE';
+      return {
+        id: `${tournamentId}-${idx}`,
+        tournamentId,
+        player1: pair[0],
+        player2: pair[1],
+        player1Tag: playerStats[pair[0]]?.tag || '',
+        player2Tag: playerStats[pair[1]]?.tag || '',
+        player1Stats: playerStats[pair[0]] || null,
+        player2Stats: playerStats[pair[1]] || null,
+        round: 1,
+        status: isBye ? 'completed' : 'pending',
+        winner: isBye ? pair[0] : undefined,
+        completedAt: isBye ? new Date().getTime() : undefined,
+        player1Ready: false,
+        player2Ready: false,
+        player1ReadyTime: null,
+        player2ReadyTime: null,
+        scheduledStartTime: null,
+        winner1Vote: null,
+        winner2Vote: null,
+        player1VoteTime: null,
+        player2VoteTime: null,
+        player1Screenshot: null,
+        player2Screenshot: null,
+      };
+    });
 
-    setTournaments(prev => prev.map(t => {
+    const updated = tournaments.map(t => {
       if (t.id === tournamentId) {
         return {
           ...t,
@@ -622,13 +630,13 @@ export default function TournamentApp() {
         };
       }
       return t;
-    }));
-
-    saveData(tournaments);
+    });
+    setTournaments(updated);
+    saveData(updated);
   };
 
   const handlePlayerReady = (matchId) => {
-    setTournaments(prev => prev.map(t => {
+    const updated = tournaments.map(t => {
       const updatedMatches = t.matches.map(m => {
         if (m.id === matchId) {
           const isPlayer1 = currentUser.username === m.player1;
@@ -651,15 +659,16 @@ export default function TournamentApp() {
       });
 
       return { ...t, matches: updatedMatches };
-    }));
+    });
 
-    saveData(tournaments);
+    setTournaments(updated);
+    saveData(updated);
   };
 
   const handleReportMatch = (matchId, selectedWinner, screenshot) => {
     const now = new Date().getTime();
-    
-    setTournaments(prev => prev.map(t => {
+
+    const updated = tournaments.map(t => {
       const updatedMatches = t.matches.map(m => {
         if (m.id === matchId) {
           const isPlayer1 = currentUser.username === m.player1;
@@ -688,9 +697,10 @@ export default function TournamentApp() {
       });
 
       return { ...t, matches: updatedMatches };
-    }));
+    });
 
-    saveData(tournaments);
+    setTournaments(updated);
+    saveData(updated);
   };
 
   const handleResolveDispute = (matchId, winner) => {
@@ -714,7 +724,7 @@ export default function TournamentApp() {
   };
 
   const handleMatchTimeout = (tournamentId, matchId, resolution) => {
-    setTournaments(prev => prev.map(t => {
+    const updated = tournaments.map(t => {
       if (t.id === tournamentId) {
         const updatedMatches = t.matches.map(m => {
           if (m.id === matchId) {
@@ -740,9 +750,10 @@ export default function TournamentApp() {
         return { ...t, matches: updatedMatches };
       }
       return t;
-    }));
+    });
 
-    saveData(tournaments);
+    setTournaments(updated);
+    saveData(updated);
   };
 
   const handleCreateFlag = (flagData) => {
@@ -807,70 +818,99 @@ export default function TournamentApp() {
   useEffect(() => {
     const interval = setInterval(() => {
       checkMatchTimeouts(tournaments, handleMatchTimeout);
-      
-      tournaments.forEach(tournament => {
-        if (tournament.status === 'in_progress') {
-          const roundNumbers = [...new Set(tournament.matches.map(m => m.round))];
-          
-          roundNumbers.forEach(round => {
-            const roundMatches = tournament.matches.filter(m => m.round === round);
-            const allComplete = roundMatches.every(m => m.status === 'completed' || m.status === 'disputed' || m.status === 'needs_staff_review');
-            
-            if (allComplete && round < 10) {
-              const nextRound = round + 1;
-              const alreadyHasNextRound = tournament.matches.some(m => m.round === nextRound);
-              
-              if (!alreadyHasNextRound) {
-                const winners = roundMatches
-                  .filter(m => m.status === 'completed')
-                  .map(m => m.winner)
-                  .filter(w => w && !(tournament.removedPlayers || []).includes(w));
 
-                if (winners.length === 1) {
-                  setTournaments(prev => prev.map(t => {
-                    if (t.id === tournament.id) {
-                      return { ...t, status: 'completed', champion: winners[0] };
-                    }
-                    return t;
-                  }));
-                } else if (winners.length > 1) {
-                  const nextRoundMatches = [];
-                  for (let i = 0; i < winners.length; i += 2) {
-                    if (winners[i + 1]) {
-                      const now = new Date().getTime();
-                      nextRoundMatches.push({
-                        id: `${tournament.id}-r${nextRound}-${i / 2}`,
-                        tournamentId: tournament.id,
-                        player1: winners[i],
-                        player2: winners[i + 1],
-                        player1Tag: tournament.playerStats?.[winners[i]]?.tag || '',
-                        player2Tag: tournament.playerStats?.[winners[i + 1]]?.tag || '',
-                        player1Stats: tournament.playerStats?.[winners[i]] || null,
-                        player2Stats: tournament.playerStats?.[winners[i + 1]] || null,
-                        round: nextRound,
-                        status: 'pending',
-                        player1Ready: false,
-                        player2Ready: false,
-                        winner1Vote: null,
-                        winner2Vote: null,
-                        player1Screenshot: null,
-                        player2Screenshot: null,
-                      });
-                    }
-                  }
+      let anyChanged = false;
+      const updatedTournaments = tournaments.map(tournament => {
+        if (tournament.status !== 'in_progress') return tournament;
 
-                  setTournaments(prev => prev.map(t => {
-                    if (t.id === tournament.id) {
-                      return { ...t, matches: [...t.matches, ...nextRoundMatches] };
-                    }
-                    return t;
-                  }));
+        let matches = tournament.matches;
+        let newStatus = tournament.status;
+        let champion = tournament.champion;
+        let tournamentChanged = false;
+        const roundNumbers = [...new Set(matches.map(m => m.round))];
+
+        roundNumbers.forEach(round => {
+          const roundMatches = matches.filter(m => m.round === round);
+          const allComplete = roundMatches.every(m => m.status === 'completed' || m.status === 'disputed' || m.status === 'needs_staff_review');
+
+          if (allComplete && round < 10) {
+            const nextRound = round + 1;
+            const alreadyHasNextRound = matches.some(m => m.round === nextRound);
+
+            if (!alreadyHasNextRound) {
+              const winners = roundMatches
+                .filter(m => m.status === 'completed')
+                .map(m => m.winner)
+                .filter(w => w && !(tournament.removedPlayers || []).includes(w));
+
+              if (winners.length === 1) {
+                newStatus = 'completed';
+                champion = winners[0];
+                tournamentChanged = true;
+              } else if (winners.length > 1) {
+                const now = new Date().getTime();
+                const nextRoundMatches = [];
+                let matchIdx = 0;
+                let i = 0;
+                for (; i + 1 < winners.length; i += 2) {
+                  nextRoundMatches.push({
+                    id: `${tournament.id}-r${nextRound}-${matchIdx++}`,
+                    tournamentId: tournament.id,
+                    player1: winners[i],
+                    player2: winners[i + 1],
+                    player1Tag: tournament.playerStats?.[winners[i]]?.tag || '',
+                    player2Tag: tournament.playerStats?.[winners[i + 1]]?.tag || '',
+                    player1Stats: tournament.playerStats?.[winners[i]] || null,
+                    player2Stats: tournament.playerStats?.[winners[i + 1]] || null,
+                    round: nextRound,
+                    status: 'pending',
+                    player1Ready: false,
+                    player2Ready: false,
+                    winner1Vote: null,
+                    winner2Vote: null,
+                    player1Screenshot: null,
+                    player2Screenshot: null,
+                  });
                 }
+                if (i < winners.length) {
+                  // Odd winner count - this player gets an automatic bye into the next round
+                  nextRoundMatches.push({
+                    id: `${tournament.id}-r${nextRound}-${matchIdx++}`,
+                    tournamentId: tournament.id,
+                    player1: winners[i],
+                    player2: 'BYE',
+                    player1Tag: tournament.playerStats?.[winners[i]]?.tag || '',
+                    player2Tag: '',
+                    player1Stats: tournament.playerStats?.[winners[i]] || null,
+                    player2Stats: null,
+                    round: nextRound,
+                    status: 'completed',
+                    winner: winners[i],
+                    completedAt: now,
+                    player1Ready: false,
+                    player2Ready: false,
+                    winner1Vote: null,
+                    winner2Vote: null,
+                    player1Screenshot: null,
+                    player2Screenshot: null,
+                  });
+                }
+                matches = [...matches, ...nextRoundMatches];
+                tournamentChanged = true;
               }
             }
-          });
-        }
+          }
+        });
+
+        if (!tournamentChanged) return tournament;
+        anyChanged = true;
+        return { ...tournament, matches, status: newStatus, champion };
       });
+
+      if (anyChanged) {
+        setTournaments(updatedTournaments);
+        saveData(updatedTournaments);
+      }
     }, 10000);
 
     return () => clearInterval(interval);
@@ -1817,18 +1857,19 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
           {match.status === 'disputed' && (
             <p className="text-white">Disputed • {match.player1} voted: {match.winner1Vote} | {match.player2} voted: {match.winner2Vote}</p>
           )}
-          {match.status === 'waiting_for_opponent' && userIsPlayer && (
+          {match.status === 'waiting_for_opponent' && userIsPlayer && userVote && (
             <>
               <p>You voted for: <span className="text-white font-bold">{userVote}</span></p>
-              {userVote && (
-                <div className="text-xs text-white mt-1">
-                  📸 Screenshot submitted
-                </div>
-              )}
+              <div className="text-xs text-white mt-1">
+                📸 Screenshot submitted
+              </div>
               <p className="text-xs text-gray-400 mt-1">Waiting for opponent...</p>
             </>
           )}
-          {(match.status === 'active' || match.status === 'scheduled') && match.scheduledStartTime && (
+          {match.status === 'waiting_for_opponent' && userIsPlayer && !userVote && (
+            <p className="text-white">Your opponent has reported a result — submit yours to confirm or dispute it.</p>
+          )}
+          {(match.status === 'active' || match.status === 'scheduled' || match.status === 'waiting_for_opponent') && match.scheduledStartTime && (
             <div className={`text-xs mt-2 ${timeDisplay?.color || 'text-gray-400'}`}>
               ⏱️ Time remaining: {timeDisplay?.text}
               {match.resolvedReason === 'no_report_timeout' && ' (Needs staff review - no reports submitted)'}
@@ -1849,7 +1890,7 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
         {userIsPlayer && match.status === 'pending' && userReady && (
           <div className="text-sm text-white">✓ You're Ready</div>
         )}
-        {userIsPlayer && (match.status === 'active' || match.status === 'scheduled') && !userVote && (
+        {userIsPlayer && !userVote && ['active', 'scheduled', 'waiting_for_opponent'].includes(match.status) && (
           <button
             onClick={onSelectMatch}
             className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
@@ -1860,7 +1901,7 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
         {userIsPlayer && userVote && match.status !== 'completed' && match.status !== 'disputed' && (
           <div className="text-sm text-white">Waiting for opponent...</div>
         )}
-        {userIsPlayer && (match.status === 'active' || match.status === 'scheduled') && (
+        {userIsPlayer && ['active', 'scheduled', 'waiting_for_opponent'].includes(match.status) && (
           <button
             onClick={onFlagMatch}
             className="border border-white text-white hover:bg-white hover:text-black px-3 py-2 rounded text-sm transition"
@@ -2254,7 +2295,7 @@ function checkMatchTimeouts(tournaments, onTimeout) {
 
   tournaments.forEach(tournament => {
     tournament.matches?.forEach(match => {
-      if ((match.status === 'active' || match.status === 'scheduled') && match.scheduledStartTime) {
+      if ((match.status === 'active' || match.status === 'scheduled' || match.status === 'waiting_for_opponent') && match.scheduledStartTime) {
         const elapsed = now - match.scheduledStartTime;
         
         if (elapsed > TIMEOUT_MS) {
