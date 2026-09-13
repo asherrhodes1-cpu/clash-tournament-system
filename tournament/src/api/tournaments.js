@@ -146,58 +146,66 @@ async function lookupClashTags(usernames) {
 export async function startTournament(tournament) {
   await updateDoc(tournamentRef(tournament.id), { status: 'loading_stats', bracket: [] });
 
-  const clashTagsByUsername = await lookupClashTags(tournament.players);
+  try {
+    const clashTagsByUsername = await lookupClashTags(tournament.players);
 
-  const playerStats = {};
-  for (const player of tournament.players) {
-    const clashTag = clashTagsByUsername[player];
-    if (clashTag) {
-      const stats = await fetchClashPlayerData(clashTag);
-      if (stats) playerStats[player] = stats;
+    const playerStats = {};
+    for (const player of tournament.players) {
+      const clashTag = clashTagsByUsername[player];
+      if (clashTag) {
+        const stats = await fetchClashPlayerData(clashTag);
+        if (stats) playerStats[player] = stats;
+      }
     }
-  }
 
-  const bracket = generateSeededBracket(tournament.players, playerStats);
-  const now = Date.now();
-  const batch = writeBatch(db);
+    const bracket = generateSeededBracket(tournament.players, playerStats);
+    const now = Date.now();
+    const batch = writeBatch(db);
 
-  bracket.forEach((pair, idx) => {
-    const isBye = pair[1] === 'BYE';
-    const matchId = `${tournament.id}-${idx}`;
-    batch.set(matchRef(tournament.id, matchId), {
-      id: matchId,
-      tournamentId: tournament.id,
-      player1: pair[0],
-      player2: pair[1],
-      player1Tag: playerStats[pair[0]]?.tag || '',
-      player2Tag: playerStats[pair[1]]?.tag || '',
-      player1Stats: playerStats[pair[0]] || null,
-      player2Stats: playerStats[pair[1]] || null,
-      round: 1,
-      status: isBye ? 'completed' : 'pending',
-      winner: isBye ? pair[0] : null,
-      completedAt: isBye ? now : null,
-      player1Ready: false,
-      player2Ready: false,
-      player1ReadyTime: null,
-      player2ReadyTime: null,
-      scheduledStartTime: null,
-      winner1Vote: null,
-      winner2Vote: null,
-      player1VoteTime: null,
-      player2VoteTime: null,
-      player1ScreenshotPath: null,
-      player2ScreenshotPath: null,
+    bracket.forEach((pair, idx) => {
+      const isBye = pair[1] === 'BYE';
+      const matchId = `${tournament.id}-${idx}`;
+      batch.set(matchRef(tournament.id, matchId), {
+        id: matchId,
+        tournamentId: tournament.id,
+        player1: pair[0],
+        player2: pair[1],
+        player1Tag: playerStats[pair[0]]?.tag || '',
+        player2Tag: playerStats[pair[1]]?.tag || '',
+        player1Stats: playerStats[pair[0]] || null,
+        player2Stats: playerStats[pair[1]] || null,
+        round: 1,
+        status: isBye ? 'completed' : 'pending',
+        winner: isBye ? pair[0] : null,
+        completedAt: isBye ? now : null,
+        player1Ready: false,
+        player2Ready: false,
+        player1ReadyTime: null,
+        player2ReadyTime: null,
+        scheduledStartTime: null,
+        winner1Vote: null,
+        winner2Vote: null,
+        player1VoteTime: null,
+        player2VoteTime: null,
+        player1ScreenshotPath: null,
+        player2ScreenshotPath: null,
+      });
     });
-  });
 
-  batch.update(tournamentRef(tournament.id), {
-    status: 'in_progress',
-    bracket,
-    playerStats,
-  });
+    batch.update(tournamentRef(tournament.id), {
+      status: 'in_progress',
+      // Firestore doesn't allow arrays nested directly inside arrays, so store
+      // pairs as objects instead of the [player1, player2] tuples used internally.
+      bracket: bracket.map(([player1, player2]) => ({ player1, player2 })),
+      playerStats,
+    });
 
-  await batch.commit();
+    await batch.commit();
+  } catch (err) {
+    // Don't leave the tournament stuck on "loading_stats" if anything above throws.
+    await updateDoc(tournamentRef(tournament.id), { status: 'signups_open' });
+    throw err;
+  }
 }
 
 export async function playerReady(tournamentId, matchId, username) {

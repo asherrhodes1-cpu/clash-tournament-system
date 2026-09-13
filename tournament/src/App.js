@@ -602,7 +602,11 @@ export default function TournamentApp() {
   const handleStartTournament = async (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
-    await startTournament(tournament);
+    try {
+      await startTournament(tournament);
+    } catch (err) {
+      alert(`Failed to start tournament: ${err.message}`);
+    }
   };
 
   const handlePlayerReady = async (matchId) => {
