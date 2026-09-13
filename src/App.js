@@ -489,7 +489,14 @@ export default function TournamentApp() {
     setCurrentPage('dashboard');
   };
 
-  const handleJoinTournament = (tournamentId) => {
+  const handleDeleteTournament = (tournamentId) => {
+    if (window.confirm('Are you sure you want to delete this tournament? This cannot be undone.')) {
+      setTournaments(prev => prev.filter(t => t.id !== tournamentId));
+      const updated = tournaments.filter(t => t.id !== tournamentId);
+      saveData(updated);
+      setCurrentPage('dashboard');
+    }
+  };
     const tournament = tournaments.find(t => t.id === tournamentId);
     
     // Check if signup deadline has passed
@@ -932,6 +939,7 @@ export default function TournamentApp() {
             tournaments={tournaments}
             onJoinTournament={handleJoinTournament}
             onStartTournament={handleStartTournament}
+            onDeleteTournament={handleDeleteTournament}
             setCurrentPage={setCurrentPage}
           />
         )}
@@ -1318,7 +1326,7 @@ function LoginPage({ onLogin }) {
   );
 }
 
-function DashboardPage({ user, tournaments, onJoinTournament, onStartTournament, setCurrentPage }) {
+function DashboardPage({ user, tournaments, onJoinTournament, onStartTournament, onDeleteTournament, setCurrentPage }) {
   const userTournaments = tournaments.filter(t => t.createdBy === user.username || t.players.includes(user.username));
 
   return (
@@ -1357,6 +1365,7 @@ function DashboardPage({ user, tournaments, onJoinTournament, onStartTournament,
                 user={user}
                 onJoin={onJoinTournament}
                 onStart={onStartTournament}
+                onDelete={onDeleteTournament}
                 onView={() => {
                   setCurrentPage('tournament');
                   user.selectedTournament = tournament.id;
