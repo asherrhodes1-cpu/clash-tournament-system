@@ -1,10 +1,4 @@
 {
   "buildCommand": "cd tournament && npm run build",
-  "outputDirectory": ".",
-  "rewrites": [
-    {
-      "source": "/tournaments/:path*",
-      "destination": "/tournament/build/index.html"
-    }
-  ]
+  "outputDirectory": "tournament/build"
 }
