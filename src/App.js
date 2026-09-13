@@ -1286,10 +1286,6 @@ function LoginPage({ onLogin }) {
         >
           Create New Account
         </button>
-
-        <p className="text-xs text-gray-400 mt-6 text-center">
-          Staff password for admin access: <span className="font-mono">clash2024</span>
-        </p>
       </div>
     </div>
   );
