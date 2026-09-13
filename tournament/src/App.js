@@ -593,7 +593,11 @@ export default function TournamentApp() {
   };
 
   const handleDeleteTournament = async (tournamentId) => {
-    if (window.confirm('Are you sure you want to delete this tournament? This cannot be undone.')) {
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    const warning = tournament?.status === 'completed'
+      ? 'Delete this tournament? This also removes the placement badges/achievements it gave players. This cannot be undone.'
+      : 'Are you sure you want to delete this tournament? This cannot be undone.';
+    if (window.confirm(warning)) {
       await deleteTournament(tournamentId);
       setCurrentPage('dashboard');
     }
@@ -1513,7 +1517,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         >
           View
         </button>
-        {isCreator && user.isStaff && (
+        {user.isStaff && (
           <button
             onClick={() => onDelete(tournament.id)}
             className="border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition"
