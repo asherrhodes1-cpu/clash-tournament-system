@@ -1,9 +1,10 @@
 {
   "buildCommand": "cd tournament && npm run build",
+  "outputDirectory": "tournament/build",
   "routes": [
     {
       "src": "/tournaments(/?.*)",
-      "dest": "/tournament/public/index.html"
+      "dest": "/index.html"
     },
     {
       "src": "/(.*)",
