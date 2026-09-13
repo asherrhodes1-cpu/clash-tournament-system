@@ -264,6 +264,11 @@ export async function reportMatch(tournamentId, matchId, username, selectedWinne
     const m = snap.data();
 
     const isPlayer1 = username === m.player1;
+    const alreadyVoted = isPlayer1 ? m.winner1Vote : m.winner2Vote;
+    if (alreadyVoted) {
+      throw new Error('You already submitted a result for this match.');
+    }
+
     const now = Date.now();
     const update = {
       [isPlayer1 ? 'winner1Vote' : 'winner2Vote']: selectedWinner,

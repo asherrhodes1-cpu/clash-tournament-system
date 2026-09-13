@@ -619,6 +619,10 @@ export default function TournamentApp() {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
     const isPlayer1 = currentUser.username === match.player1;
+    const alreadyVoted = isPlayer1 ? match.winner1Vote : match.winner2Vote;
+    if (alreadyVoted) {
+      throw new Error('You already submitted a result for this match.');
+    }
     const screenshotPath = await uploadMatchScreenshot(
       selectedTournamentId,
       matchId,
@@ -1645,6 +1649,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
 
   const opponent = match.player1 === user.username ? match.player2 : match.player1;
   const timeDisplay = getTimeRemainingDisplay(match.scheduledStartTime);
+  const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
 
   const handleSendMessage = () => {
     if (messageText.trim()) {
@@ -1668,8 +1673,13 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
     }
 
     setSelectedWinner(winner);
-    setTimeout(() => {
-      onReportWinner(winner, screenshot);
+    setTimeout(async () => {
+      try {
+        await onReportWinner(winner, screenshot);
+      } catch (err) {
+        setSelectedWinner(null);
+        alert(err.message);
+      }
     }, 500);
   };
 
@@ -1728,72 +1738,81 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
           </div>
         )}
 
-        <div className="mb-6 pb-6 border-b border-gray-600">
-          <p className="text-sm font-medium mb-3">📸 Proof Screenshot</p>
-          <p className="text-xs text-gray-400 mb-3">Upload a screenshot showing the match result from your profile</p>
+        {userVote ? (
+          <div className="mb-6 p-4 bg-neutral-800 border border-white rounded text-white text-sm text-center">
+            ✓ You already reported <span className="font-bold">{userVote}</span> as the winner.
+            <p className="text-xs mt-1 text-gray-400">Your result is locked in — you can't resubmit or change it.</p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-6 pb-6 border-b border-gray-600">
+              <p className="text-sm font-medium mb-3">📸 Proof Screenshot</p>
+              <p className="text-xs text-gray-400 mb-3">Upload a screenshot showing the match result from your profile</p>
 
-          <label className="block">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleScreenshotUpload}
-              className="hidden"
-            />
-            <div className="border-2 border-dashed border-gray-600 rounded p-4 text-center cursor-pointer hover:border-white transition">
-              {screenshotPreview ? (
-                <div>
-                  <img src={screenshotPreview} alt="Preview" className="w-full h-auto rounded mb-2 max-h-48" />
-                  <p className="text-xs text-white">✓ Screenshot uploaded</p>
+              <label className="block">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleScreenshotUpload}
+                  className="hidden"
+                />
+                <div className="border-2 border-dashed border-gray-600 rounded p-4 text-center cursor-pointer hover:border-white transition">
+                  {screenshotPreview ? (
+                    <div>
+                      <img src={screenshotPreview} alt="Preview" className="w-full h-auto rounded mb-2 max-h-48" />
+                      <p className="text-xs text-white">✓ Screenshot uploaded</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm text-gray-400">Click to upload screenshot</p>
+                      <p className="text-xs text-gray-500 mt-1">or drag and drop</p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-gray-400">Click to upload screenshot</p>
-                  <p className="text-xs text-gray-500 mt-1">or drag and drop</p>
-                </div>
-              )}
+              </label>
             </div>
-          </label>
-        </div>
 
-        <p className="text-sm text-gray-300 mb-4">
-          Based on the match, who won?
-        </p>
+            <p className="text-sm text-gray-300 mb-4">
+              Based on the match, who won?
+            </p>
 
-        <div className="space-y-2">
-          <button
-            onClick={() => handleReportWinner(match.player1)}
-            disabled={selectedWinner !== null || !screenshot}
-            className={`w-full p-3 rounded font-bold transition ${
-              selectedWinner === match.player1
-                ? 'bg-white text-black'
-                : 'bg-gray-700 hover:bg-gray-600'
-            } ${selectedWinner !== null && selectedWinner !== match.player1 ? 'opacity-50' : ''} ${!screenshot ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {match.player1} won
-          </button>
-          <button
-            onClick={() => handleReportWinner(match.player2)}
-            disabled={selectedWinner !== null || !screenshot}
-            className={`w-full p-3 rounded font-bold transition ${
-              selectedWinner === match.player2
-                ? 'bg-white text-black'
-                : 'bg-gray-700 hover:bg-gray-600'
-            } ${selectedWinner !== null && selectedWinner !== match.player2 ? 'opacity-50' : ''} ${!screenshot ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {match.player2} won
-          </button>
-        </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => handleReportWinner(match.player1)}
+                disabled={selectedWinner !== null || !screenshot}
+                className={`w-full p-3 rounded font-bold transition ${
+                  selectedWinner === match.player1
+                    ? 'bg-white text-black'
+                    : 'bg-gray-700 hover:bg-gray-600'
+                } ${selectedWinner !== null && selectedWinner !== match.player1 ? 'opacity-50' : ''} ${!screenshot ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {match.player1} won
+              </button>
+              <button
+                onClick={() => handleReportWinner(match.player2)}
+                disabled={selectedWinner !== null || !screenshot}
+                className={`w-full p-3 rounded font-bold transition ${
+                  selectedWinner === match.player2
+                    ? 'bg-white text-black'
+                    : 'bg-gray-700 hover:bg-gray-600'
+                } ${selectedWinner !== null && selectedWinner !== match.player2 ? 'opacity-50' : ''} ${!screenshot ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {match.player2} won
+              </button>
+            </div>
 
-        {selectedWinner && (
-          <div className="mt-4 p-3 bg-neutral-800 border border-white rounded text-white text-sm text-center">
-            ✓ Vote submitted! Waiting for opponent to confirm...
-          </div>
-        )}
+            {selectedWinner && (
+              <div className="mt-4 p-3 bg-neutral-800 border border-white rounded text-white text-sm text-center">
+                ✓ Vote submitted! Waiting for opponent to confirm...
+              </div>
+            )}
 
-        {!screenshot && selectedWinner === null && (
-          <div className="mt-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm text-center">
-            ⚠️ Screenshot required to report
-          </div>
+            {!screenshot && selectedWinner === null && (
+              <div className="mt-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm text-center">
+                ⚠️ Screenshot required to report
+              </div>
+            )}
+          </>
         )}
 
         <button

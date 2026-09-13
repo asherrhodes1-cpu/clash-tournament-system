@@ -36,9 +36,17 @@ service cloud.firestore {
       match /matches/{matchId} {
         allow read: if isSignedIn();
         allow write: if isStaff();
-        // A non-staff player may update only fields on a match they're actually part of.
+
+        function playerAlreadyVoted() {
+          return (resource.data.player1 == myUsername() && resource.data.winner1Vote != null) ||
+                 (resource.data.player2 == myUsername() && resource.data.winner2Vote != null);
+        }
+
+        // A non-staff player may update only fields on a match they're actually part of,
+        // and only before they've already submitted a result for it.
         allow update: if isSignedIn() &&
           (resource.data.player1 == myUsername() || resource.data.player2 == myUsername()) &&
+          !playerAlreadyVoted() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'player1Ready', 'player1ReadyTime', 'player2Ready', 'player2ReadyTime',
             'winner1Vote', 'player1VoteTime', 'winner2Vote', 'player2VoteTime',
