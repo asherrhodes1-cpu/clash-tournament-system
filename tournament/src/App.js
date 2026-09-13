@@ -13,6 +13,8 @@ import {
   playerReady,
   reportMatch,
   resolveDispute,
+  subscribeToMatchMessages,
+  sendMatchMessage,
 } from './api/tournaments';
 import { subscribeToFlags, createFlag, updateFlagStatus, addFlagResponse } from './api/flags';
 import { uploadMatchScreenshot, getScreenshotUrl } from './api/storage';
@@ -1613,6 +1615,11 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
 
+  useEffect(() => {
+    if (!match) return;
+    return subscribeToMatchMessages(match.tournamentId, match.id, setMessages);
+  }, [match?.tournamentId, match?.id]);
+
   if (!match) {
     return (
       <div className="text-center">
@@ -1626,14 +1633,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
 
   const handleSendMessage = () => {
     if (messageText.trim()) {
-      setMessages([
-        ...messages,
-        {
-          sender: user.username,
-          text: messageText,
-          timestamp: new Date().toLocaleTimeString(),
-        },
-      ]);
+      sendMatchMessage(match.tournamentId, match.id, user.username, messageText.trim());
       setMessageText('');
     }
   };
@@ -1674,7 +1674,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
                 <div className={`mt-1 ${msg.sender === user.username ? 'text-white' : 'text-gray-300'}`}>
                   {msg.text}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">{msg.timestamp}</div>
+                <div className="text-xs text-gray-500 mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</div>
               </div>
             ))
           )}

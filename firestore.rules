@@ -45,6 +45,18 @@ service cloud.firestore {
             'player1ScreenshotPath', 'player2ScreenshotPath', 'status', 'scheduledStartTime',
             'winner', 'completedAt'
           ]);
+
+        match /messages/{messageId} {
+          function isMatchParticipant() {
+            let m = get(/databases/$(database)/documents/tournaments/$(tournamentId)/matches/$(matchId)).data;
+            return isSignedIn() && (m.player1 == myUsername() || m.player2 == myUsername());
+          }
+          allow read: if isMatchParticipant() || isStaff();
+          allow create: if (isMatchParticipant() || isStaff())
+                        && request.resource.data.sender == myUsername()
+                        && request.resource.data.keys().hasOnly(['sender', 'text', 'timestamp']);
+          allow update, delete: if false;
+        }
       }
     }
 

@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  addDoc,
   setDoc,
   updateDoc,
   onSnapshot,
@@ -26,6 +27,25 @@ function tournamentRef(tournamentId) {
 
 function matchesRef(tournamentId) {
   return collection(db, TOURNAMENTS, String(tournamentId), 'matches');
+}
+
+function matchMessagesRef(tournamentId, matchId) {
+  return collection(db, TOURNAMENTS, String(tournamentId), 'matches', matchId, 'messages');
+}
+
+export function subscribeToMatchMessages(tournamentId, matchId, onChange) {
+  const q = query(matchMessagesRef(tournamentId, matchId), orderBy('timestamp'));
+  return onSnapshot(q, (snapshot) => {
+    onChange(snapshot.docs.map((d) => d.data()));
+  });
+}
+
+export async function sendMatchMessage(tournamentId, matchId, sender, text) {
+  await addDoc(matchMessagesRef(tournamentId, matchId), {
+    sender,
+    text,
+    timestamp: Date.now(),
+  });
 }
 
 function matchRef(tournamentId, matchId) {
