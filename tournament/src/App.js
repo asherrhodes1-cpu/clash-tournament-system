@@ -47,7 +47,7 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
         <h2 className="text-2xl font-bold mb-4">Report Issue to Staff</h2>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-900 border border-red-700 rounded text-red-300 text-sm">
+          <div className="mb-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm">
             {error}
           </div>
         )}
@@ -59,7 +59,7 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
               placeholder="Brief description of issue"
               required
             />
@@ -70,7 +70,7 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
             >
               <option value="other">Other</option>
               <option value="rules">Rules Question</option>
@@ -85,7 +85,7 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
             >
               <option value="low">Low</option>
               <option value="normal">Normal</option>
@@ -99,7 +99,7 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
               placeholder="Explain the issue in detail..."
               rows="4"
               required
@@ -109,7 +109,7 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
           <div className="flex gap-3">
             <button
               type="submit"
-              className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-4 rounded transition"
+              className="flex-1 bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition"
             >
               Submit Report
             </button>
@@ -177,13 +177,13 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
   const getPriorityColor = (priority) => {
     switch (priority) {
       case 'urgent':
-        return 'bg-red-900 text-red-200';
+        return 'bg-white text-black border border-white';
       case 'high':
-        return 'bg-orange-900 text-orange-200';
+        return 'bg-neutral-800 text-white border-2 border-white';
       case 'normal':
-        return 'bg-yellow-900 text-yellow-200';
+        return 'bg-neutral-800 text-white border border-neutral-600';
       case 'low':
-        return 'bg-blue-900 text-blue-200';
+        return 'bg-neutral-800 text-neutral-400 border border-neutral-700';
       default:
         return 'bg-gray-700 text-gray-200';
     }
@@ -192,11 +192,11 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
   const getStatusColor = (status) => {
     switch (status) {
       case 'open':
-        return 'bg-red-600';
+        return 'bg-neutral-800 border-2 border-white';
       case 'in_progress':
-        return 'bg-yellow-600';
+        return 'bg-neutral-700 border border-white';
       case 'resolved':
-        return 'bg-green-600';
+        return 'bg-neutral-800 border border-neutral-700';
       default:
         return 'bg-gray-600';
     }
@@ -222,7 +222,7 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
       <div className="space-y-6">
         <button
           onClick={() => setSelectedFlag(null)}
-          className="text-yellow-500 hover:text-yellow-600 text-sm"
+          className="text-white hover:text-neutral-300 text-sm"
         >
           ← Back to Flags
         </button>
@@ -260,7 +260,7 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
                 selectedFlag.responses.map((response, idx) => (
                   <div key={idx} className="border-b border-gray-600 pb-3 last:border-0">
                     <div className="flex justify-between">
-                      <span className="font-bold text-yellow-400">{response.sender}</span>
+                      <span className="font-bold text-white">{response.sender}</span>
                       <span className="text-xs text-gray-400">{new Date(response.timestamp).toLocaleString()}</span>
                     </div>
                     <p className="text-gray-300 mt-1">{response.message}</p>
@@ -278,12 +278,12 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
                   value={responseText}
                   onChange={(e) => setResponseText(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddResponse(selectedFlag.id)}
-                  className="flex-1 bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+                  className="flex-1 bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
                   placeholder="Add staff response..."
                 />
                 <button
                   onClick={() => handleAddResponse(selectedFlag.id)}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold px-4 py-2 rounded transition"
+                  className="bg-white hover:bg-neutral-200 text-gray-900 font-bold px-4 py-2 rounded transition"
                 >
                   Send
                 </button>
@@ -298,7 +298,7 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
                 {selectedFlag.status !== 'in_progress' && (
                   <button
                     onClick={() => handleStatusChange(selectedFlag.id, 'in_progress')}
-                    className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded transition"
+                    className="bg-neutral-700 hover:bg-neutral-600 px-4 py-2 rounded transition"
                   >
                     Mark In Progress
                   </button>
@@ -306,14 +306,14 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
                 {selectedFlag.status !== 'open' && (
                   <button
                     onClick={() => handleStatusChange(selectedFlag.id, 'open')}
-                    className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded transition"
+                    className="border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded transition"
                   >
                     Reopen
                   </button>
                 )}
                 <button
                   onClick={() => handleStatusChange(selectedFlag.id, 'resolved')}
-                  className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded transition"
+                  className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded transition"
                 >
                   Mark Resolved
                 </button>
@@ -322,8 +322,8 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
           )}
 
           {selectedFlag.resolvedAt && (
-            <div className="border-t border-gray-600 pt-6 mt-6 bg-green-900 rounded p-4">
-              <p className="text-green-300 text-sm">
+            <div className="border-t border-gray-600 pt-6 mt-6 bg-neutral-800 border border-neutral-700 rounded p-4">
+              <p className="text-white text-sm">
                 ✓ Resolved by {selectedFlag.resolvedBy} on {new Date(selectedFlag.resolvedAt).toLocaleString()}
               </p>
             </div>
@@ -343,16 +343,16 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
             <p className="text-sm text-gray-400">Total Flags</p>
             <p className="text-2xl font-bold">{flags.length}</p>
           </div>
-          <div className="bg-red-900 rounded p-4">
-            <p className="text-sm text-red-200">Open</p>
+          <div className="bg-neutral-800 border-2 border-white rounded p-4">
+            <p className="text-sm text-neutral-300">Open</p>
             <p className="text-2xl font-bold">{flags.filter(f => f.status === 'open').length}</p>
           </div>
-          <div className="bg-yellow-900 rounded p-4">
-            <p className="text-sm text-yellow-200">In Progress</p>
+          <div className="bg-neutral-800 border border-white rounded p-4">
+            <p className="text-sm text-neutral-300">In Progress</p>
             <p className="text-2xl font-bold">{flags.filter(f => f.status === 'in_progress').length}</p>
           </div>
-          <div className="bg-green-900 rounded p-4">
-            <p className="text-sm text-green-200">Resolved</p>
+          <div className="bg-neutral-800 border border-neutral-700 rounded p-4">
+            <p className="text-sm text-neutral-400">Resolved</p>
             <p className="text-2xl font-bold">{flags.filter(f => f.status === 'resolved').length}</p>
           </div>
         </div>
@@ -363,7 +363,7 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+              className="bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
             >
               <option value="all">All Flags</option>
               <option value="open">Open</option>
@@ -376,7 +376,7 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+              className="bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
             >
               <option value="priority">Priority</option>
               <option value="date">Most Recent</option>
@@ -826,27 +826,26 @@ export default function TournamentApp() {
   }, [tournaments]);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-black text-white">
       {currentUser && (
         <nav className="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center gap-2">
-                <Trophy className="w-8 h-8 text-yellow-500" />
-                <span className="font-bold text-xl hidden sm:inline">MercifulAj</span>
+                <img src="/logo.png" alt="MercifulAj" className="w-9 h-9 object-contain" />
               </div>
 
               <div className="hidden md:flex items-center gap-6">
                 <button
                   onClick={() => setCurrentPage('dashboard')}
-                  className="hover:text-yellow-500 transition"
+                  className="hover:text-neutral-300 transition"
                 >
                   Dashboard
                 </button>
                 {currentUser.isStaff && (
                   <button
                     onClick={() => setCurrentPage('create')}
-                    className="hover:text-yellow-500 transition"
+                    className="hover:text-neutral-300 transition"
                   >
                     Create Tournament
                   </button>
@@ -854,7 +853,7 @@ export default function TournamentApp() {
                 {currentUser.isStaff && (
                   <button
                     onClick={() => setCurrentPage('staff_dashboard')}
-                    className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm transition"
+                    className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-sm transition"
                   >
                     Staff Dashboard
                   </button>
@@ -862,11 +861,11 @@ export default function TournamentApp() {
                 <div className="text-sm text-gray-400">
                   {currentUser.username}
                   <div className="text-xs text-gray-500">{currentUser.clashTag}</div>
-                  {currentUser.isStaff && <span className="ml-2 text-red-500">[STAFF]</span>}
+                  {currentUser.isStaff && <span className="ml-2 text-white font-bold">[STAFF]</span>}
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded transition"
+                  className="border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded transition"
                 >
                   Logout
                 </button>
@@ -908,18 +907,18 @@ export default function TournamentApp() {
                       setCurrentPage('staff_dashboard');
                       setMobileMenuOpen(false);
                     }}
-                    className="block w-full text-left bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
+                    className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
                   >
                     Staff Dashboard
                   </button>
                 )}
                 <div className="px-4 py-2 text-sm text-gray-400 border-t border-gray-700 pt-3">
                   {currentUser.username}
-                  {currentUser.isStaff && <span className="ml-2 text-red-500">[STAFF]</span>}
+                  {currentUser.isStaff && <span className="ml-2 text-white font-bold">[STAFF]</span>}
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="block w-full text-left bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
+                  className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
                 >
                   Logout
                 </button>
@@ -962,7 +961,7 @@ export default function TournamentApp() {
                 <p className="text-gray-400 mb-6">Only staff members can create tournaments.</p>
                 <button
                   onClick={() => setCurrentPage('dashboard')}
-                  className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-6 rounded transition"
+                  className="bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-6 rounded transition"
                 >
                   Back to Dashboard
                 </button>
@@ -1169,12 +1168,12 @@ function LoginPage({ onLogin }) {
       <div className="max-w-md mx-auto mt-20">
         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
           <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-3">
-            <Trophy className="w-10 h-10 text-yellow-500" />
+            <Trophy className="w-10 h-10 text-white" />
             Create Account
           </h1>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-900 border border-red-700 rounded text-red-300 text-sm">
+            <div className="mb-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm">
               {error}
             </div>
           )}
@@ -1186,7 +1185,7 @@ function LoginPage({ onLogin }) {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
                 placeholder="Enter username (3+ characters)"
                 required
               />
@@ -1198,7 +1197,7 @@ function LoginPage({ onLogin }) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
                 placeholder="Enter password (6+ characters)"
                 required
               />
@@ -1210,7 +1209,7 @@ function LoginPage({ onLogin }) {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
                 placeholder="Confirm password"
                 required
               />
@@ -1222,7 +1221,7 @@ function LoginPage({ onLogin }) {
                 type="text"
                 value={clashTag}
                 onChange={(e) => setClashTag(e.target.value.toUpperCase())}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+                className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
                 placeholder="e.g., #ABC123XYZ"
                 required
               />
@@ -1231,7 +1230,7 @@ function LoginPage({ onLogin }) {
 
             <button
               type="submit"
-              className="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-4 rounded transition"
+              className="w-full bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition"
             >
               Create Account
             </button>
@@ -1263,13 +1262,12 @@ function LoginPage({ onLogin }) {
   return (
     <div className="max-w-md mx-auto mt-20">
       <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
-        <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-3">
-          <Trophy className="w-10 h-10 text-yellow-500" />
-          MercifulAj
-        </h1>
+        <div className="flex justify-center mb-8">
+          <img src="/logo.png" alt="MercifulAj" className="w-24 h-24 object-contain" />
+        </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-900 border border-red-700 rounded text-red-300 text-sm">
+          <div className="mb-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm">
             {error}
           </div>
         )}
@@ -1281,7 +1279,7 @@ function LoginPage({ onLogin }) {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
               placeholder="Enter username"
               required
             />
@@ -1293,7 +1291,7 @@ function LoginPage({ onLogin }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
               placeholder="Enter password"
               required
             />
@@ -1304,7 +1302,7 @@ function LoginPage({ onLogin }) {
               type="checkbox"
               checked={isStaff}
               onChange={(e) => setIsStaff(e.target.checked)}
-              className="w-4 h-4"
+              className="w-4 h-4 accent-white"
             />
             <span className="text-sm">Login as staff member</span>
           </label>
@@ -1316,7 +1314,7 @@ function LoginPage({ onLogin }) {
                 type="password"
                 value={staffPassword}
                 onChange={(e) => setStaffPassword(e.target.value)}
-                className="w-full bg-gray-700 border border-red-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-red-500"
+                className="w-full bg-gray-700 border border-white rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
                 placeholder="Enter staff password"
                 required
               />
@@ -1325,7 +1323,7 @@ function LoginPage({ onLogin }) {
 
           <button
             type="submit"
-            className="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-4 rounded transition"
+            className="w-full bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition"
           >
             Login
           </button>
@@ -1340,7 +1338,7 @@ function LoginPage({ onLogin }) {
             setStaffPassword('');
             setIsStaff(false);
           }}
-          className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition"
+          className="w-full mt-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-white font-bold py-2 px-4 rounded transition"
         >
           Create New Account
         </button>
@@ -1421,9 +1419,9 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
     if (!tournament.signupDeadline) return null;
     const deadline = new Date(tournament.signupDeadline);
     if (deadline < now) {
-      return <span className="text-red-400">Signups Closed</span>;
+      return <span className="text-white font-semibold">Signups Closed</span>;
     }
-    return <span className="text-yellow-400">{deadline.toLocaleString()}</span>;
+    return <span className="text-white">{deadline.toLocaleString()}</span>;
   };
 
   return (
@@ -1432,7 +1430,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         <h3 className="font-bold text-lg">{tournament.name}</h3>
         <div className="text-sm text-gray-300 mt-1">
           <p>Creator: {tournament.createdBy}</p>
-          <p>Players: {tournament.players.length} | Status: <span className="text-yellow-500">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
+          <p>Players: {tournament.players.length} | Status: <span className="text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
           {tournament.signupDeadline && (
             <p>Deadline: {getDeadlineDisplay()}</p>
           )}
@@ -1442,27 +1440,27 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         {canJoin && (
           <button
             onClick={() => onJoin(tournament.id)}
-            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm transition"
+            className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
           >
             Join
           </button>
         )}
         {hasJoined && !isCreator && tournament.status === 'signups_open' && (
-          <span className="bg-green-700 px-4 py-2 rounded text-sm">Joined ✓</span>
+          <span className="bg-neutral-800 border border-neutral-600 text-white px-4 py-2 rounded text-sm">Joined ✓</span>
         )}
         {deadlinePassed && !hasJoined && tournament.status === 'signups_open' && (
-          <span className="bg-red-700 px-4 py-2 rounded text-sm">Signups Closed</span>
+          <span className="bg-neutral-800 border-2 border-white text-white px-4 py-2 rounded text-sm">Signups Closed</span>
         )}
         {isCreator && tournament.status === 'signups_open' && tournament.players.length >= 2 && (
           <button
             onClick={() => onStart(tournament.id)}
-            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm transition"
+            className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
           >
             Start Tournament
           </button>
         )}
         {tournament.status === 'loading_stats' && (
-          <div className="text-yellow-500 text-sm">Fetching player data...</div>
+          <div className="text-white text-sm">Fetching player data...</div>
         )}
         <button
           onClick={onView}
@@ -1473,7 +1471,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         {isCreator && user.isStaff && (
           <button
             onClick={() => onDelete(tournament.id)}
-            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm transition"
+            className="border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition"
             title="Delete tournament"
           >
             🗑️ Delete
@@ -1519,7 +1517,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
         <h2 className="text-2xl font-bold mb-6">Create Tournament</h2>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-900 border border-red-700 rounded text-red-300 text-sm">
+          <div className="mb-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm">
             {error}
           </div>
         )}
@@ -1531,7 +1529,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
               placeholder="e.g., Builder Base April Cup"
               required
             />
@@ -1542,7 +1540,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
               placeholder="Details about your tournament"
               rows="4"
             />
@@ -1553,7 +1551,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
             >
               <option value="single_elimination">Single Elimination</option>
               <option value="double_elimination">Double Elimination (Coming Soon)</option>
@@ -1566,7 +1564,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
               type="datetime-local"
               value={signupDeadline}
               onChange={(e) => setSignupDeadline(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
             />
             <p className="text-xs text-gray-400 mt-1">Leave blank to allow signups indefinitely</p>
           </div>
@@ -1574,7 +1572,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
           <div className="flex gap-4">
             <button
               type="submit"
-              className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-4 rounded transition"
+              className="flex-1 bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition"
             >
               Create Tournament
             </button>
@@ -1619,7 +1617,7 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-gray-400">Status</p>
-            <p className="text-lg font-bold text-yellow-500">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</p>
+            <p className="text-lg font-bold text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</p>
           </div>
           <div>
             <p className="text-sm text-gray-400">Players</p>
@@ -1632,14 +1630,14 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
           {tournament.champion && (
             <div>
               <p className="text-sm text-gray-400">Champion</p>
-              <p className="text-lg font-bold text-yellow-500">{tournament.champion}</p>
+              <p className="text-lg font-bold text-white">{tournament.champion}</p>
             </div>
           )}
         </div>
         {tournament.signupDeadline && (
           <div className="mt-4 p-3 bg-gray-700 rounded">
             <p className="text-sm text-gray-400">Signup Deadline</p>
-            <p className="text-yellow-400">{new Date(tournament.signupDeadline).toLocaleString()}</p>
+            <p className="text-white">{new Date(tournament.signupDeadline).toLocaleString()}</p>
           </div>
         )}
       </div>
@@ -1684,15 +1682,15 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
   const getStatusColor = (status) => {
     switch (status) {
       case 'completed':
-        return 'bg-green-900';
+        return 'bg-neutral-900 border border-neutral-700';
       case 'disputed':
-        return 'bg-red-900';
+        return 'bg-neutral-900 border-2 border-white';
       case 'active':
-        return 'bg-blue-900';
+        return 'bg-neutral-800 border border-white';
       case 'scheduled':
-        return 'bg-purple-900';
+        return 'bg-neutral-900 border border-neutral-600';
       case 'waiting_for_opponent':
-        return 'bg-yellow-900';
+        return 'bg-neutral-900 border border-neutral-700';
       default:
         return 'bg-gray-700';
     }
@@ -1716,39 +1714,39 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
           <div>
             <span className="font-bold">{match.player1}</span>
             <div className="text-xs text-gray-400">#{match.player1Tag}</div>
-            {match.player1Ready && match.status === 'pending' && <div className="text-xs text-green-400">✓ Ready</div>}
+            {match.player1Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
           </div>
           <span className="text-gray-400">vs</span>
           <div>
             <span className="font-bold">{match.player2}</span>
             <div className="text-xs text-gray-400">#{match.player2Tag}</div>
-            {match.player2Ready && match.status === 'pending' && <div className="text-xs text-green-400">✓ Ready</div>}
+            {match.player2Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
           </div>
           {getStatusIcon(match.status)}
         </div>
         <div className="text-sm text-gray-300 mt-2">
           {match.status === 'pending' && (
-            <p className="text-blue-300">
+            <p className="text-white">
               {match.player1Ready && match.player2Ready ? '⏱️ Both players ready! Match will start soon.' : 'Waiting for both players to confirm ready...'}
             </p>
           )}
           {match.status === 'scheduled' && (
-            <p className="text-purple-300">Match scheduled - coordinate timing with opponent</p>
+            <p className="text-white">Match scheduled - coordinate timing with opponent</p>
           )}
           {match.status === 'active' && (
-            <p className="text-yellow-300">🎮 Match is LIVE - Play now in-game and report results</p>
+            <p className="text-white">🎮 Match is LIVE - Play now in-game and report results</p>
           )}
           {match.status === 'completed' && (
-            <p>Winner: <span className="text-green-300 font-bold">{match.winner}</span></p>
+            <p>Winner: <span className="text-white font-bold">{match.winner}</span></p>
           )}
           {match.status === 'disputed' && (
-            <p className="text-red-300">Disputed • {match.player1} voted: {match.winner1Vote} | {match.player2} voted: {match.winner2Vote}</p>
+            <p className="text-white">Disputed • {match.player1} voted: {match.winner1Vote} | {match.player2} voted: {match.winner2Vote}</p>
           )}
           {match.status === 'waiting_for_opponent' && userIsPlayer && (
             <>
-              <p>You voted for: <span className="text-yellow-300 font-bold">{userVote}</span></p>
+              <p>You voted for: <span className="text-white font-bold">{userVote}</span></p>
               {userVote && (
-                <div className="text-xs text-green-400 mt-1">
+                <div className="text-xs text-white mt-1">
                   📸 Screenshot submitted
                 </div>
               )}
@@ -1768,29 +1766,29 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
         {userIsPlayer && match.status === 'pending' && !userReady && (
           <button
             onClick={onPlayerReady}
-            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm transition"
+            className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
           >
             I'm Ready
           </button>
         )}
         {userIsPlayer && match.status === 'pending' && userReady && (
-          <div className="text-sm text-green-400">✓ You're Ready</div>
+          <div className="text-sm text-white">✓ You're Ready</div>
         )}
         {userIsPlayer && (match.status === 'active' || match.status === 'scheduled') && !userVote && (
           <button
             onClick={onSelectMatch}
-            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm transition"
+            className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
           >
             Report Result
           </button>
         )}
         {userIsPlayer && userVote && match.status !== 'completed' && match.status !== 'disputed' && (
-          <div className="text-sm text-yellow-300">Waiting for opponent...</div>
+          <div className="text-sm text-white">Waiting for opponent...</div>
         )}
         {userIsPlayer && (match.status === 'active' || match.status === 'scheduled') && (
           <button
             onClick={onFlagMatch}
-            className="bg-red-700 hover:bg-red-800 px-3 py-2 rounded text-sm transition"
+            className="border border-white text-white hover:bg-white hover:text-black px-3 py-2 rounded text-sm transition"
             title="Report issue to staff"
           >
             🚩 Flag
@@ -1870,7 +1868,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
             messages.map((msg, idx) => (
               <div key={idx} className={`text-sm ${msg.sender === user.username ? 'text-right' : ''}`}>
                 <span className="font-bold">{msg.sender}</span>
-                <div className={`mt-1 ${msg.sender === user.username ? 'text-yellow-300' : 'text-gray-300'}`}>
+                <div className={`mt-1 ${msg.sender === user.username ? 'text-white' : 'text-gray-300'}`}>
                   {msg.text}
                 </div>
                 <div className="text-xs text-gray-500 mt-1">{msg.timestamp}</div>
@@ -1885,12 +1883,12 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-            className="flex-1 bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
+            className="flex-1 bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
             placeholder="Type your message..."
           />
           <button
             onClick={handleSendMessage}
-            className="bg-yellow-500 hover:bg-yellow-600 p-2 rounded transition"
+            className="bg-white hover:bg-neutral-200 p-2 rounded transition"
           >
             <Send className="w-5 h-5 text-gray-900" />
           </button>
@@ -1923,11 +1921,11 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
               onChange={handleScreenshotUpload}
               className="hidden"
             />
-            <div className="border-2 border-dashed border-gray-600 rounded p-4 text-center cursor-pointer hover:border-yellow-500 transition">
+            <div className="border-2 border-dashed border-gray-600 rounded p-4 text-center cursor-pointer hover:border-white transition">
               {screenshotPreview ? (
                 <div>
                   <img src={screenshotPreview} alt="Preview" className="w-full h-auto rounded mb-2 max-h-48" />
-                  <p className="text-xs text-green-400">✓ Screenshot uploaded</p>
+                  <p className="text-xs text-white">✓ Screenshot uploaded</p>
                 </div>
               ) : (
                 <div>
@@ -1949,7 +1947,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
             disabled={selectedWinner !== null || !screenshot}
             className={`w-full p-3 rounded font-bold transition ${
               selectedWinner === match.player1
-                ? 'bg-green-600 text-white'
+                ? 'bg-white text-black'
                 : 'bg-gray-700 hover:bg-gray-600'
             } ${selectedWinner !== null && selectedWinner !== match.player1 ? 'opacity-50' : ''} ${!screenshot ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
@@ -1960,7 +1958,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
             disabled={selectedWinner !== null || !screenshot}
             className={`w-full p-3 rounded font-bold transition ${
               selectedWinner === match.player2
-                ? 'bg-green-600 text-white'
+                ? 'bg-white text-black'
                 : 'bg-gray-700 hover:bg-gray-600'
             } ${selectedWinner !== null && selectedWinner !== match.player2 ? 'opacity-50' : ''} ${!screenshot ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
@@ -1969,13 +1967,13 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
         </div>
 
         {selectedWinner && (
-          <div className="mt-4 p-3 bg-green-900 rounded text-green-300 text-sm text-center">
+          <div className="mt-4 p-3 bg-neutral-800 border border-white rounded text-white text-sm text-center">
             ✓ Vote submitted! Waiting for opponent to confirm...
           </div>
         )}
 
         {!screenshot && selectedWinner === null && (
-          <div className="mt-4 p-3 bg-yellow-900 rounded text-yellow-300 text-sm text-center">
+          <div className="mt-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm text-center">
             ⚠️ Screenshot required to report
           </div>
         )}
@@ -2000,30 +1998,30 @@ function DisputeReview({ tournament, user, setCurrentPage }) {
   if (allIssues.length === 0) return null;
 
   return (
-    <div className="bg-red-900 border border-red-700 rounded-lg p-6">
+    <div className="bg-neutral-900 border-2 border-white rounded-lg p-6">
       <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
         <AlertCircle className="w-6 h-6" />
         Pending Staff Review ({allIssues.length})
       </h2>
       <div className="space-y-3">
         {disputes.map(dispute => (
-          <div key={dispute.id} className="bg-red-800 rounded p-4">
+          <div key={dispute.id} className="bg-neutral-800 border border-neutral-600 rounded p-4">
             <div className="flex justify-between items-start flex-wrap gap-4">
               <div className="flex-1">
                 <p className="font-bold mb-2">
                   {dispute.player1} <span className="text-gray-300">vs</span> {dispute.player2}
                 </p>
                 <p className="text-sm text-gray-300 mb-2">
-                  {dispute.player1} voted: <span className="text-yellow-300 font-bold">{dispute.winner1Vote}</span>
+                  {dispute.player1} voted: <span className="text-white font-bold">{dispute.winner1Vote}</span>
                 </p>
                 <p className="text-sm text-gray-300 mb-3">
-                  {dispute.player2} voted: <span className="text-yellow-300 font-bold">{dispute.winner2Vote}</span>
+                  {dispute.player2} voted: <span className="text-white font-bold">{dispute.winner2Vote}</span>
                 </p>
                 <div className="flex gap-2 flex-wrap">
                   {dispute.player1Screenshot && (
                     <button
                       onClick={() => setExpandedDispute(expandedDispute === `${dispute.id}-p1` ? null : `${dispute.id}-p1`)}
-                      className="text-xs bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded transition"
+                      className="text-xs bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-white px-3 py-1 rounded transition"
                     >
                       📸 {dispute.player1}'s Screenshot
                     </button>
@@ -2031,7 +2029,7 @@ function DisputeReview({ tournament, user, setCurrentPage }) {
                   {dispute.player2Screenshot && (
                     <button
                       onClick={() => setExpandedDispute(expandedDispute === `${dispute.id}-p2` ? null : `${dispute.id}-p2`)}
-                      className="text-xs bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded transition"
+                      className="text-xs bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-white px-3 py-1 rounded transition"
                     >
                       📸 {dispute.player2}'s Screenshot
                     </button>
@@ -2045,10 +2043,10 @@ function DisputeReview({ tournament, user, setCurrentPage }) {
                 )}
               </div>
               <div className="flex gap-2 ml-4">
-                <button className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded text-sm transition">
+                <button className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition">
                   Accept {dispute.winner1Vote}
                 </button>
-                <button className="bg-green-600 hover:bg-green-700 px-3 py-2 rounded text-sm transition">
+                <button className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition">
                   Accept {dispute.winner2Vote}
                 </button>
               </div>
@@ -2057,20 +2055,20 @@ function DisputeReview({ tournament, user, setCurrentPage }) {
         ))}
 
         {noReports.map(match => (
-          <div key={match.id} className="bg-orange-800 rounded p-4 border-l-4 border-orange-500">
+          <div key={match.id} className="bg-neutral-900 rounded p-4 border-l-4 border-white">
             <div className="flex justify-between items-start flex-wrap gap-4">
               <div>
-                <p className="font-bold mb-2 text-orange-100">
+                <p className="font-bold mb-2 text-white">
                   {match.player1} <span className="text-gray-300">vs</span> {match.player2}
                 </p>
-                <p className="text-sm text-orange-200 mb-2">
+                <p className="text-sm text-neutral-300 mb-2">
                   🕐 No results reported within 16 hours
                 </p>
                 <p className="text-xs text-gray-300 mb-3">
                   Timed out: {new Date(match.timeoutAt).toLocaleString()}
                 </p>
               </div>
-              <button className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-sm transition">
+              <button className="border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition">
                 Review & Decide
               </button>
             </div>
@@ -2085,7 +2083,7 @@ function StatCard({ icon, label, value }) {
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
       <div className="flex items-center gap-4">
-        <div className="text-yellow-500">{icon}</div>
+        <div className="text-white">{icon}</div>
         <div>
           <p className="text-sm text-gray-400">{label}</p>
           <p className="text-3xl font-bold">{value}</p>
@@ -2203,10 +2201,10 @@ function getTimeRemaining(startTime) {
 function getTimeRemainingDisplay(startTime) {
   const remaining = getTimeRemaining(startTime);
   if (!remaining) return null;
-  if (remaining === 'EXPIRED') return { text: 'TIMEOUT', color: 'text-red-400' };
-  
+  if (remaining === 'EXPIRED') return { text: 'TIMEOUT', color: 'text-white font-bold' };
+
   const hours = parseInt(remaining);
-  if (hours <= 2) return { text: remaining, color: 'text-red-400' };
-  if (hours <= 8) return { text: remaining, color: 'text-yellow-400' };
-  return { text: remaining, color: 'text-green-400' };
+  if (hours <= 2) return { text: remaining, color: 'text-white font-bold' };
+  if (hours <= 8) return { text: remaining, color: 'text-white' };
+  return { text: remaining, color: 'text-neutral-400' };
 }
