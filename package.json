@@ -1,0 +1,10 @@
+{
+  "name": "mercifulaj",
+  "version": "1.0.0",
+  "description": "MercifulAj - Clash of Clans Builder Base Tournament System",
+  "private": true,
+  "scripts": {
+    "build": "cd tournament && npm run build",
+    "start": "cd tournament && npm start"
+  }
+}
