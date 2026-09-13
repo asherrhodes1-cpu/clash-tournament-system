@@ -17,7 +17,9 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isSignedIn();
       allow update: if isSignedIn() && request.auth.uid == uid
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clashTag']);
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clashTag', 'bio', 'avatarPath'])
+                    && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 300))
+                    && (!('avatarPath' in request.resource.data) || request.resource.data.avatarPath is string);
       allow create, delete: if false; // Admin SDK only, via the signUp Cloud Function
     }
 

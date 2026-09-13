@@ -17,7 +17,8 @@ import {
   sendMatchMessage,
 } from './api/tournaments';
 import { subscribeToFlags, createFlag, updateFlagStatus, addFlagResponse } from './api/flags';
-import { uploadMatchScreenshot, getScreenshotUrl } from './api/storage';
+import { uploadMatchScreenshot, getScreenshotUrl, uploadProfilePicture, getProfilePictureUrl } from './api/storage';
+import { subscribeToUserProfile, updateProfile } from './api/users';
 import { getTimeRemainingDisplay } from './utils';
 
 // ============================================================================
@@ -512,6 +513,7 @@ export default function TournamentApp() {
   const [flags, setFlags] = useState([]);
   const [selectedTournamentId, setSelectedTournamentId] = useState(null);
   const [selectedMatchId, setSelectedMatchId] = useState(null);
+  const [selectedProfileUsername, setSelectedProfileUsername] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
   const [flagRelatedMatch, setFlagRelatedMatch] = useState(null);
@@ -568,6 +570,11 @@ export default function TournamentApp() {
   const handleLogout = async () => {
     await logOut();
     setMobileMenuOpen(false);
+  };
+
+  const viewProfile = (username) => {
+    setSelectedProfileUsername(username);
+    setCurrentPage('profile');
   };
 
   const handleCreateTournament = async (tournamentData) => {
@@ -678,7 +685,7 @@ export default function TournamentApp() {
                   Dashboard
                 </button>
                 <button
-                  onClick={() => setCurrentPage('profile')}
+                  onClick={() => viewProfile(currentUser.username)}
                   className="hover:text-neutral-300 transition"
                 >
                   Profile
@@ -733,7 +740,7 @@ export default function TournamentApp() {
                 </button>
                 <button
                   onClick={() => {
-                    setCurrentPage('profile');
+                    viewProfile(currentUser.username);
                     setMobileMenuOpen(false);
                   }}
                   className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
@@ -841,6 +848,7 @@ export default function TournamentApp() {
             onResolveDispute={handleResolveDispute}
             onRemovePlayer={handleRemovePlayer}
             onPlayerReady={handlePlayerReady}
+            onViewProfile={viewProfile}
             onFlagMatch={(matchId) => {
               setFlagRelatedMatch(matchId);
               setFlagModalOpen(true);
@@ -869,7 +877,12 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'profile' && currentUser && (
-          <ProfilePage user={currentUser} tournaments={tournaments} />
+          <ProfilePage
+            username={selectedProfileUsername || currentUser.username}
+            currentUser={currentUser}
+            tournaments={tournaments}
+            onViewProfile={viewProfile}
+          />
         )}
       </div>
 
@@ -1244,20 +1257,148 @@ function medalFor(place) {
   return place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : '🎖️';
 }
 
-function ProfilePage({ user, tournaments }) {
-  const placed = tournaments
-    .filter(t => t.status === 'completed' && t.placements && t.placements[user.username])
-    .sort((a, b) => a.placements[user.username] - b.placements[user.username]);
+function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
+  const [profile, setProfile] = useState(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [editingBio, setEditingBio] = useState(false);
+  const [bioDraft, setBioDraft] = useState('');
+  const [uploading, setUploading] = useState(false);
 
-  const championships = placed.filter(t => t.placements[user.username] === 1).length;
-  const runnerUps = placed.filter(t => t.placements[user.username] === 2).length;
+  const isOwnProfile = currentUser.username === username;
+
+  useEffect(() => {
+    setProfileLoaded(false);
+    return subscribeToUserProfile(username, (p) => {
+      setProfile(p);
+      setProfileLoaded(true);
+    });
+  }, [username]);
+
+  useEffect(() => {
+    setBioDraft(profile?.bio || '');
+  }, [profile?.bio]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (profile?.avatarPath) {
+      getProfilePictureUrl(profile.avatarPath).then((url) => {
+        if (!cancelled) setAvatarUrl(url);
+      });
+    } else {
+      setAvatarUrl(null);
+    }
+    return () => { cancelled = true; };
+  }, [profile?.avatarPath]);
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !profile) return;
+    setUploading(true);
+    try {
+      const path = await uploadProfilePicture(profile.id, file);
+      await updateProfile(profile.id, { avatarPath: path });
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSaveBio = async () => {
+    try {
+      await updateProfile(profile.id, { bio: bioDraft.trim() });
+      setEditingBio(false);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const placed = tournaments
+    .filter(t => t.status === 'completed' && t.placements && t.placements[username])
+    .sort((a, b) => a.placements[username] - b.placements[username]);
+
+  const championships = placed.filter(t => t.placements[username] === 1).length;
+  const runnerUps = placed.filter(t => t.placements[username] === 2).length;
+
+  if (profileLoaded && !profile) {
+    return (
+      <div className="text-center">
+        <p className="text-gray-400">No player found with that username</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-        <h1 className="text-3xl font-bold mb-1">{user.username}</h1>
-        <p className="text-gray-400">{user.clashTag}</p>
-        <div className="mt-4 grid grid-cols-3 gap-4">
+        <div className="flex items-center gap-4">
+          <div className="relative shrink-0">
+            <div className="w-20 h-20 rounded-full bg-gray-700 border-2 border-white overflow-hidden flex items-center justify-center text-2xl font-bold">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={username} className="w-full h-full object-cover" />
+              ) : (
+                username.charAt(0).toUpperCase()
+              )}
+            </div>
+            {isOwnProfile && (
+              <label
+                className="absolute -bottom-1 -right-1 bg-white text-black rounded-full w-7 h-7 flex items-center justify-center text-xs cursor-pointer border-2 border-gray-800"
+                title="Change profile picture"
+              >
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploading} />
+                {uploading ? '…' : '✎'}
+              </label>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-3xl font-bold">{username}</h1>
+            <p className="text-gray-400">{profile?.clashTag}</p>
+            {profile?.isStaff && <span className="text-white font-bold text-xs">[STAFF]</span>}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {editingBio ? (
+            <div className="space-y-2">
+              <textarea
+                value={bioDraft}
+                onChange={(e) => setBioDraft(e.target.value)}
+                maxLength={300}
+                rows={3}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white"
+                placeholder="Say something about yourself..."
+              />
+              <div className="flex gap-2">
+                <button onClick={handleSaveBio} className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-1 rounded text-sm transition">
+                  Save
+                </button>
+                <button
+                  onClick={() => { setEditingBio(false); setBioDraft(profile?.bio || ''); }}
+                  className="border border-gray-600 hover:border-white px-3 py-1 rounded text-sm transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <p className="text-gray-300 text-sm">
+                {profile?.bio || (isOwnProfile ? 'No bio yet — add one!' : 'No bio yet.')}
+              </p>
+              {isOwnProfile && (
+                <button
+                  onClick={() => setEditingBio(true)}
+                  className="border border-gray-600 hover:border-white text-xs px-2 py-1 rounded shrink-0 transition"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 grid grid-cols-3 gap-4">
           <div>
             <p className="text-sm text-gray-400">Tournaments Placed</p>
             <p className="text-2xl font-bold">{placed.length}</p>
@@ -1281,11 +1422,16 @@ function ProfilePage({ user, tournaments }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {placed.map(t => (
               <div key={t.id} className="bg-gray-700 rounded p-4 flex items-center gap-3">
-                <span className="text-3xl">{medalFor(t.placements[user.username])}</span>
+                <span className="text-3xl">{medalFor(t.placements[username])}</span>
                 <div>
-                  <p className="font-bold">{ordinal(t.placements[user.username])} place</p>
+                  <p className="font-bold">{ordinal(t.placements[username])} place</p>
                   <p className="text-sm text-gray-300">{t.name}</p>
-                  <p className="text-xs text-gray-500">Champion: {t.champion}</p>
+                  <button
+                    onClick={() => onViewProfile(t.champion)}
+                    className="text-xs text-gray-500 hover:text-white hover:underline transition"
+                  >
+                    Champion: {t.champion}
+                  </button>
                 </div>
               </div>
             ))}
@@ -1489,7 +1635,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer }) {
+function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile }) {
   const [viewMode, setViewMode] = useState('list');
 
   if (!tournament) {
@@ -1531,7 +1677,12 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           {tournament.champion && (
             <div>
               <p className="text-sm text-gray-400">Champion</p>
-              <p className="text-lg font-bold text-white">{tournament.champion}</p>
+              <button
+                onClick={() => onViewProfile(tournament.champion)}
+                className="text-lg font-bold text-white hover:underline"
+              >
+                {tournament.champion}
+              </button>
             </div>
           )}
         </div>
@@ -1552,7 +1703,9 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             <div className="space-y-2">
               {tournament.players.map(player => (
                 <div key={player} className="flex items-center justify-between bg-gray-700 rounded px-4 py-2">
-                  <span>{player}</span>
+                  <button onClick={() => onViewProfile(player)} className="hover:underline text-left">
+                    {player}
+                  </button>
                   <button
                     onClick={() => onRemovePlayer(tournament.id, player)}
                     className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-xs transition"
@@ -1571,7 +1724,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       )}
 
       {tournament.status === 'completed' && tournament.champion && (
-        <TournamentResults tournament={tournament} matches={matches} />
+        <TournamentResults tournament={tournament} matches={matches} onViewProfile={onViewProfile} />
       )}
 
       <div className="flex items-center justify-between">
@@ -1613,6 +1766,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                     onSelectMatch={() => onSelectMatch(match.id)}
                     onPlayerReady={() => onPlayerReady(match.id)}
                     onFlagMatch={() => onFlagMatch(match.id)}
+                    onViewProfile={onViewProfile}
                   />
                 ))}
             </div>
@@ -1654,7 +1808,7 @@ function buildStandings(tournament, matches) {
   return standings;
 }
 
-function TournamentResults({ tournament, matches }) {
+function TournamentResults({ tournament, matches, onViewProfile }) {
   const standings = buildStandings(tournament, matches);
 
   return (
@@ -1669,7 +1823,16 @@ function TournamentResults({ tournament, matches }) {
             <span className="font-bold text-white">
               {place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'} {ordinal(place)} place
             </span>
-            <span className="text-gray-200">{players.join(', ')}</span>
+            <span className="text-gray-200 space-x-2">
+              {players.map((p, idx) => (
+                <React.Fragment key={p}>
+                  {idx > 0 && ', '}
+                  <button onClick={() => onViewProfile(p)} className="hover:underline hover:text-white">
+                    {p}
+                  </button>
+                </React.Fragment>
+              ))}
+            </span>
           </div>
         ))}
       </div>
@@ -1713,7 +1876,7 @@ function BracketView({ matches, rounds }) {
   );
 }
 
-function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
+function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch, onViewProfile }) {
   const userIsPlayer = match.player1 === user.username || match.player2 === user.username;
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
   const userReady = match.player1 === user.username ? match.player1Ready : match.player2Ready;
@@ -1752,13 +1915,17 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
       <div className="flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <div>
-            <span className="font-bold">{match.player1}</span>
+            <button onClick={() => onViewProfile(match.player1)} className="font-bold hover:underline">
+              {match.player1}
+            </button>
             <div className="text-xs text-gray-400">#{match.player1Tag}</div>
             {match.player1Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
           </div>
           <span className="text-gray-400">vs</span>
           <div>
-            <span className="font-bold">{match.player2}</span>
+            <button onClick={() => onViewProfile(match.player2)} className="font-bold hover:underline" disabled={match.player2 === 'BYE'}>
+              {match.player2}
+            </button>
             <div className="text-xs text-gray-400">#{match.player2Tag}</div>
             {match.player2Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
           </div>

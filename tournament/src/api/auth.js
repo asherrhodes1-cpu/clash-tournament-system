@@ -53,6 +53,6 @@ export function subscribeToAuthState(onChange) {
     const userDoc = await getDoc(doc(db, 'users', user.uid));
     const clashTag = userDoc.exists() ? userDoc.data().clashTag : '';
 
-    onChange({ username, clashTag, isStaff });
+    onChange({ uid: user.uid, username, clashTag, isStaff });
   });
 }
