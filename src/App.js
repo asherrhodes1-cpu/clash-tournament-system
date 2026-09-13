@@ -490,6 +490,14 @@ export default function TournamentApp() {
   };
 
   const handleJoinTournament = (tournamentId) => {
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    
+    // Check if signup deadline has passed
+    if (tournament.signupDeadline && new Date(tournament.signupDeadline) < new Date()) {
+      alert('Signups for this tournament have closed');
+      return;
+    }
+
     setTournaments(prev => prev.map(t => {
       if (t.id === tournamentId) {
         if (!t.players.includes(currentUser.username)) {
@@ -875,15 +883,17 @@ export default function TournamentApp() {
                 >
                   Dashboard
                 </button>
-                <button
-                  onClick={() => {
-                    setCurrentPage('create');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
-                >
-                  Create Tournament
-                </button>
+                {currentUser.isStaff && (
+                  <button
+                    onClick={() => {
+                      setCurrentPage('create');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                  >
+                    Create Tournament
+                  </button>
+                )}
                 {currentUser.isStaff && (
                   <button
                     onClick={() => {
@@ -927,10 +937,25 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'create' && currentUser && (
-          <CreateTournamentPage
-            onCreateTournament={handleCreateTournament}
-            onCancel={() => setCurrentPage('dashboard')}
-          />
+          currentUser.isStaff ? (
+            <CreateTournamentPage
+              onCreateTournament={handleCreateTournament}
+              onCancel={() => setCurrentPage('dashboard')}
+            />
+          ) : (
+            <div className="max-w-md mx-auto mt-20">
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
+                <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
+                <p className="text-gray-400 mb-6">Only staff members can create tournaments.</p>
+                <button
+                  onClick={() => setCurrentPage('dashboard')}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-2 px-6 rounded transition"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            </div>
+          )
         )}
 
         {currentPage === 'tournament' && currentUser && (
@@ -1348,6 +1373,26 @@ function DashboardPage({ user, tournaments, onJoinTournament, onStartTournament,
 function TournamentCard({ tournament, user, onJoin, onStart, onView }) {
   const isCreator = tournament.createdBy === user.username;
   const hasJoined = tournament.players.includes(user.username);
+  const now = new Date();
+  const deadlinePassed = tournament.signupDeadline && new Date(tournament.signupDeadline) < now;
+  const canJoin = !hasJoined && !isCreator && tournament.status === 'signups_open' && !deadlinePassed;
+
+  const formatStatus = (status) => {
+    return status
+      .replace(/_/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  const getDeadlineDisplay = () => {
+    if (!tournament.signupDeadline) return null;
+    const deadline = new Date(tournament.signupDeadline);
+    if (deadline < now) {
+      return <span className="text-red-400">Signups Closed</span>;
+    }
+    return <span className="text-yellow-400">{deadline.toLocaleString()}</span>;
+  };
 
   return (
     <div className="bg-gray-700 rounded p-4 flex justify-between items-center">
@@ -1355,17 +1400,26 @@ function TournamentCard({ tournament, user, onJoin, onStart, onView }) {
         <h3 className="font-bold text-lg">{tournament.name}</h3>
         <div className="text-sm text-gray-300 mt-1">
           <p>Creator: {tournament.createdBy}</p>
-          <p>Players: {tournament.players.length} | Status: <span className="text-yellow-500">{tournament.status === 'loading_stats' ? 'Loading...' : tournament.status}</span></p>
+          <p>Players: {tournament.players.length} | Status: <span className="text-yellow-500">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
+          {tournament.signupDeadline && (
+            <p>Deadline: {getDeadlineDisplay()}</p>
+          )}
         </div>
       </div>
       <div className="flex gap-2">
-        {!hasJoined && !isCreator && tournament.status === 'signups_open' && (
+        {canJoin && (
           <button
             onClick={() => onJoin(tournament.id)}
             className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm transition"
           >
             Join
           </button>
+        )}
+        {hasJoined && !isCreator && tournament.status === 'signups_open' && (
+          <span className="bg-green-700 px-4 py-2 rounded text-sm">Joined ✓</span>
+        )}
+        {deadlinePassed && !hasJoined && tournament.status === 'signups_open' && (
+          <span className="bg-red-700 px-4 py-2 rounded text-sm">Signups Closed</span>
         )}
         {isCreator && tournament.status === 'signups_open' && tournament.players.length >= 2 && (
           <button
@@ -1393,18 +1447,41 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [format, setFormat] = useState('single_elimination');
+  const [signupDeadline, setSignupDeadline] = useState('');
+  const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (name.trim()) {
-      onCreateTournament({ name, description, format });
+    setError('');
+
+    if (!name.trim()) {
+      setError('Tournament name is required');
+      return;
     }
+
+    if (signupDeadline && new Date(signupDeadline) < new Date()) {
+      setError('Signup deadline must be in the future');
+      return;
+    }
+
+    onCreateTournament({ 
+      name, 
+      description, 
+      format,
+      signupDeadline: signupDeadline || null,
+    });
   };
 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-8">
         <h2 className="text-2xl font-bold mb-6">Create Tournament</h2>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-900 border border-red-700 rounded text-red-300 text-sm">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -1442,6 +1519,17 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
             </select>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium mb-2">Signup Deadline (Optional)</label>
+            <input
+              type="datetime-local"
+              value={signupDeadline}
+              onChange={(e) => setSignupDeadline(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-yellow-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">Leave blank to allow signups indefinitely</p>
+          </div>
+
           <div className="flex gap-4">
             <button
               type="submit"
@@ -1472,6 +1560,14 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
     );
   }
 
+  const formatStatus = (status) => {
+    return status
+      .replace(/_/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   const rounds = [...new Set(tournament.matches.map(m => m.round))].sort((a, b) => a - b);
 
   return (
@@ -1482,7 +1578,7 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-gray-400">Status</p>
-            <p className="text-lg font-bold text-yellow-500">{tournament.status === 'loading_stats' ? 'Loading...' : tournament.status}</p>
+            <p className="text-lg font-bold text-yellow-500">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</p>
           </div>
           <div>
             <p className="text-sm text-gray-400">Players</p>
@@ -1499,6 +1595,12 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
             </div>
           )}
         </div>
+        {tournament.signupDeadline && (
+          <div className="mt-4 p-3 bg-gray-700 rounded">
+            <p className="text-sm text-gray-400">Signup Deadline</p>
+            <p className="text-yellow-400">{new Date(tournament.signupDeadline).toLocaleString()}</p>
+          </div>
+        )}
       </div>
 
       {user.isStaff && tournament.matches.filter(m => m.status === 'disputed').length > 0 && (
