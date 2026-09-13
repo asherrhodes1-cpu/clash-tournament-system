@@ -780,6 +780,11 @@ export default function TournamentApp() {
               setSelectedTournamentId(id);
               setCurrentPage('tournament');
             }}
+            onOpenMatch={(match) => {
+              setSelectedTournamentId(match.tournamentId);
+              setSelectedMatchId(match.id);
+              setCurrentPage('match');
+            }}
           />
         )}
 
@@ -826,7 +831,7 @@ export default function TournamentApp() {
 
         {currentPage === 'match' && currentUser && (
           <MatchPage
-            match={matches.find(m => m.id === selectedMatchId)}
+            match={matches.find(m => m.id === selectedMatchId) || userMatches.find(m => m.id === selectedMatchId)}
             user={currentUser}
             onReportWinner={async (winner, screenshotFile) => {
               await handleReportMatch(selectedMatchId, winner, screenshotFile);
@@ -1141,8 +1146,10 @@ function LoginPage() {
   );
 }
 
-function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onStartTournament, onDeleteTournament, onSelectTournament }) {
+function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onStartTournament, onDeleteTournament, onSelectTournament, onOpenMatch }) {
   const userTournaments = tournaments.filter(t => t.createdBy === user.username || t.players.includes(user.username));
+  const pendingMatches = userMatches
+    .filter(m => m.status === 'waiting_for_opponent' || m.status === 'pending' || m.status === 'scheduled' || m.status === 'active');
 
   return (
     <div className="space-y-8">
@@ -1160,8 +1167,8 @@ function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onSta
         <StatCard
           icon={<MessageCircle className="w-6 h-6" />}
           label="Pending Matches"
-          value={userMatches
-            .filter(m => m.status === 'waiting_for_opponent' || m.status === 'pending' || m.status === 'scheduled').length}
+          value={pendingMatches.length}
+          onClick={pendingMatches.length > 0 ? () => onOpenMatch(pendingMatches[0]) : undefined}
         />
       </div>
 
@@ -1572,6 +1579,14 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
         </div>
       </div>
       <div className="flex gap-2 ml-4 flex-wrap">
+        {userIsPlayer && match.status !== 'completed' && (
+          <button
+            onClick={onSelectMatch}
+            className="border border-white text-white hover:bg-white hover:text-black px-3 py-2 rounded text-sm transition"
+          >
+            💬 Coordinate Match
+          </button>
+        )}
         {userIsPlayer && match.status === 'pending' && !userReady && (
           <button
             onClick={onPlayerReady}
@@ -1912,9 +1927,12 @@ function DisputeReview({ matches, onResolveDispute }) {
   );
 }
 
-function StatCard({ icon, label, value }) {
+function StatCard({ icon, label, value, onClick }) {
   return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+    <div
+      onClick={onClick}
+      className={`bg-gray-800 rounded-lg border border-gray-700 p-6 ${onClick ? 'cursor-pointer hover:border-white transition' : ''}`}
+    >
       <div className="flex items-center gap-4">
         <div className="text-white">{icon}</div>
         <div>
@@ -1922,6 +1940,7 @@ function StatCard({ icon, label, value }) {
           <p className="text-3xl font-bold">{value}</p>
         </div>
       </div>
+      {onClick && <p className="text-xs text-gray-500 mt-2">Click to open your match</p>}
     </div>
   );
 }
