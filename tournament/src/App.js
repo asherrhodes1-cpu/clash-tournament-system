@@ -443,8 +443,13 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
 // MAIN APP COMPONENT
 // ============================================================================
 export default function TournamentApp() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState('landing');
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('currentUser');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [currentPage, setCurrentPage] = useState(() => {
+    return localStorage.getItem('currentUser') ? 'dashboard' : 'landing';
+  });
   const [tournaments, setTournaments] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
@@ -463,11 +468,13 @@ export default function TournamentApp() {
 
   const handleLogin = (user) => {
     setCurrentUser(user);
+    localStorage.setItem('currentUser', JSON.stringify(user));
     setCurrentPage('dashboard');
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem('currentUser');
     setCurrentPage('login');
     setMobileMenuOpen(false);
   };
