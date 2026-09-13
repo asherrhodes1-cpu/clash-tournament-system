@@ -1,83 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="MercifulAj - Tournament Management System"
+    />
     <title>MercifulAj</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-            background: #000000;
-            color: #ffffff;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        
-        .container {
-            text-align: center;
-            max-width: 600px;
-        }
-        
-        .logo img {
-            width: 300px;
-            height: 300px;
-            margin: 0 auto 50px;
-            display: block;
-            object-fit: contain;
-        }
-        
-        .cta-button {
-            display: inline-block;
-            background: #ffffff;
-            color: #000000;
-            padding: 16px 50px;
-            border-radius: 2px;
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-            border: 2px solid #ffffff;
-            cursor: pointer;
-            letter-spacing: 1px;
-        }
-        
-        .cta-button:hover {
-            background: #000000;
-            color: #ffffff;
-            border-color: #ffffff;
-        }
-        
-        @media (max-width: 600px) {
-            .logo img {
-                width: 220px;
-                height: 220px;
-            }
-            
-            .cta-button {
-                padding: 14px 40px;
-                font-size: 1rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="logo">
-            <img src="logo.png" alt="ASHER Logo">
-        </div>
-        
-        <a href="/tournaments" class="cta-button">
-            ENTER TOURNAMENTS
-        </a>
-    </div>
-</body>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
 </html>

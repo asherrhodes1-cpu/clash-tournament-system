@@ -444,7 +444,7 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
 // ============================================================================
 export default function TournamentApp() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState('login');
+  const [currentPage, setCurrentPage] = useState('landing');
   const [tournaments, setTournaments] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
@@ -930,6 +930,10 @@ export default function TournamentApp() {
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {currentPage === 'landing' && (
+          <LandingPage onEnter={() => setCurrentPage('login')} />
+        )}
+
         {currentPage === 'login' && (
           <LoginPage onLogin={handleLogin} />
         )}
@@ -1029,6 +1033,24 @@ export default function TournamentApp() {
 // ============================================================================
 // PAGE COMPONENTS
 // ============================================================================
+
+function LandingPage({ onEnter }) {
+  return (
+    <div className="text-center max-w-lg mx-auto mt-20">
+      <img
+        src="/logo.png"
+        alt="MercifulAj Logo"
+        className="w-64 h-64 sm:w-72 sm:h-72 mx-auto mb-12 object-contain"
+      />
+      <button
+        onClick={onEnter}
+        className="inline-block bg-white text-black px-12 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
+      >
+        ENTER TOURNAMENTS
+      </button>
+    </div>
+  );
+}
 
 function LoginPage({ onLogin }) {
   const [isCreating, setIsCreating] = useState(false);
