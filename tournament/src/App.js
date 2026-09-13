@@ -1,5 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { signUp, logIn, logOut, subscribeToAuthState, adminResetPassword } from './api/auth';
+import {
+  subscribeToTournaments,
+  subscribeToMatches,
+  subscribeToUserMatches,
+  createTournament,
+  joinTournament,
+  deleteTournament,
+  removePlayer,
+  startTournament,
+  playerReady,
+  reportMatch,
+  resolveDispute,
+} from './api/tournaments';
+import { subscribeToFlags, createFlag, updateFlagStatus, addFlagResponse } from './api/flags';
+import { uploadMatchScreenshot, getScreenshotUrl } from './api/storage';
+import { getTimeRemainingDisplay } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -130,22 +147,19 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
 // ============================================================================
 // STAFF DASHBOARD COMPONENT
 // ============================================================================
-function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddResponse }) {
-  const [flags, setFlags] = useState(() => {
-    const saved = localStorage.getItem('flags');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [selectedFlag, setSelectedFlag] = useState(null);
+function StaffDashboard({ flags, onUpdateFlagStatus, onAddResponse }) {
+  const [selectedFlagId, setSelectedFlagId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('priority');
   const [responseText, setResponseText] = useState('');
+  const [resetUsername, setResetUsername] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetSubmitting, setResetSubmitting] = useState(false);
 
-  const refreshFlags = () => {
-    const saved = localStorage.getItem('flags');
-    setFlags(saved ? JSON.parse(saved) : []);
-  };
+  const selectedFlag = flags.find((f) => f.id === selectedFlagId) || null;
 
-  const filteredFlags = flags.filter(flag => 
+  const filteredFlags = flags.filter(flag =>
     filterStatus === 'all' ? true : flag.status === filterStatus
   );
 
@@ -161,18 +175,34 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
 
   const handleStatusChange = (flagId, newStatus) => {
     onUpdateFlagStatus(flagId, newStatus);
-    refreshFlags();
-    const updatedFlags = JSON.parse(localStorage.getItem('flags') || '[]');
-    setSelectedFlag(updatedFlags.find(f => f.id === flagId) || null);
   };
 
   const handleAddResponse = (flagId) => {
     if (responseText.trim()) {
       onAddResponse(flagId, responseText);
       setResponseText('');
-      refreshFlags();
-      const updatedFlags = JSON.parse(localStorage.getItem('flags') || '[]');
-      setSelectedFlag(updatedFlags.find(f => f.id === flagId));
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setResetMessage('');
+
+    if (!resetUsername.trim() || resetPassword.length < 6) {
+      setResetMessage('Enter a username and a 6+ character password');
+      return;
+    }
+
+    setResetSubmitting(true);
+    try {
+      await adminResetPassword({ username: resetUsername.trim(), newPassword: resetPassword });
+      setResetMessage(`Password updated for ${resetUsername.trim()}`);
+      setResetUsername('');
+      setResetPassword('');
+    } catch (err) {
+      setResetMessage(err.message || 'Failed to reset password');
+    } finally {
+      setResetSubmitting(false);
     }
   };
 
@@ -223,7 +253,7 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
     return (
       <div className="space-y-6">
         <button
-          onClick={() => setSelectedFlag(null)}
+          onClick={() => setSelectedFlagId(null)}
           className="text-white hover:text-neutral-300 text-sm"
         >
           ← Back to Flags
@@ -384,15 +414,41 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
               <option value="date">Most Recent</option>
             </select>
           </div>
-          <div className="flex-1">
-            <button
-              onClick={refreshFlags}
-              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm w-full md:w-auto"
-            >
-              🔄 Refresh
-            </button>
-          </div>
         </div>
+      </div>
+
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <h2 className="text-xl font-bold mb-4">Reset a Player's Password</h2>
+        <form onSubmit={handleResetPassword} className="flex gap-3 flex-wrap items-end">
+          <div>
+            <label className="block text-sm font-medium mb-2">Username</label>
+            <input
+              type="text"
+              value={resetUsername}
+              onChange={(e) => setResetUsername(e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
+              placeholder="username"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">New Password</label>
+            <input
+              type="password"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              className="bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
+              placeholder="6+ characters"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={resetSubmitting}
+            className="border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded transition disabled:opacity-50"
+          >
+            {resetSubmitting ? 'Updating...' : 'Reset Password'}
+          </button>
+        </form>
+        {resetMessage && <p className="text-sm text-neutral-300 mt-3">{resetMessage}</p>}
       </div>
 
       <div className="space-y-3">
@@ -404,7 +460,7 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
           sortedFlags.map(flag => (
             <button
               key={flag.id}
-              onClick={() => setSelectedFlag(flag)}
+              onClick={() => setSelectedFlagId(flag.id)}
               className="w-full text-left bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 p-4 transition"
             >
               <div className="flex justify-between items-start">
@@ -445,476 +501,154 @@ function StaffDashboard({ user, setCurrentPage, onUpdateFlagStatus, onAddRespons
 // MAIN APP COMPONENT
 // ============================================================================
 export default function TournamentApp() {
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('currentUser');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [currentPage, setCurrentPage] = useState(() => {
-    return localStorage.getItem('currentUser') ? 'dashboard' : 'landing';
-  });
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authInitializing, setAuthInitializing] = useState(true);
+  const [currentPage, setCurrentPage] = useState('landing');
   const [tournaments, setTournaments] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [userMatches, setUserMatches] = useState([]);
+  const [flags, setFlags] = useState([]);
+  const [selectedTournamentId, setSelectedTournamentId] = useState(null);
+  const [selectedMatchId, setSelectedMatchId] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
   const [flagRelatedMatch, setFlagRelatedMatch] = useState(null);
 
   useEffect(() => {
-    const savedData = localStorage.getItem('tournamentData');
-    if (savedData) {
-      setTournaments(JSON.parse(savedData));
-    }
+    const unsubscribe = subscribeToAuthState((user) => {
+      setCurrentUser(user);
+      setAuthInitializing(false);
+    });
+    return unsubscribe;
   }, []);
 
-  const saveData = (data) => {
-    localStorage.setItem('tournamentData', JSON.stringify(data));
-  };
+  useEffect(() => {
+    if (currentUser && (currentPage === 'landing' || currentPage === 'login')) {
+      setCurrentPage('dashboard');
+    }
+    if (!currentUser && !authInitializing && currentPage !== 'landing' && currentPage !== 'login') {
+      setCurrentPage('landing');
+    }
+  }, [currentUser, authInitializing, currentPage]);
 
-  const handleLogin = (user) => {
-    setCurrentUser(user);
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    setCurrentPage('dashboard');
-  };
+  useEffect(() => {
+    if (!currentUser) {
+      setTournaments([]);
+      return;
+    }
+    return subscribeToTournaments(setTournaments);
+  }, [currentUser?.username]);
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('currentUser');
-    setCurrentPage('login');
+  useEffect(() => {
+    if (!currentUser) {
+      setFlags([]);
+      return;
+    }
+    return subscribeToFlags(setFlags);
+  }, [currentUser?.username]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setUserMatches([]);
+      return;
+    }
+    return subscribeToUserMatches(currentUser.username, setUserMatches);
+  }, [currentUser?.username]);
+
+  useEffect(() => {
+    if (!selectedTournamentId || !currentUser) {
+      setMatches([]);
+      return;
+    }
+    return subscribeToMatches(selectedTournamentId, setMatches);
+  }, [selectedTournamentId, currentUser?.username]);
+
+  const handleLogout = async () => {
+    await logOut();
     setMobileMenuOpen(false);
   };
 
-  const handleCreateTournament = (tournamentData) => {
-    const newTournament = {
-      id: Date.now(),
-      ...tournamentData,
-      createdBy: currentUser.username,
-      players: [],
-      bracket: [],
-      matches: [],
-      status: 'signups_open',
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [...tournaments, newTournament];
-    setTournaments(updated);
-    saveData(updated);
+  const handleCreateTournament = async (tournamentData) => {
+    await createTournament(tournamentData, currentUser.username);
     setCurrentPage('dashboard');
   };
 
-  const handleJoinTournament = (tournamentId) => {
+  const handleJoinTournament = async (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
-
-    if (tournament.signupDeadline && new Date(tournament.signupDeadline) < new Date()) {
-      alert('Signups for this tournament have closed');
-      return;
+    if (!tournament) return;
+    try {
+      await joinTournament(tournament, currentUser.username);
+    } catch (err) {
+      alert(err.message);
     }
-
-    const updated = tournaments.map(t => {
-      if (t.id === tournamentId) {
-        if (!t.players.includes(currentUser.username)) {
-          return { ...t, players: [...t.players, currentUser.username] };
-        }
-      }
-      return t;
-    });
-    setTournaments(updated);
-    saveData(updated);
   };
 
-  const handleDeleteTournament = (tournamentId) => {
+  const handleDeleteTournament = async (tournamentId) => {
     if (window.confirm('Are you sure you want to delete this tournament? This cannot be undone.')) {
-      setTournaments(prev => prev.filter(t => t.id !== tournamentId));
-      const updated = tournaments.filter(t => t.id !== tournamentId);
-      saveData(updated);
+      await deleteTournament(tournamentId);
       setCurrentPage('dashboard');
     }
   };
 
-  const handleRemovePlayer = (tournamentId, username) => {
+  const handleRemovePlayer = async (tournamentId, username) => {
     if (!window.confirm(`Remove ${username} from this tournament? This cannot be undone.`)) {
       return;
     }
-
-    const updated = tournaments.map(t => {
-      if (t.id !== tournamentId) return t;
-
-      if (t.status === 'signups_open') {
-        return { ...t, players: t.players.filter(p => p !== username) };
-      }
-
-      const now = new Date().getTime();
-      const updatedMatches = t.matches.map(m => {
-        const isInMatch = m.player1 === username || m.player2 === username;
-        const isUnresolved = !['completed', 'disputed', 'needs_staff_review'].includes(m.status);
-        if (!isInMatch || !isUnresolved) return m;
-
-        const opponent = m.player1 === username ? m.player2 : m.player1;
-        return {
-          ...m,
-          status: 'completed',
-          winner: opponent === 'BYE' ? null : opponent,
-          resolvedBy: currentUser.username,
-          resolvedReason: 'player_removed',
-          completedAt: now,
-        };
-      });
-
-      return {
-        ...t,
-        players: t.players.filter(p => p !== username),
-        removedPlayers: [...(t.removedPlayers || []), username],
-        matches: updatedMatches,
-      };
-    });
-
-    setTournaments(updated);
-    saveData(updated);
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    if (!tournament) return;
+    await removePlayer(tournament, matches, username, currentUser.username);
   };
 
   const handleStartTournament = async (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
+    await startTournament(tournament);
+  };
 
-    setTournaments(prev => prev.map(t => 
-      t.id === tournamentId ? { ...t, status: 'loading_stats', bracket: [] } : t
-    ));
+  const handlePlayerReady = async (matchId) => {
+    await playerReady(selectedTournamentId, matchId, currentUser.username);
+  };
 
-    const playerStats = {};
-    for (const player of tournament.players) {
-      const playerAccount = JSON.parse(localStorage.getItem('accounts') || '[]')
-        .find(acc => acc.username === player);
-      
-      if (playerAccount) {
-        const stats = await fetchClashPlayerData(playerAccount.clashTag);
-        if (stats) {
-          playerStats[player] = stats;
-        }
-      }
+  const handleReportMatch = async (matchId, selectedWinner, screenshotFile) => {
+    const match = matches.find(m => m.id === matchId);
+    if (!match) return;
+    const isPlayer1 = currentUser.username === match.player1;
+    const screenshotPath = await uploadMatchScreenshot(
+      selectedTournamentId,
+      matchId,
+      isPlayer1 ? 'player1' : 'player2',
+      screenshotFile
+    );
+    await reportMatch(selectedTournamentId, matchId, currentUser.username, selectedWinner, screenshotPath);
+  };
+
+  const handleResolveDispute = async (matchId, winner) => {
+    try {
+      await resolveDispute(selectedTournamentId, matchId, winner, currentUser.username);
+    } catch (err) {
+      alert(err.message);
     }
-
-    const bracket = generateSeededBracket(tournament.players, playerStats);
-    const firstRoundMatches = bracket.map((pair, idx) => {
-      const isBye = pair[1] === 'BYE';
-      return {
-        id: `${tournamentId}-${idx}`,
-        tournamentId,
-        player1: pair[0],
-        player2: pair[1],
-        player1Tag: playerStats[pair[0]]?.tag || '',
-        player2Tag: playerStats[pair[1]]?.tag || '',
-        player1Stats: playerStats[pair[0]] || null,
-        player2Stats: playerStats[pair[1]] || null,
-        round: 1,
-        status: isBye ? 'completed' : 'pending',
-        winner: isBye ? pair[0] : undefined,
-        completedAt: isBye ? new Date().getTime() : undefined,
-        player1Ready: false,
-        player2Ready: false,
-        player1ReadyTime: null,
-        player2ReadyTime: null,
-        scheduledStartTime: null,
-        winner1Vote: null,
-        winner2Vote: null,
-        player1VoteTime: null,
-        player2VoteTime: null,
-        player1Screenshot: null,
-        player2Screenshot: null,
-      };
-    });
-
-    const updated = tournaments.map(t => {
-      if (t.id === tournamentId) {
-        return {
-          ...t,
-          status: 'in_progress',
-          bracket,
-          matches: firstRoundMatches,
-          playerStats,
-        };
-      }
-      return t;
-    });
-    setTournaments(updated);
-    saveData(updated);
   };
 
-  const handlePlayerReady = (matchId) => {
-    const updated = tournaments.map(t => {
-      const updatedMatches = t.matches.map(m => {
-        if (m.id === matchId) {
-          const isPlayer1 = currentUser.username === m.player1;
-          const updatedMatch = {
-            ...m,
-            [isPlayer1 ? 'player1Ready' : 'player2Ready']: true,
-            [isPlayer1 ? 'player1ReadyTime' : 'player2ReadyTime']: new Date().getTime(),
-          };
-
-          if (updatedMatch.player1Ready && updatedMatch.player2Ready && !updatedMatch.scheduledStartTime) {
-            updatedMatch.status = 'scheduled';
-            updatedMatch.scheduledStartTime = new Date().getTime();
-          } else if (updatedMatch.player1Ready && updatedMatch.player2Ready) {
-            updatedMatch.status = 'active';
-          }
-
-          return updatedMatch;
-        }
-        return m;
-      });
-
-      return { ...t, matches: updatedMatches };
-    });
-
-    setTournaments(updated);
-    saveData(updated);
+  const handleCreateFlag = async (flagData) => {
+    await createFlag(flagData, currentUser.username);
   };
 
-  const handleReportMatch = (matchId, selectedWinner, screenshot) => {
-    const now = new Date().getTime();
-
-    const updated = tournaments.map(t => {
-      const updatedMatches = t.matches.map(m => {
-        if (m.id === matchId) {
-          const isPlayer1 = currentUser.username === m.player1;
-          const updatedMatch = {
-            ...m,
-            [isPlayer1 ? 'winner1Vote' : 'winner2Vote']: selectedWinner,
-            [isPlayer1 ? 'player1VoteTime' : 'player2VoteTime']: now,
-            [isPlayer1 ? 'player1Screenshot' : 'player2Screenshot']: screenshot,
-          };
-
-          if (updatedMatch.winner1Vote && updatedMatch.winner2Vote) {
-            if (updatedMatch.winner1Vote === updatedMatch.winner2Vote) {
-              updatedMatch.status = 'completed';
-              updatedMatch.winner = updatedMatch.winner1Vote;
-              updatedMatch.completedAt = now;
-            } else {
-              updatedMatch.status = 'disputed';
-            }
-          } else {
-            updatedMatch.status = 'waiting_for_opponent';
-          }
-
-          return updatedMatch;
-        }
-        return m;
-      });
-
-      return { ...t, matches: updatedMatches };
-    });
-
-    setTournaments(updated);
-    saveData(updated);
+  const handleUpdateFlagStatus = async (flagId, status, staffResponse = null) => {
+    await updateFlagStatus(flagId, status, currentUser.username, staffResponse);
   };
 
-  const handleResolveDispute = (matchId, winner) => {
-    const updated = tournaments.map(t => {
-      const updatedMatches = t.matches.map(m => {
-        if (m.id === matchId) {
-          return {
-            ...m,
-            status: 'completed',
-            winner,
-            resolvedBy: currentUser.username,
-            completedAt: new Date().getTime(),
-          };
-        }
-        return m;
-      });
-      return { ...t, matches: updatedMatches };
-    });
-    setTournaments(updated);
-    saveData(updated);
+  const handleAddFlagResponse = async (flagId, message) => {
+    await addFlagResponse(flagId, message, currentUser.username);
   };
 
-  const handleMatchTimeout = (tournamentId, matchId, resolution) => {
-    const updated = tournaments.map(t => {
-      if (t.id === tournamentId) {
-        const updatedMatches = t.matches.map(m => {
-          if (m.id === matchId) {
-            if (resolution === 'no_report') {
-              return {
-                ...m,
-                status: 'needs_staff_review',
-                timeoutAt: new Date().getTime(),
-                resolvedReason: 'no_report_timeout',
-              };
-            } else {
-              return {
-                ...m,
-                status: 'completed',
-                winner: resolution,
-                autoResolvedAt: new Date().getTime(),
-                resolvedReason: 'opponent_timeout',
-              };
-            }
-          }
-          return m;
-        });
-        return { ...t, matches: updatedMatches };
-      }
-      return t;
-    });
-
-    setTournaments(updated);
-    saveData(updated);
-  };
-
-  const handleCreateFlag = (flagData) => {
-    const newFlag = {
-      id: Date.now(),
-      ...flagData,
-      createdBy: currentUser.username,
-      createdAt: new Date().toISOString(),
-      status: 'open',
-      priority: flagData.priority || 'normal',
-      responses: [],
-      resolvedAt: null,
-      resolvedBy: null,
-    };
-
-    const updatedFlags = JSON.parse(localStorage.getItem('flags') || '[]');
-    updatedFlags.push(newFlag);
-    localStorage.setItem('flags', JSON.stringify(updatedFlags));
-  };
-
-  const handleUpdateFlagStatus = (flagId, status, staffResponse = null) => {
-    const flags = JSON.parse(localStorage.getItem('flags') || '[]');
-    const updatedFlags = flags.map(flag => {
-      if (flag.id === flagId) {
-        const updated = { ...flag, status };
-        if (status === 'resolved') {
-          updated.resolvedAt = new Date().toISOString();
-          updated.resolvedBy = currentUser.username;
-        }
-        if (staffResponse) {
-          updated.responses = [...(updated.responses || []), {
-            sender: currentUser.username,
-            message: staffResponse,
-            timestamp: new Date().toISOString(),
-          }];
-        }
-        return updated;
-      }
-      return flag;
-    });
-    localStorage.setItem('flags', JSON.stringify(updatedFlags));
-  };
-
-  const handleAddFlagResponse = (flagId, message) => {
-    const flags = JSON.parse(localStorage.getItem('flags') || '[]');
-    const updatedFlags = flags.map(flag => {
-      if (flag.id === flagId) {
-        return {
-          ...flag,
-          responses: [...(flag.responses || []), {
-            sender: currentUser.username,
-            message,
-            timestamp: new Date().toISOString(),
-          }],
-        };
-      }
-      return flag;
-    });
-    localStorage.setItem('flags', JSON.stringify(updatedFlags));
-  };
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      checkMatchTimeouts(tournaments, handleMatchTimeout);
-
-      let anyChanged = false;
-      const updatedTournaments = tournaments.map(tournament => {
-        if (tournament.status !== 'in_progress') return tournament;
-
-        let matches = tournament.matches;
-        let newStatus = tournament.status;
-        let champion = tournament.champion;
-        let tournamentChanged = false;
-        const roundNumbers = [...new Set(matches.map(m => m.round))];
-
-        roundNumbers.forEach(round => {
-          const roundMatches = matches.filter(m => m.round === round);
-          const allComplete = roundMatches.every(m => m.status === 'completed' || m.status === 'disputed' || m.status === 'needs_staff_review');
-
-          if (allComplete && round < 10) {
-            const nextRound = round + 1;
-            const alreadyHasNextRound = matches.some(m => m.round === nextRound);
-
-            if (!alreadyHasNextRound) {
-              const winners = roundMatches
-                .filter(m => m.status === 'completed')
-                .map(m => m.winner)
-                .filter(w => w && !(tournament.removedPlayers || []).includes(w));
-
-              if (winners.length === 1) {
-                newStatus = 'completed';
-                champion = winners[0];
-                tournamentChanged = true;
-              } else if (winners.length > 1) {
-                const now = new Date().getTime();
-                const nextRoundMatches = [];
-                let matchIdx = 0;
-                let i = 0;
-                for (; i + 1 < winners.length; i += 2) {
-                  nextRoundMatches.push({
-                    id: `${tournament.id}-r${nextRound}-${matchIdx++}`,
-                    tournamentId: tournament.id,
-                    player1: winners[i],
-                    player2: winners[i + 1],
-                    player1Tag: tournament.playerStats?.[winners[i]]?.tag || '',
-                    player2Tag: tournament.playerStats?.[winners[i + 1]]?.tag || '',
-                    player1Stats: tournament.playerStats?.[winners[i]] || null,
-                    player2Stats: tournament.playerStats?.[winners[i + 1]] || null,
-                    round: nextRound,
-                    status: 'pending',
-                    player1Ready: false,
-                    player2Ready: false,
-                    winner1Vote: null,
-                    winner2Vote: null,
-                    player1Screenshot: null,
-                    player2Screenshot: null,
-                  });
-                }
-                if (i < winners.length) {
-                  // Odd winner count - this player gets an automatic bye into the next round
-                  nextRoundMatches.push({
-                    id: `${tournament.id}-r${nextRound}-${matchIdx++}`,
-                    tournamentId: tournament.id,
-                    player1: winners[i],
-                    player2: 'BYE',
-                    player1Tag: tournament.playerStats?.[winners[i]]?.tag || '',
-                    player2Tag: '',
-                    player1Stats: tournament.playerStats?.[winners[i]] || null,
-                    player2Stats: null,
-                    round: nextRound,
-                    status: 'completed',
-                    winner: winners[i],
-                    completedAt: now,
-                    player1Ready: false,
-                    player2Ready: false,
-                    winner1Vote: null,
-                    winner2Vote: null,
-                    player1Screenshot: null,
-                    player2Screenshot: null,
-                  });
-                }
-                matches = [...matches, ...nextRoundMatches];
-                tournamentChanged = true;
-              }
-            }
-          }
-        });
-
-        if (!tournamentChanged) return tournament;
-        anyChanged = true;
-        return { ...tournament, matches, status: newStatus, champion };
-      });
-
-      if (anyChanged) {
-        setTournaments(updatedTournaments);
-        saveData(updatedTournaments);
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [tournaments]);
+  if (authInitializing) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-neutral-400">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -1025,17 +759,21 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'login' && (
-          <LoginPage onLogin={handleLogin} />
+          <LoginPage />
         )}
 
         {currentPage === 'dashboard' && currentUser && (
           <DashboardPage
             user={currentUser}
             tournaments={tournaments}
+            userMatches={userMatches}
             onJoinTournament={handleJoinTournament}
             onStartTournament={handleStartTournament}
             onDeleteTournament={handleDeleteTournament}
-            setCurrentPage={setCurrentPage}
+            onSelectTournament={(id) => {
+              setSelectedTournamentId(id);
+              setCurrentPage('tournament');
+            }}
           />
         )}
 
@@ -1063,15 +801,16 @@ export default function TournamentApp() {
 
         {currentPage === 'tournament' && currentUser && (
           <TournamentPage
-            tournament={tournaments.find(t => t.id === currentUser.selectedTournament)}
+            tournament={tournaments.find(t => t.id === selectedTournamentId)}
+            matches={matches}
             user={currentUser}
-            onSelectMatch={() => setCurrentPage('match')}
-            onReportMatch={handleReportMatch}
+            onSelectMatch={(matchId) => {
+              setSelectedMatchId(matchId);
+              setCurrentPage('match');
+            }}
             onResolveDispute={handleResolveDispute}
             onRemovePlayer={handleRemovePlayer}
             onPlayerReady={handlePlayerReady}
-            setCurrentPage={setCurrentPage}
-            tournaments={tournaments}
             onFlagMatch={(matchId) => {
               setFlagRelatedMatch(matchId);
               setFlagModalOpen(true);
@@ -1081,12 +820,10 @@ export default function TournamentApp() {
 
         {currentPage === 'match' && currentUser && (
           <MatchPage
-            match={tournaments
-              .flatMap(t => t.matches)
-              .find(m => m.id === currentUser.selectedMatch)}
+            match={matches.find(m => m.id === selectedMatchId)}
             user={currentUser}
-            onReportWinner={(winner, screenshot) => {
-              handleReportMatch(currentUser.selectedMatch, winner, screenshot);
+            onReportWinner={async (winner, screenshotFile) => {
+              await handleReportMatch(selectedMatchId, winner, screenshotFile);
               setCurrentPage('tournament');
             }}
             onCancel={() => setCurrentPage('tournament')}
@@ -1095,8 +832,7 @@ export default function TournamentApp() {
 
         {currentPage === 'staff_dashboard' && currentUser?.isStaff && (
           <StaffDashboard
-            user={currentUser}
-            setCurrentPage={setCurrentPage}
+            flags={flags}
             onUpdateFlagStatus={handleUpdateFlagStatus}
             onAddResponse={handleAddFlagResponse}
           />
@@ -1143,28 +879,17 @@ function LandingPage({ onEnter }) {
   );
 }
 
-function LoginPage({ onLogin }) {
+function LoginPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [clashTag, setClashTag] = useState('');
-  const [staffPassword, setStaffPassword] = useState('');
-  const [isStaff, setIsStaff] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
-  const [accounts, setAccounts] = useState(() => {
-    const saved = localStorage.getItem('accounts');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const STAFF_PASSWORD = 'clash2024';
-
-  const saveAccounts = (newAccounts) => {
-    localStorage.setItem('accounts', JSON.stringify(newAccounts));
-    setAccounts(newAccounts);
-  };
-
-  const handleCreateAccount = (e) => {
+  const handleCreateAccount = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -1175,11 +900,6 @@ function LoginPage({ onLogin }) {
 
     if (username.length < 3) {
       setError('Username must be at least 3 characters');
-      return;
-    }
-
-    if (accounts.some(acc => acc.username === username)) {
-      setError('Username already exists');
       return;
     }
 
@@ -1208,20 +928,22 @@ function LoginPage({ onLogin }) {
       return;
     }
 
-    const newAccount = {
-      username,
-      password,
-      clashTag: clashTag.toUpperCase(),
-      createdAt: new Date().toISOString(),
-    };
-
-    const newAccounts = [...accounts, newAccount];
-    saveAccounts(newAccounts);
-
-    onLogin({ username, password, isStaff: false, clashTag: clashTag.toUpperCase() });
+    setIsSubmitting(true);
+    try {
+      await signUp({
+        username,
+        password,
+        clashTag: clashTag.toUpperCase(),
+        inviteCode: inviteCode.trim(),
+      });
+    } catch (err) {
+      setError(err.message || 'Failed to create account');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -1230,29 +952,19 @@ function LoginPage({ onLogin }) {
       return;
     }
 
-    const account = accounts.find(acc => acc.username === username);
-
-    if (!account) {
-      setError('Account not found');
+    if (!password) {
+      setError('Password is required');
       return;
     }
 
-    if (account.password !== password) {
-      setError('Incorrect password');
-      return;
+    setIsSubmitting(true);
+    try {
+      await logIn({ username, password });
+    } catch (err) {
+      setError(err.message || 'Invalid username or password');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (isStaff && staffPassword !== STAFF_PASSWORD) {
-      setError('Incorrect staff password');
-      return;
-    }
-
-    onLogin({ 
-      username, 
-      password, 
-      isStaff, 
-      clashTag: account.clashTag 
-    });
   };
 
   if (isCreating) {
@@ -1320,11 +1032,23 @@ function LoginPage({ onLogin }) {
               <p className="text-xs text-gray-400 mt-1">Find your tag in your Clash profile</p>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium mb-2">Staff Invite Code (optional)</label>
+              <input
+                type="password"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                className="w-full bg-gray-700 border border-white rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
+                placeholder="Only if you were given one"
+              />
+            </div>
+
             <button
               type="submit"
-              className="w-full bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition"
+              disabled={isSubmitting}
+              className="w-full bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition disabled:opacity-50"
             >
-              Create Account
+              {isSubmitting ? 'Creating Account...' : 'Create Account'}
             </button>
 
             <button
@@ -1336,16 +1060,13 @@ function LoginPage({ onLogin }) {
                 setPassword('');
                 setConfirmPassword('');
                 setClashTag('');
+                setInviteCode('');
               }}
               className="w-full bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded transition"
             >
               Back to Login
             </button>
           </form>
-
-          <p className="text-xs text-gray-400 mt-6 text-center">
-            {accounts.length} account(s) created
-          </p>
         </div>
       </div>
     );
@@ -1389,35 +1110,12 @@ function LoginPage({ onLogin }) {
             />
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isStaff}
-              onChange={(e) => setIsStaff(e.target.checked)}
-              className="w-4 h-4 accent-white"
-            />
-            <span className="text-sm">Login as staff member</span>
-          </label>
-
-          {isStaff && (
-            <div>
-              <label className="block text-sm font-medium mb-2">Staff Password</label>
-              <input
-                type="password"
-                value={staffPassword}
-                onChange={(e) => setStaffPassword(e.target.value)}
-                className="w-full bg-gray-700 border border-white rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
-                placeholder="Enter staff password"
-                required
-              />
-            </div>
-          )}
-
           <button
             type="submit"
-            className="w-full bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition"
+            disabled={isSubmitting}
+            className="w-full bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition disabled:opacity-50"
           >
-            Login
+            {isSubmitting ? 'Logging in...' : 'Login'}
           </button>
         </form>
 
@@ -1427,8 +1125,6 @@ function LoginPage({ onLogin }) {
             setError('');
             setUsername('');
             setPassword('');
-            setStaffPassword('');
-            setIsStaff(false);
           }}
           className="w-full mt-4 bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-white font-bold py-2 px-4 rounded transition"
         >
@@ -1439,7 +1135,7 @@ function LoginPage({ onLogin }) {
   );
 }
 
-function DashboardPage({ user, tournaments, onJoinTournament, onStartTournament, onDeleteTournament, setCurrentPage }) {
+function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onStartTournament, onDeleteTournament, onSelectTournament }) {
   const userTournaments = tournaments.filter(t => t.createdBy === user.username || t.players.includes(user.username));
 
   return (
@@ -1458,10 +1154,8 @@ function DashboardPage({ user, tournaments, onJoinTournament, onStartTournament,
         <StatCard
           icon={<MessageCircle className="w-6 h-6" />}
           label="Pending Matches"
-          value={tournaments
-            .flatMap(t => t.matches)
-            .filter(m => m.status === 'waiting_for_opponent' || m.status === 'pending' || m.status === 'scheduled')
-            .filter(m => m.player1 === user.username || m.player2 === user.username).length}
+          value={userMatches
+            .filter(m => m.status === 'waiting_for_opponent' || m.status === 'pending' || m.status === 'scheduled').length}
         />
       </div>
 
@@ -1479,10 +1173,7 @@ function DashboardPage({ user, tournaments, onJoinTournament, onStartTournament,
                 onJoin={onJoinTournament}
                 onStart={onStartTournament}
                 onDelete={onDeleteTournament}
-                onView={() => {
-                  setCurrentPage('tournament');
-                  user.selectedTournament = tournament.id;
-                }}
+                onView={() => onSelectTournament(tournament.id)}
               />
             ))
           )}
@@ -1595,9 +1286,9 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
       return;
     }
 
-    onCreateTournament({ 
-      name, 
-      description, 
+    onCreateTournament({
+      name,
+      description,
       format,
       signupDeadline: signupDeadline || null,
     });
@@ -1682,7 +1373,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, user, setCurrentPage, tournaments, onReportMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer }) {
+function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer }) {
   if (!tournament) {
     return (
       <div className="text-center">
@@ -1699,7 +1390,7 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
       .join(' ');
   };
 
-  const rounds = [...new Set(tournament.matches.map(m => m.round))].sort((a, b) => a - b);
+  const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b);
 
   return (
     <div className="space-y-8">
@@ -1717,7 +1408,7 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
           </div>
           <div>
             <p className="text-sm text-gray-400">Matches</p>
-            <p className="text-lg font-bold">{tournament.matches.length}</p>
+            <p className="text-lg font-bold">{matches.length}</p>
           </div>
           {tournament.champion && (
             <div>
@@ -1757,25 +1448,22 @@ function TournamentPage({ tournament, user, setCurrentPage, tournaments, onRepor
         </div>
       )}
 
-      {user.isStaff && tournament.matches.filter(m => m.status === 'disputed' || m.status === 'needs_staff_review').length > 0 && (
-        <DisputeReview tournament={tournament} user={user} setCurrentPage={setCurrentPage} onResolveDispute={onResolveDispute} />
+      {user.isStaff && matches.filter(m => m.status === 'disputed' || m.status === 'needs_staff_review').length > 0 && (
+        <DisputeReview matches={matches} onResolveDispute={onResolveDispute} />
       )}
 
       {rounds.map(round => (
         <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
           <h2 className="text-xl font-bold mb-4">Round {round}</h2>
           <div className="space-y-3">
-            {tournament.matches
+            {matches
               .filter(m => m.round === round)
               .map(match => (
                 <MatchCard
                   key={match.id}
                   match={match}
                   user={user}
-                  onSelectMatch={() => {
-                    user.selectedMatch = match.id;
-                    setCurrentPage('match');
-                  }}
+                  onSelectMatch={() => onSelectMatch(match.id)}
                   onPlayerReady={() => onPlayerReady(match.id)}
                   onFlagMatch={() => onFlagMatch(match.id)}
                 />
@@ -1791,7 +1479,6 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch }) {
   const userIsPlayer = match.player1 === user.username || match.player2 === user.username;
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
   const userReady = match.player1 === user.username ? match.player1Ready : match.player2Ready;
-  const opponent = match.player1 === user.username ? match.player2 : match.player1;
   const timeDisplay = getTimeRemainingDisplay(match.scheduledStartTime);
 
   const getStatusColor = (status) => {
@@ -1950,12 +1637,8 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
   const handleScreenshotUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setScreenshot(event.target.result);
-        setScreenshotPreview(event.target.result);
-      };
-      reader.readAsDataURL(file);
+      setScreenshot(file);
+      setScreenshotPreview(URL.createObjectURL(file));
     }
   };
 
@@ -2029,7 +1712,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
         <div className="mb-6 pb-6 border-b border-gray-600">
           <p className="text-sm font-medium mb-3">📸 Proof Screenshot</p>
           <p className="text-xs text-gray-400 mb-3">Upload a screenshot showing the match result from your profile</p>
-          
+
           <label className="block">
             <input
               type="file"
@@ -2105,13 +1788,26 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
   );
 }
 
-function DisputeReview({ tournament, user, setCurrentPage, onResolveDispute }) {
+function DisputeReview({ matches, onResolveDispute }) {
   const [expandedDispute, setExpandedDispute] = useState(null);
-  const disputes = tournament.matches.filter(m => m.status === 'disputed');
-  const noReports = tournament.matches.filter(m => m.status === 'needs_staff_review');
+  const [screenshotUrls, setScreenshotUrls] = useState({});
+  const disputes = matches.filter(m => m.status === 'disputed');
+  const noReports = matches.filter(m => m.status === 'needs_staff_review');
   const allIssues = [...disputes, ...noReports];
 
   if (allIssues.length === 0) return null;
+
+  const toggleScreenshot = async (key, path) => {
+    if (expandedDispute === key) {
+      setExpandedDispute(null);
+      return;
+    }
+    setExpandedDispute(key);
+    if (!screenshotUrls[key]) {
+      const url = await getScreenshotUrl(path);
+      setScreenshotUrls(prev => ({ ...prev, [key]: url }));
+    }
+  };
 
   return (
     <div className="bg-neutral-900 border-2 border-white rounded-lg p-6">
@@ -2134,28 +1830,28 @@ function DisputeReview({ tournament, user, setCurrentPage, onResolveDispute }) {
                   {dispute.player2} voted: <span className="text-white font-bold">{dispute.winner2Vote}</span>
                 </p>
                 <div className="flex gap-2 flex-wrap">
-                  {dispute.player1Screenshot && (
+                  {dispute.player1ScreenshotPath && (
                     <button
-                      onClick={() => setExpandedDispute(expandedDispute === `${dispute.id}-p1` ? null : `${dispute.id}-p1`)}
+                      onClick={() => toggleScreenshot(`${dispute.id}-p1`, dispute.player1ScreenshotPath)}
                       className="text-xs bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-white px-3 py-1 rounded transition"
                     >
                       📸 {dispute.player1}'s Screenshot
                     </button>
                   )}
-                  {dispute.player2Screenshot && (
+                  {dispute.player2ScreenshotPath && (
                     <button
-                      onClick={() => setExpandedDispute(expandedDispute === `${dispute.id}-p2` ? null : `${dispute.id}-p2`)}
+                      onClick={() => toggleScreenshot(`${dispute.id}-p2`, dispute.player2ScreenshotPath)}
                       className="text-xs bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-white px-3 py-1 rounded transition"
                     >
                       📸 {dispute.player2}'s Screenshot
                     </button>
                   )}
                 </div>
-                {expandedDispute === `${dispute.id}-p1` && dispute.player1Screenshot && (
-                  <img src={dispute.player1Screenshot} alt="Player 1 proof" className="mt-3 max-h-64 rounded border border-gray-600" />
+                {expandedDispute === `${dispute.id}-p1` && screenshotUrls[`${dispute.id}-p1`] && (
+                  <img src={screenshotUrls[`${dispute.id}-p1`]} alt="Player 1 proof" className="mt-3 max-h-64 rounded border border-gray-600" />
                 )}
-                {expandedDispute === `${dispute.id}-p2` && dispute.player2Screenshot && (
-                  <img src={dispute.player2Screenshot} alt="Player 2 proof" className="mt-3 max-h-64 rounded border border-gray-600" />
+                {expandedDispute === `${dispute.id}-p2` && screenshotUrls[`${dispute.id}-p2`] && (
+                  <img src={screenshotUrls[`${dispute.id}-p2`]} alt="Player 2 proof" className="mt-3 max-h-64 rounded border border-gray-600" />
                 )}
               </div>
               <div className="flex gap-2 ml-4">
@@ -2224,120 +1920,4 @@ function StatCard({ icon, label, value }) {
       </div>
     </div>
   );
-}
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-async function fetchClashPlayerData(playerTag) {
-  try {
-    const cleanTag = playerTag.startsWith('#') ? playerTag.slice(1) : playerTag;
-    const response = await fetch(`https://api.clashofclans.com/v1/players/%23${cleanTag}`);
-    
-    if (!response.ok) {
-      console.error('Player not found');
-      return null;
-    }
-
-    const data = await response.json();
-    
-    return {
-      name: data.name,
-      tag: data.tag,
-      bestBuilderBaseTrophies: data.bestBuildersHall || 0,
-      builderBaseTrophies: data.builderBaseTrophies || 0,
-      builderBaseHall: data.builderHallLevel || 0,
-      townHallLevel: data.townHallLevel,
-    };
-  } catch (error) {
-    console.error('Error fetching player data:', error);
-    return null;
-  }
-}
-
-function generateSeededBracket(players, playerStats) {
-  const sorted = [...players].sort((a, b) => {
-    const aStats = playerStats[a] || { bestBuilderBaseTrophies: 0 };
-    const bStats = playerStats[b] || { bestBuilderBaseTrophies: 0 };
-    return bStats.bestBuilderBaseTrophies - aStats.bestBuilderBaseTrophies;
-  });
-
-  const seeded = [];
-  const top = [];
-  const bottom = [];
-
-  sorted.forEach((player, index) => {
-    if (index % 2 === 0) {
-      top.push(player);
-    } else {
-      bottom.unshift(player);
-    }
-  });
-
-  seeded.push(...top, ...bottom);
-
-  const pairs = [];
-  for (let i = 0; i < seeded.length; i += 2) {
-    if (i + 1 < seeded.length) {
-      pairs.push([seeded[i], seeded[i + 1]]);
-    } else {
-      pairs.push([seeded[i], 'BYE']);
-    }
-  }
-
-  return pairs;
-}
-
-function checkMatchTimeouts(tournaments, onTimeout) {
-  const now = new Date().getTime();
-  const TIMEOUT_MS = 16 * 60 * 60 * 1000;
-
-  tournaments.forEach(tournament => {
-    tournament.matches?.forEach(match => {
-      if ((match.status === 'active' || match.status === 'scheduled' || match.status === 'waiting_for_opponent') && match.scheduledStartTime) {
-        const elapsed = now - match.scheduledStartTime;
-        
-        if (elapsed > TIMEOUT_MS) {
-          const player1Reported = !!match.winner1Vote;
-          const player2Reported = !!match.winner2Vote;
-          
-          if (!player1Reported && !player2Reported) {
-            onTimeout(tournament.id, match.id, 'no_report');
-          }
-          else if (player1Reported && !player2Reported) {
-            onTimeout(tournament.id, match.id, match.winner1Vote);
-          } else if (player2Reported && !player1Reported) {
-            onTimeout(tournament.id, match.id, match.winner2Vote);
-          }
-        }
-      }
-    });
-  });
-}
-
-function getTimeRemaining(startTime) {
-  if (!startTime) return null;
-  const now = new Date().getTime();
-  const elapsed = now - startTime;
-  const TIMEOUT_MS = 16 * 60 * 60 * 1000;
-  const remaining = TIMEOUT_MS - elapsed;
-  
-  if (remaining <= 0) return 'EXPIRED';
-  
-  const hours = Math.floor(remaining / (60 * 60 * 1000));
-  const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
-  
-  return `${hours}h ${minutes}m`;
-}
-
-function getTimeRemainingDisplay(startTime) {
-  const remaining = getTimeRemaining(startTime);
-  if (!remaining) return null;
-  if (remaining === 'EXPIRED') return { text: 'TIMEOUT', color: 'text-white font-bold' };
-
-  const hours = parseInt(remaining);
-  if (hours <= 2) return { text: remaining, color: 'text-white font-bold' };
-  if (hours <= 8) return { text: remaining, color: 'text-white' };
-  return { text: remaining, color: 'text-neutral-400' };
 }

@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isStaff() {
+      return isSignedIn() && request.auth.token.isStaff == true;
+    }
+
+    function myUsername() {
+      return request.auth.token.username;
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow update: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clashTag']);
+      allow create, delete: if false; // Admin SDK only, via the signUp Cloud Function
+    }
+
+    match /usernames/{usernameLower} {
+      allow read: if isSignedIn();
+      allow write: if false; // Admin SDK only, via the signUp Cloud Function
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isStaff();
+      allow update: if isStaff() ||
+        (isSignedIn() && resource.data.status == 'signups_open'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players']));
+
+      match /matches/{matchId} {
+        allow read: if isSignedIn();
+        allow write: if isStaff();
+        // A non-staff player may update only fields on a match they're actually part of.
+        allow update: if isSignedIn() &&
+          (resource.data.player1 == myUsername() || resource.data.player2 == myUsername()) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'player1Ready', 'player1ReadyTime', 'player2Ready', 'player2ReadyTime',
+            'winner1Vote', 'player1VoteTime', 'winner2Vote', 'player2VoteTime',
+            'player1ScreenshotPath', 'player2ScreenshotPath', 'status', 'scheduledStartTime',
+            'winner', 'completedAt'
+          ]);
+      }
+    }
+
+    match /flags/{flagId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.createdBy == myUsername()
+                    && request.resource.data.status == 'open';
+      allow update: if isStaff() ||
+        (isSignedIn() && resource.data.createdBy == myUsername()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['responses']));
+    }
+  }
+}
