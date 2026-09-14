@@ -1,5 +1,6 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
@@ -10,10 +11,23 @@ const db = admin.firestore();
 const STAFF_INVITE_CODE = defineSecret('STAFF_INVITE_CODE');
 const CLASH_API_KEY = defineSecret('CLASH_API_KEY');
 const CLASH_RELAY_SECRET = defineSecret('CLASH_RELAY_SECRET');
+const DISCORD_WEBHOOK_URL = defineSecret('DISCORD_WEBHOOK_URL');
 const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
 const TERMINAL_STATUSES = ['completed', 'disputed', 'needs_staff_review'];
+
+async function notifyDiscord(content) {
+  try {
+    await fetch(DISCORD_WEBHOOK_URL.value(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+  } catch (err) {
+    logger.error('notifyDiscord failed', err);
+  }
+}
 
 function usernameToEmail(username) {
   return `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`;
@@ -612,3 +626,39 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
 
   if (hasWrites) await batch.commit();
 }
+
+// ============================================================================
+// Discord notifications - fire automatically off Firestore writes, so no
+// other code path needs to know about them.
+// ============================================================================
+exports.notifyTournamentCreated = onDocumentCreated(
+  { document: 'tournaments/{tournamentId}', secrets: [DISCORD_WEBHOOK_URL] },
+  async (event) => {
+    const t = event.data.data();
+    await notifyDiscord(`🏆 New tournament created: **${t.name}** — sign up now!`);
+  }
+);
+
+exports.notifyMatchNeedsReview = onDocumentUpdated(
+  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_WEBHOOK_URL] },
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    const needsReviewNow = ['disputed', 'needs_staff_review'].includes(after.status);
+    const neededReviewBefore = ['disputed', 'needs_staff_review'].includes(before.status);
+    if (!needsReviewNow || neededReviewBefore) return;
+
+    await notifyDiscord(`⚠️ Match needs staff review: **${after.player1}** vs **${after.player2}**`);
+  }
+);
+
+exports.notifyChampionCrowned = onDocumentUpdated(
+  { document: 'tournaments/{tournamentId}', secrets: [DISCORD_WEBHOOK_URL] },
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    if (before.champion || !after.champion) return;
+
+    await notifyDiscord(`🎉 **${after.champion}** wins **${after.name}**!`);
+  }
+);
