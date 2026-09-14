@@ -93,8 +93,13 @@ export async function createTournament(tournamentData, createdBy) {
     removedPlayers: [],
     requiredBuilderHallLevel: tournamentData.requiredBuilderHallLevel || null,
     minBestTrophies: tournamentData.minBestTrophies || null,
+    bannerPath: null,
   });
   return id;
+}
+
+export async function updateTournamentBanner(tournamentId, bannerPath) {
+  await updateDoc(tournamentRef(tournamentId), { bannerPath });
 }
 
 export async function joinTournament(tournament, user) {

@@ -27,3 +27,14 @@ export function getProfilePictureUrl(path) {
   if (!path) return Promise.resolve(null);
   return getDownloadURL(ref(storage, path));
 }
+
+export async function uploadTournamentBanner(tournamentId, file) {
+  const path = `tournamentBanners/${tournamentId}/banner_${Date.now()}`;
+  await uploadBytes(ref(storage, path), file);
+  return path;
+}
+
+export function getTournamentBannerUrl(path) {
+  if (!path) return Promise.resolve(null);
+  return getDownloadURL(ref(storage, path));
+}

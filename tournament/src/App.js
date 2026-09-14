@@ -6,6 +6,7 @@ import {
   subscribeToMatches,
   subscribeToUserMatches,
   createTournament,
+  updateTournamentBanner,
   joinTournament,
   deleteTournament,
   removePlayer,
@@ -17,7 +18,14 @@ import {
   sendMatchMessage,
 } from './api/tournaments';
 import { subscribeToFlags, createFlag, updateFlagStatus, addFlagResponse } from './api/flags';
-import { uploadMatchScreenshots, getScreenshotUrl, uploadProfilePicture, getProfilePictureUrl } from './api/storage';
+import {
+  uploadMatchScreenshots,
+  getScreenshotUrl,
+  uploadProfilePicture,
+  getProfilePictureUrl,
+  uploadTournamentBanner,
+  getTournamentBannerUrl,
+} from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
 import { verifyClashAccount } from './api/clash';
 import { getTimeRemainingDisplay } from './utils';
@@ -578,9 +586,18 @@ export default function TournamentApp() {
     setCurrentPage('profile');
   };
 
-  const handleCreateTournament = async (tournamentData) => {
-    await createTournament(tournamentData, currentUser.username);
+  const handleCreateTournament = async (tournamentData, bannerFile) => {
+    const id = await createTournament(tournamentData, currentUser.username);
+    if (bannerFile) {
+      const path = await uploadTournamentBanner(id, bannerFile);
+      await updateTournamentBanner(id, path);
+    }
     setCurrentPage('dashboard');
+  };
+
+  const handleUpdateBanner = async (tournamentId, bannerFile) => {
+    const path = await uploadTournamentBanner(tournamentId, bannerFile);
+    await updateTournamentBanner(tournamentId, path);
   };
 
   const handleJoinTournament = async (tournamentId) => {
@@ -854,6 +871,7 @@ export default function TournamentApp() {
             onRemovePlayer={handleRemovePlayer}
             onPlayerReady={handlePlayerReady}
             onViewProfile={viewProfile}
+            onUpdateBanner={handleUpdateBanner}
             onFlagMatch={(matchId) => {
               setFlagRelatedMatch(matchId);
               setFlagModalOpen(true);
@@ -1690,10 +1708,10 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
     return <span className="text-white">{deadline.toLocaleString()}</span>;
   };
 
-  return (
-    <div className="bg-gray-700 rounded p-4 flex justify-between items-center flex-wrap gap-4">
+  const cardContent = (
+    <div className="bg-gray-700 flex-1 min-w-0 p-4 flex justify-between items-center flex-wrap gap-4">
       <div className="flex-1 min-w-0">
-        <h3 className="font-bold text-lg">{tournament.name}</h3>
+        <h3 className="font-extrabold text-xl tracking-tight">{tournament.name}</h3>
         <div className="text-sm text-gray-300 mt-1">
           <p>Creator: {tournament.createdBy}</p>
           <p>Players: {tournament.players.length} | Status: <span className="text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
@@ -1767,6 +1785,34 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
       </div>
     </div>
   );
+
+  if (tournament.bannerPath) {
+    return (
+      <div className="rounded overflow-hidden border-2 border-white flex flex-col sm:flex-row">
+        <TournamentBannerImage path={tournament.bannerPath} className="w-full sm:w-48 h-32 sm:h-auto object-cover shrink-0" />
+        {cardContent}
+      </div>
+    );
+  }
+
+  return <div className="rounded overflow-hidden">{cardContent}</div>;
+}
+
+function TournamentBannerImage({ path, className }) {
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (path) {
+      getTournamentBannerUrl(path).then((u) => { if (!cancelled) setUrl(u); });
+    } else {
+      setUrl(null);
+    }
+    return () => { cancelled = true; };
+  }, [path]);
+
+  if (!url) return <div className={`${className} bg-gray-800`} />;
+  return <img src={url} alt="Tournament banner" className={className} />;
 }
 
 function CreateTournamentPage({ onCreateTournament, onCancel }) {
@@ -1776,7 +1822,17 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   const [signupDeadline, setSignupDeadline] = useState('');
   const [requiredBuilderHallLevel, setRequiredBuilderHallLevel] = useState('');
   const [minBestTrophies, setMinBestTrophies] = useState('');
+  const [bannerFile, setBannerFile] = useState(null);
+  const [bannerPreview, setBannerPreview] = useState(null);
   const [error, setError] = useState('');
+
+  const handleBannerUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setBannerFile(file);
+      setBannerPreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1799,7 +1855,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
       signupDeadline: signupDeadline || null,
       requiredBuilderHallLevel: requiredBuilderHallLevel ? parseInt(requiredBuilderHallLevel, 10) : null,
       minBestTrophies: minBestTrophies ? parseInt(minBestTrophies, 10) : null,
-    });
+    }, bannerFile);
   };
 
   return (
@@ -1824,6 +1880,23 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
               placeholder="e.g., Builder Base April Cup"
               required
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Banner Image (Optional)</label>
+            <label className="block">
+              <input type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+              <div className="border-2 border-dashed border-gray-600 rounded overflow-hidden cursor-pointer hover:border-white transition">
+                {bannerPreview ? (
+                  <img src={bannerPreview} alt="Banner preview" className="w-full h-32 object-cover" />
+                ) : (
+                  <div className="p-4 text-center">
+                    <p className="text-sm text-gray-400">Click to upload a banner</p>
+                    <p className="text-xs text-gray-500 mt-1">Shown on the tournament card and page</p>
+                  </div>
+                )}
+              </div>
+            </label>
           </div>
 
           <div>
@@ -1912,8 +1985,33 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile }) {
+function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner }) {
   const [viewMode, setViewMode] = useState('list');
+  const [bannerUrl, setBannerUrl] = useState(null);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (tournament?.bannerPath) {
+      getTournamentBannerUrl(tournament.bannerPath).then((u) => { if (!cancelled) setBannerUrl(u); });
+    } else {
+      setBannerUrl(null);
+    }
+    return () => { cancelled = true; };
+  }, [tournament?.bannerPath]);
+
+  const handleBannerChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingBanner(true);
+    try {
+      await onUpdateBanner(tournament.id, file);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
 
   if (!tournament) {
     return (
@@ -1950,8 +2048,29 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
 
   return (
     <div className="space-y-8">
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-        <h1 className="text-3xl font-bold mb-2">{tournament.name}</h1>
+      <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        {bannerUrl ? (
+          <div className="relative">
+            <img src={bannerUrl} alt="" className="w-full h-48 object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+            <h1 className="absolute bottom-4 left-6 right-6 text-4xl font-extrabold text-white tracking-tight">{tournament.name}</h1>
+            {user.isStaff && (
+              <label className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white text-xs px-3 py-1.5 rounded cursor-pointer transition">
+                <input type="file" accept="image/*" onChange={handleBannerChange} className="hidden" disabled={uploadingBanner} />
+                {uploadingBanner ? 'Uploading...' : 'Change Banner'}
+              </label>
+            )}
+          </div>
+        ) : (
+          user.isStaff && (
+            <label className="block border-b border-gray-700 p-3 text-center text-xs text-gray-400 hover:text-white cursor-pointer transition">
+              <input type="file" accept="image/*" onChange={handleBannerChange} className="hidden" disabled={uploadingBanner} />
+              {uploadingBanner ? 'Uploading...' : '+ Add a banner image'}
+            </label>
+          )
+        )}
+        <div className="p-6">
+        {!bannerUrl && <h1 className="text-3xl font-bold mb-2">{tournament.name}</h1>}
         <p className="text-gray-400">{tournament.description}</p>
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
@@ -1984,6 +2103,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             <p className="text-white">{new Date(tournament.signupDeadline).toLocaleString()}</p>
           </div>
         )}
+        </div>
       </div>
 
       {user.isStaff && (
