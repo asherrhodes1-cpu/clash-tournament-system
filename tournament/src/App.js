@@ -1293,6 +1293,8 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
   const [editingBio, setEditingBio] = useState(false);
   const [bioDraft, setBioDraft] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [editingDiscordId, setEditingDiscordId] = useState(false);
+  const [discordIdDraft, setDiscordIdDraft] = useState('');
   const [showVerifyForm, setShowVerifyForm] = useState(false);
   const [verifyClashTag, setVerifyClashTag] = useState('');
   const [editingVerifyTag, setEditingVerifyTag] = useState(false);
@@ -1313,6 +1315,10 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
   useEffect(() => {
     setBioDraft(profile?.bio || '');
   }, [profile?.bio]);
+
+  useEffect(() => {
+    setDiscordIdDraft(profile?.discordId || '');
+  }, [profile?.discordId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1344,6 +1350,20 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
     try {
       await updateProfile(profile.id, { bio: bioDraft.trim() });
       setEditingBio(false);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleSaveDiscordId = async () => {
+    const trimmed = discordIdDraft.trim();
+    if (trimmed && !/^[0-9]{5,25}$/.test(trimmed)) {
+      alert('That doesn\'t look like a Discord User ID (should be a number, e.g. 123456789012345678).');
+      return;
+    }
+    try {
+      await updateProfile(profile.id, { discordId: trimmed });
+      setEditingDiscordId(false);
     } catch (err) {
       alert(err.message);
     }
@@ -1460,6 +1480,53 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
             </div>
           )}
         </div>
+
+        {isOwnProfile && (
+          <div className="mt-4 p-3 bg-gray-700 rounded">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+              <span className="text-sm font-bold">💬 Discord Notifications</span>
+              {!editingDiscordId && (
+                <button
+                  onClick={() => setEditingDiscordId(true)}
+                  className="text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition"
+                >
+                  {profile?.discordId ? 'Edit' : 'Set up'}
+                </button>
+              )}
+            </div>
+            {editingDiscordId ? (
+              <div className="space-y-2 mt-2">
+                <input
+                  type="text"
+                  value={discordIdDraft}
+                  onChange={(e) => setDiscordIdDraft(e.target.value)}
+                  placeholder="e.g., 123456789012345678"
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white"
+                />
+                <p className="text-xs text-gray-400">
+                  In Discord: Settings → Advanced → enable Developer Mode. Then right-click your name anywhere and click "Copy User ID".
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={handleSaveDiscordId} className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-1 rounded text-sm transition">
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setEditingDiscordId(false); setDiscordIdDraft(profile?.discordId || ''); }}
+                    className="border border-gray-600 hover:border-white px-3 py-1 rounded text-sm transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">
+                {profile?.discordId
+                  ? "You'll be @mentioned in Discord for your matches and new chat messages."
+                  : 'Add your Discord User ID to get @mentioned for your matches and new chat messages.'}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 p-3 bg-gray-700 rounded">
           <div className="flex items-center justify-between flex-wrap gap-2">

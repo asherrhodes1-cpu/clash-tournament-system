@@ -29,6 +29,17 @@ async function notifyDiscord(content) {
   }
 }
 
+// Resolves a username to an @mention if they've linked a Discord User ID,
+// otherwise just returns the plain username so the message still reads fine.
+async function resolveMention(username) {
+  if (!username || username === 'BYE') return username;
+  const usernameDoc = await db.collection('usernames').doc(username.toLowerCase()).get();
+  if (!usernameDoc.exists) return username;
+  const userDoc = await db.collection('users').doc(usernameDoc.data().uid).get();
+  const discordId = userDoc.exists ? userDoc.data().discordId : null;
+  return discordId ? `<@${discordId}>` : username;
+}
+
 function usernameToEmail(username) {
   return `${username.trim().toLowerCase()}@${EMAIL_DOMAIN}`;
 }
@@ -660,5 +671,35 @@ exports.notifyChampionCrowned = onDocumentUpdated(
     if (before.champion || !after.champion) return;
 
     await notifyDiscord(`🎉 **${after.champion}** wins **${after.name}**!`);
+  }
+);
+
+exports.notifyMatchReady = onDocumentCreated(
+  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_WEBHOOK_URL] },
+  async (event) => {
+    const m = event.data.data();
+    if (!m.player1 || !m.player2 || m.player1 === 'BYE' || m.player2 === 'BYE') return;
+
+    const [p1, p2] = await Promise.all([resolveMention(m.player1), resolveMention(m.player2)]);
+    await notifyDiscord(`⚔️ New match: ${p1} vs ${p2} — head to the app to ready up!`);
+  }
+);
+
+exports.notifyNewChatMessage = onDocumentCreated(
+  { document: 'tournaments/{tournamentId}/matches/{matchId}/messages/{messageId}', secrets: [DISCORD_WEBHOOK_URL] },
+  async (event) => {
+    const msg = event.data.data();
+    const { tournamentId, matchId } = event.params;
+
+    const matchDoc = await db.collection('tournaments').doc(tournamentId).collection('matches').doc(matchId).get();
+    if (!matchDoc.exists) return;
+    const match = matchDoc.data();
+
+    const recipient = match.player1 === msg.sender ? match.player2 : match.player1;
+    if (!recipient || recipient === 'BYE') return;
+
+    const mention = await resolveMention(recipient);
+    const preview = msg.text.length > 200 ? `${msg.text.slice(0, 200)}...` : msg.text;
+    await notifyDiscord(`💬 ${mention}, new message from **${msg.sender}**: ${preview}`);
   }
 );
