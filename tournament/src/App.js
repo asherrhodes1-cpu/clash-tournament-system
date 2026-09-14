@@ -17,7 +17,7 @@ import {
   sendMatchMessage,
 } from './api/tournaments';
 import { subscribeToFlags, createFlag, updateFlagStatus, addFlagResponse } from './api/flags';
-import { uploadMatchScreenshot, getScreenshotUrl, uploadProfilePicture, getProfilePictureUrl } from './api/storage';
+import { uploadMatchScreenshots, getScreenshotUrl, uploadProfilePicture, getProfilePictureUrl } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
 import { verifyClashAccount } from './api/clash';
 import { getTimeRemainingDisplay } from './utils';
@@ -627,7 +627,7 @@ export default function TournamentApp() {
     await playerReady(selectedTournamentId, matchId, currentUser.username);
   };
 
-  const handleReportMatch = async (matchId, selectedWinner, screenshotFile) => {
+  const handleReportMatch = async (matchId, selectedWinner, screenshotFiles) => {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
     const isPlayer1 = currentUser.username === match.player1;
@@ -635,13 +635,13 @@ export default function TournamentApp() {
     if (alreadyVoted) {
       throw new Error('You already submitted a result for this match.');
     }
-    const screenshotPath = await uploadMatchScreenshot(
+    const screenshotPaths = await uploadMatchScreenshots(
       selectedTournamentId,
       matchId,
       isPlayer1 ? 'player1' : 'player2',
-      screenshotFile
+      screenshotFiles
     );
-    await reportMatch(selectedTournamentId, matchId, currentUser.username, selectedWinner, screenshotPath);
+    await reportMatch(selectedTournamentId, matchId, currentUser.username, selectedWinner, screenshotPaths);
   };
 
   const handleResolveDispute = async (matchId, winner) => {
@@ -865,8 +865,8 @@ export default function TournamentApp() {
           <MatchPage
             match={matches.find(m => m.id === selectedMatchId) || userMatches.find(m => m.id === selectedMatchId)}
             user={currentUser}
-            onReportWinner={async (winner, screenshotFile) => {
-              await handleReportMatch(selectedMatchId, winner, screenshotFile);
+            onReportWinner={async (winner, screenshotFiles) => {
+              await handleReportMatch(selectedMatchId, winner, screenshotFiles);
               setCurrentPage('tournament');
             }}
             onCancel={() => setCurrentPage('tournament')}
@@ -2296,10 +2296,12 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch, onV
   );
 }
 
+const MAX_SCREENSHOTS = 5;
+
 function MatchPage({ match, user, onReportWinner, onCancel }) {
   const [selectedWinner, setSelectedWinner] = useState(null);
-  const [screenshot, setScreenshot] = useState(null);
-  const [screenshotPreview, setScreenshotPreview] = useState(null);
+  const [screenshots, setScreenshots] = useState([]);
+  const [screenshotPreviews, setScreenshotPreviews] = useState([]);
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
 
@@ -2328,16 +2330,23 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
   };
 
   const handleScreenshotUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setScreenshot(file);
-      setScreenshotPreview(URL.createObjectURL(file));
-    }
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const combined = [...screenshots, ...files].slice(0, MAX_SCREENSHOTS);
+    setScreenshots(combined);
+    setScreenshotPreviews(combined.map((f) => URL.createObjectURL(f)));
+    e.target.value = '';
+  };
+
+  const handleRemoveScreenshot = (index) => {
+    setScreenshots((prev) => prev.filter((_, i) => i !== index));
+    setScreenshotPreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleReportWinner = (winner) => {
-    if (!screenshot) {
-      alert('Please upload a screenshot before reporting');
+    if (screenshots.length === 0) {
+      alert('Please upload at least one screenshot before reporting');
       return;
     }
 
@@ -2349,7 +2358,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
     setSelectedWinner(winner);
     setTimeout(async () => {
       try {
-        await onReportWinner(winner, screenshot);
+        await onReportWinner(winner, screenshots);
       } catch (err) {
         setSelectedWinner(null);
         alert(err.message);
@@ -2420,30 +2429,46 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
         ) : (
           <>
             <div className="mb-6 pb-6 border-b border-gray-600">
-              <p className="text-sm font-medium mb-3">📸 Proof Screenshot</p>
-              <p className="text-xs text-gray-400 mb-3">Upload a screenshot showing the match result from your profile</p>
+              <p className="text-sm font-medium mb-3">📸 Proof Screenshots</p>
+              <p className="text-xs text-gray-400 mb-3">
+                Upload one or more screenshots showing the match result from your profile (up to {MAX_SCREENSHOTS})
+              </p>
 
-              <label className="block">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleScreenshotUpload}
-                  className="hidden"
-                />
-                <div className="border-2 border-dashed border-gray-600 rounded p-4 text-center cursor-pointer hover:border-white transition">
-                  {screenshotPreview ? (
-                    <div>
-                      <img src={screenshotPreview} alt="Preview" className="w-full h-auto rounded mb-2 max-h-48" />
-                      <p className="text-xs text-white">✓ Screenshot uploaded</p>
+              {screenshotPreviews.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {screenshotPreviews.map((preview, idx) => (
+                    <div key={idx} className="relative">
+                      <img src={preview} alt={`Screenshot ${idx + 1}`} className="w-full h-20 object-cover rounded" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveScreenshot(idx)}
+                        className="absolute -top-1 -right-1 bg-white text-black rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold"
+                        title="Remove"
+                      >
+                        ×
+                      </button>
                     </div>
-                  ) : (
-                    <div>
-                      <p className="text-sm text-gray-400">Click to upload screenshot</p>
-                      <p className="text-xs text-gray-500 mt-1">or drag and drop</p>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              </label>
+              )}
+
+              {screenshots.length < MAX_SCREENSHOTS && (
+                <label className="block">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleScreenshotUpload}
+                    className="hidden"
+                  />
+                  <div className="border-2 border-dashed border-gray-600 rounded p-4 text-center cursor-pointer hover:border-white transition">
+                    <p className="text-sm text-gray-400">
+                      {screenshots.length > 0 ? 'Add another screenshot' : 'Click to upload screenshot(s)'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">or drag and drop</p>
+                  </div>
+                </label>
+              )}
             </div>
 
             <p className="text-sm text-gray-300 mb-4">
@@ -2457,23 +2482,23 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
             <div className="space-y-2">
               <button
                 onClick={() => handleReportWinner(match.player1)}
-                disabled={selectedWinner !== null || !screenshot}
+                disabled={selectedWinner !== null || screenshots.length === 0}
                 className={`w-full p-3 rounded font-bold transition ${
                   selectedWinner === match.player1
                     ? 'bg-white text-black'
                     : 'bg-gray-700 hover:bg-gray-600'
-                } ${selectedWinner !== null && selectedWinner !== match.player1 ? 'opacity-50' : ''} ${!screenshot ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${selectedWinner !== null && selectedWinner !== match.player1 ? 'opacity-50' : ''} ${screenshots.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {match.player1} won
               </button>
               <button
                 onClick={() => handleReportWinner(match.player2)}
-                disabled={selectedWinner !== null || !screenshot}
+                disabled={selectedWinner !== null || screenshots.length === 0}
                 className={`w-full p-3 rounded font-bold transition ${
                   selectedWinner === match.player2
                     ? 'bg-white text-black'
                     : 'bg-gray-700 hover:bg-gray-600'
-                } ${selectedWinner !== null && selectedWinner !== match.player2 ? 'opacity-50' : ''} ${!screenshot ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${selectedWinner !== null && selectedWinner !== match.player2 ? 'opacity-50' : ''} ${screenshots.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {match.player2} won
               </button>
@@ -2485,9 +2510,9 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
               </div>
             )}
 
-            {!screenshot && selectedWinner === null && (
+            {screenshots.length === 0 && selectedWinner === null && (
               <div className="mt-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm text-center">
-                ⚠️ Screenshot required to report
+                ⚠️ At least one screenshot required to report
               </div>
             )}
           </>
@@ -2513,15 +2538,15 @@ function DisputeReview({ matches, onResolveDispute }) {
 
   if (allIssues.length === 0) return null;
 
-  const toggleScreenshot = async (key, path) => {
+  const toggleScreenshot = async (key, paths) => {
     if (expandedDispute === key) {
       setExpandedDispute(null);
       return;
     }
     setExpandedDispute(key);
     if (!screenshotUrls[key]) {
-      const url = await getScreenshotUrl(path);
-      setScreenshotUrls(prev => ({ ...prev, [key]: url }));
+      const urls = await Promise.all(paths.map((p) => getScreenshotUrl(p)));
+      setScreenshotUrls(prev => ({ ...prev, [key]: urls }));
     }
   };
 
@@ -2546,28 +2571,36 @@ function DisputeReview({ matches, onResolveDispute }) {
                   {dispute.player2} voted: <span className="text-white font-bold">{dispute.winner2Vote}</span>
                 </p>
                 <div className="flex gap-2 flex-wrap">
-                  {dispute.player1ScreenshotPath && (
+                  {dispute.player1ScreenshotPaths?.length > 0 && (
                     <button
-                      onClick={() => toggleScreenshot(`${dispute.id}-p1`, dispute.player1ScreenshotPath)}
+                      onClick={() => toggleScreenshot(`${dispute.id}-p1`, dispute.player1ScreenshotPaths)}
                       className="text-xs bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-white px-3 py-1 rounded transition"
                     >
-                      📸 {dispute.player1}'s Screenshot
+                      📸 {dispute.player1}'s Screenshot{dispute.player1ScreenshotPaths.length > 1 ? `s (${dispute.player1ScreenshotPaths.length})` : ''}
                     </button>
                   )}
-                  {dispute.player2ScreenshotPath && (
+                  {dispute.player2ScreenshotPaths?.length > 0 && (
                     <button
-                      onClick={() => toggleScreenshot(`${dispute.id}-p2`, dispute.player2ScreenshotPath)}
+                      onClick={() => toggleScreenshot(`${dispute.id}-p2`, dispute.player2ScreenshotPaths)}
                       className="text-xs bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-white px-3 py-1 rounded transition"
                     >
-                      📸 {dispute.player2}'s Screenshot
+                      📸 {dispute.player2}'s Screenshot{dispute.player2ScreenshotPaths.length > 1 ? `s (${dispute.player2ScreenshotPaths.length})` : ''}
                     </button>
                   )}
                 </div>
                 {expandedDispute === `${dispute.id}-p1` && screenshotUrls[`${dispute.id}-p1`] && (
-                  <img src={screenshotUrls[`${dispute.id}-p1`]} alt="Player 1 proof" className="mt-3 max-h-64 rounded border border-gray-600" />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {screenshotUrls[`${dispute.id}-p1`].map((url, idx) => (
+                      <img key={idx} src={url} alt={`Player 1 proof ${idx + 1}`} className="max-h-64 rounded border border-gray-600" />
+                    ))}
+                  </div>
                 )}
                 {expandedDispute === `${dispute.id}-p2` && screenshotUrls[`${dispute.id}-p2`] && (
-                  <img src={screenshotUrls[`${dispute.id}-p2`]} alt="Player 2 proof" className="mt-3 max-h-64 rounded border border-gray-600" />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {screenshotUrls[`${dispute.id}-p2`].map((url, idx) => (
+                      <img key={idx} src={url} alt={`Player 2 proof ${idx + 1}`} className="max-h-64 rounded border border-gray-600" />
+                    ))}
+                  </div>
                 )}
               </div>
               <div className="flex gap-2 ml-4">

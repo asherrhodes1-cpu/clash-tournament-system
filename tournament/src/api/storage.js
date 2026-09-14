@@ -1,11 +1,14 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase';
 
-export async function uploadMatchScreenshot(tournamentId, matchId, playerSlot, file) {
-  const path = `matchScreenshots/${tournamentId}/${matchId}/${playerSlot}_${Date.now()}`;
-  const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file);
-  return path;
+export async function uploadMatchScreenshots(tournamentId, matchId, playerSlot, files) {
+  const paths = [];
+  for (let i = 0; i < files.length; i++) {
+    const path = `matchScreenshots/${tournamentId}/${matchId}/${playerSlot}_${Date.now()}_${i}`;
+    await uploadBytes(ref(storage, path), files[i]);
+    paths.push(path);
+  }
+  return paths;
 }
 
 export function getScreenshotUrl(path) {

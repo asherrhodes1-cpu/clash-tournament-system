@@ -63,7 +63,7 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'player1Ready', 'player1ReadyTime', 'player2Ready', 'player2ReadyTime',
             'winner1Vote', 'player1VoteTime', 'winner2Vote', 'player2VoteTime',
-            'player1ScreenshotPath', 'player2ScreenshotPath', 'status', 'scheduledStartTime',
+            'player1ScreenshotPaths', 'player2ScreenshotPaths', 'status', 'scheduledStartTime',
             'winner', 'completedAt'
           ]);
 

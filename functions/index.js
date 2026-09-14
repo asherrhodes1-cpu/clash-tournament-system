@@ -372,8 +372,8 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
           scheduledStartTime: null,
           winner1Vote: null,
           winner2Vote: null,
-          player1ScreenshotPath: null,
-          player2ScreenshotPath: null,
+          player1ScreenshotPaths: [],
+          player2ScreenshotPaths: [],
         });
       }
 
@@ -400,8 +400,8 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
           scheduledStartTime: null,
           winner1Vote: null,
           winner2Vote: null,
-          player1ScreenshotPath: null,
-          player2ScreenshotPath: null,
+          player1ScreenshotPaths: [],
+          player2ScreenshotPaths: [],
         });
       }
 
@@ -450,8 +450,8 @@ function buildBracketMatchDoc({ id, tournamentId, player1, player2, round, brack
     winner2Vote: null,
     player1VoteTime: null,
     player2VoteTime: null,
-    player1ScreenshotPath: null,
-    player2ScreenshotPath: null,
+    player1ScreenshotPaths: [],
+    player2ScreenshotPaths: [],
   };
 }
 

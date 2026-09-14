@@ -225,8 +225,8 @@ export async function startTournament(tournament) {
           winner2Vote: null,
           player1VoteTime: null,
           player2VoteTime: null,
-          player1ScreenshotPath: null,
-          player2ScreenshotPath: null,
+          player1ScreenshotPaths: [],
+          player2ScreenshotPaths: [],
         });
       });
 
@@ -263,8 +263,8 @@ export async function startTournament(tournament) {
           winner2Vote: null,
           player1VoteTime: null,
           player2VoteTime: null,
-          player1ScreenshotPath: null,
-          player2ScreenshotPath: null,
+          player1ScreenshotPaths: [],
+          player2ScreenshotPaths: [],
         });
       });
 
@@ -313,7 +313,7 @@ export async function playerReady(tournamentId, matchId, username) {
   });
 }
 
-export async function reportMatch(tournamentId, matchId, username, selectedWinner, screenshotPath) {
+export async function reportMatch(tournamentId, matchId, username, selectedWinner, screenshotPaths) {
   await runTransaction(db, async (tx) => {
     const ref = matchRef(tournamentId, matchId);
     const snap = await tx.get(ref);
@@ -330,7 +330,7 @@ export async function reportMatch(tournamentId, matchId, username, selectedWinne
     const update = {
       [isPlayer1 ? 'winner1Vote' : 'winner2Vote']: selectedWinner,
       [isPlayer1 ? 'player1VoteTime' : 'player2VoteTime']: now,
-      [isPlayer1 ? 'player1ScreenshotPath' : 'player2ScreenshotPath']: screenshotPath,
+      [isPlayer1 ? 'player1ScreenshotPaths' : 'player2ScreenshotPaths']: screenshotPaths,
     };
 
     const winner1Vote = isPlayer1 ? selectedWinner : m.winner1Vote;
