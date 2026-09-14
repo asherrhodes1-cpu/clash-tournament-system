@@ -12,21 +12,34 @@ const STAFF_INVITE_CODE = defineSecret('STAFF_INVITE_CODE');
 const CLASH_API_KEY = defineSecret('CLASH_API_KEY');
 const CLASH_RELAY_SECRET = defineSecret('CLASH_RELAY_SECRET');
 const DISCORD_WEBHOOK_URL = defineSecret('DISCORD_WEBHOOK_URL');
+const DISCORD_MATCH_WEBHOOK_URL = defineSecret('DISCORD_MATCH_WEBHOOK_URL');
 const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
 const TERMINAL_STATUSES = ['completed', 'disputed', 'needs_staff_review'];
 
-async function notifyDiscord(content) {
+async function postToDiscord(webhookUrl, content) {
   try {
-    await fetch(DISCORD_WEBHOOK_URL.value(), {
+    await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
     });
   } catch (err) {
-    logger.error('notifyDiscord failed', err);
+    logger.error('postToDiscord failed', err);
   }
+}
+
+// Official tournament-wide announcements: new tournaments, disputes needing
+// staff, champions being crowned.
+function notifyDiscord(content) {
+  return postToDiscord(DISCORD_WEBHOOK_URL.value(), content);
+}
+
+// Per-match/chat pings that @mention specific players - kept in a separate
+// channel so they don't spam everyone unless they're the one tagged.
+function notifyMatchChannel(content) {
+  return postToDiscord(DISCORD_MATCH_WEBHOOK_URL.value(), content);
 }
 
 // Resolves a username to an @mention if they've linked a Discord User ID,
@@ -675,18 +688,18 @@ exports.notifyChampionCrowned = onDocumentUpdated(
 );
 
 exports.notifyMatchReady = onDocumentCreated(
-  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_WEBHOOK_URL] },
+  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_MATCH_WEBHOOK_URL] },
   async (event) => {
     const m = event.data.data();
     if (!m.player1 || !m.player2 || m.player1 === 'BYE' || m.player2 === 'BYE') return;
 
     const [p1, p2] = await Promise.all([resolveMention(m.player1), resolveMention(m.player2)]);
-    await notifyDiscord(`⚔️ New match: ${p1} vs ${p2} — head to the app to ready up!`);
+    await notifyMatchChannel(`⚔️ New match: ${p1} vs ${p2} — head to the app to ready up!`);
   }
 );
 
 exports.notifyNewChatMessage = onDocumentCreated(
-  { document: 'tournaments/{tournamentId}/matches/{matchId}/messages/{messageId}', secrets: [DISCORD_WEBHOOK_URL] },
+  { document: 'tournaments/{tournamentId}/matches/{matchId}/messages/{messageId}', secrets: [DISCORD_MATCH_WEBHOOK_URL] },
   async (event) => {
     const msg = event.data.data();
     const { tournamentId, matchId } = event.params;
@@ -700,6 +713,6 @@ exports.notifyNewChatMessage = onDocumentCreated(
 
     const mention = await resolveMention(recipient);
     const preview = msg.text.length > 200 ? `${msg.text.slice(0, 200)}...` : msg.text;
-    await notifyDiscord(`💬 ${mention}, new message from **${msg.sender}**: ${preview}`);
+    await notifyMatchChannel(`💬 ${mention}, new message from **${msg.sender}**: ${preview}`);
   }
 );
