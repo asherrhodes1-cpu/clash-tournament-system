@@ -121,6 +121,14 @@ exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE, CLASH_API_KEY, CLASH_RELA
   if (!username || typeof username !== 'string' || username.trim().length < 3) {
     throw new HttpsError('invalid-argument', 'Username must be at least 3 characters');
   }
+  // The username becomes the local part of a synthesized email
+  // (user@clash-tournament.local) for Firebase Auth, so it has to be
+  // restricted to characters that are actually valid there - otherwise
+  // account creation fails deep inside admin.auth().createUser() with an
+  // opaque "email address is improperly formatted" error.
+  if (!/^[A-Za-z0-9_.-]+$/.test(username.trim())) {
+    throw new HttpsError('invalid-argument', 'Username may only contain letters, numbers, underscores, hyphens, and periods');
+  }
   if (!password || typeof password !== 'string' || password.length < 6) {
     throw new HttpsError('invalid-argument', 'Password must be at least 6 characters');
   }

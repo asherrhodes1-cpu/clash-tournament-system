@@ -1077,6 +1077,11 @@ function LoginPage() {
       return;
     }
 
+    if (!/^[A-Za-z0-9_.-]+$/.test(username.trim())) {
+      setError('Username may only contain letters, numbers, underscores, hyphens, and periods');
+      return;
+    }
+
     if (!password) {
       setError('Password is required');
       return;
