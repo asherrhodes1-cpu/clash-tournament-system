@@ -99,7 +99,11 @@ export async function createTournament(tournamentData, createdBy) {
 }
 
 export async function updateTournamentBanner(tournamentId, bannerPath) {
-  await updateDoc(tournamentRef(tournamentId), { bannerPath });
+  await updateDoc(tournamentRef(tournamentId), { bannerPath, bannerPosition: { x: 50, y: 50 } });
+}
+
+export async function updateTournamentBannerPosition(tournamentId, bannerPosition) {
+  await updateDoc(tournamentRef(tournamentId), { bannerPosition });
 }
 
 export async function joinTournament(tournament, user) {

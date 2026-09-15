@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { signUp, logIn, logOut, subscribeToAuthState, adminResetPassword } from './api/auth';
 import {
@@ -7,6 +7,7 @@ import {
   subscribeToUserMatches,
   createTournament,
   updateTournamentBanner,
+  updateTournamentBannerPosition,
   joinTournament,
   deleteTournament,
   removePlayer,
@@ -600,6 +601,10 @@ export default function TournamentApp() {
     await updateTournamentBanner(tournamentId, path);
   };
 
+  const handleUpdateBannerPosition = async (tournamentId, position) => {
+    await updateTournamentBannerPosition(tournamentId, position);
+  };
+
   const handleJoinTournament = async (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
@@ -872,6 +877,7 @@ export default function TournamentApp() {
             onPlayerReady={handlePlayerReady}
             onViewProfile={viewProfile}
             onUpdateBanner={handleUpdateBanner}
+            onUpdateBannerPosition={handleUpdateBannerPosition}
             onFlagMatch={(matchId) => {
               setFlagRelatedMatch(matchId);
               setFlagModalOpen(true);
@@ -1786,19 +1792,63 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
     </div>
   );
 
-  if (tournament.bannerPath) {
-    return (
-      <div className="rounded overflow-hidden border-2 border-white flex flex-col sm:flex-row">
-        <TournamentBannerImage path={tournament.bannerPath} className="w-full sm:w-48 h-32 sm:h-auto object-cover shrink-0" />
-        {cardContent}
-      </div>
-    );
-  }
-
-  return <div className="rounded overflow-hidden">{cardContent}</div>;
+  return (
+    <div className="rounded overflow-hidden border-2 border-white flex flex-col sm:flex-row">
+      {tournament.bannerPath ? (
+        <TournamentBannerImage
+          path={tournament.bannerPath}
+          position={tournament.bannerPosition}
+          className="w-full sm:w-48 h-32 sm:h-auto object-cover shrink-0"
+        />
+      ) : (
+        <AutoBanner seed={tournament.id} className="w-full sm:w-48 h-32 sm:h-auto shrink-0" />
+      )}
+      {cardContent}
+    </div>
+  );
 }
 
-function TournamentBannerImage({ path, className }) {
+// Deterministic hash so the same tournament always gets the same colors.
+function hashSeed(seed) {
+  const str = String(seed);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash);
+}
+
+// Auto-generated banner for tournaments without an uploaded image - a
+// colorful gradient in the vein of Clash's event cards, kept separate from
+// the app's own black/white chrome since it's a decorative graphic.
+function AutoBanner({ seed, className, children }) {
+  const hue = hashSeed(seed) % 360;
+  const gradient = `linear-gradient(135deg, hsl(${hue}, 65%, 32%), hsl(${(hue + 45) % 360}, 70%, 16%))`;
+  return (
+    <div className={`${className} flex items-center justify-center relative overflow-hidden`} style={{ background: gradient }}>
+      <div
+        className="absolute inset-0 opacity-20"
+        style={{ background: `radial-gradient(circle at 30% 30%, hsl(${(hue + 20) % 360}, 80%, 60%), transparent 60%)` }}
+      />
+      {children}
+    </div>
+  );
+}
+
+// Bold, thick-outlined title text meant to sit on top of a banner image or
+// gradient - the "chunky game font" look from the Clash Royale reference.
+function BannerTitle({ children, className = '' }) {
+  return (
+    <span
+      className={`font-black text-white ${className}`}
+      style={{ WebkitTextStroke: '1.5px black', textShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function TournamentBannerImage({ path, position, className }) {
   const [url, setUrl] = useState(null);
 
   useEffect(() => {
@@ -1811,8 +1861,10 @@ function TournamentBannerImage({ path, className }) {
     return () => { cancelled = true; };
   }, [path]);
 
+  const objectPosition = `${position?.x ?? 50}% ${position?.y ?? 50}%`;
+
   if (!url) return <div className={`${className} bg-gray-800`} />;
-  return <img src={url} alt="Tournament banner" className={className} />;
+  return <img src={url} alt="Tournament banner" className={className} style={{ objectPosition }} />;
 }
 
 function CreateTournamentPage({ onCreateTournament, onCancel }) {
@@ -1985,10 +2037,15 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner }) {
+function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition }) {
   const [viewMode, setViewMode] = useState('list');
   const [bannerUrl, setBannerUrl] = useState(null);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [repositioning, setRepositioning] = useState(false);
+  const [draftPosition, setDraftPosition] = useState({ x: 50, y: 50 });
+  const [savingPosition, setSavingPosition] = useState(false);
+  const bannerBoxRef = useRef(null);
+  const dragStateRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -2010,6 +2067,45 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       alert(err.message);
     } finally {
       setUploadingBanner(false);
+    }
+  };
+
+  const startRepositioning = () => {
+    setDraftPosition(tournament.bannerPosition || { x: 50, y: 50 });
+    setRepositioning(true);
+  };
+
+  const handleDragStart = (e) => {
+    if (!repositioning) return;
+    dragStateRef.current = { startX: e.clientX, startY: e.clientY, startPosition: draftPosition };
+    e.target.setPointerCapture(e.pointerId);
+  };
+
+  const handleDragMove = (e) => {
+    if (!repositioning || !dragStateRef.current || !bannerBoxRef.current) return;
+    const { width, height } = bannerBoxRef.current.getBoundingClientRect();
+    const { startX, startY, startPosition } = dragStateRef.current;
+    const deltaXPct = ((e.clientX - startX) / width) * 100;
+    const deltaYPct = ((e.clientY - startY) / height) * 100;
+    setDraftPosition({
+      x: Math.max(0, Math.min(100, startPosition.x - deltaXPct)),
+      y: Math.max(0, Math.min(100, startPosition.y - deltaYPct)),
+    });
+  };
+
+  const handleDragEnd = () => {
+    dragStateRef.current = null;
+  };
+
+  const handleSavePosition = async () => {
+    setSavingPosition(true);
+    try {
+      await onUpdateBannerPosition(tournament.id, draftPosition);
+      setRepositioning(false);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSavingPosition(false);
     }
   };
 
@@ -2049,28 +2145,65 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
   return (
     <div className="space-y-8">
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-        {bannerUrl ? (
-          <div className="relative">
-            <img src={bannerUrl} alt="" className="w-full h-48 object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-            <h1 className="absolute bottom-4 left-6 right-6 text-4xl font-extrabold text-white tracking-tight">{tournament.name}</h1>
-            {user.isStaff && (
-              <label className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white text-xs px-3 py-1.5 rounded cursor-pointer transition">
+        <div className="relative" ref={bannerBoxRef}>
+          {bannerUrl ? (
+            <img
+              src={bannerUrl}
+              alt=""
+              className={`w-full h-48 object-cover ${repositioning ? 'cursor-move' : ''}`}
+              style={{ objectPosition: `${(repositioning ? draftPosition : tournament.bannerPosition)?.x ?? 50}% ${(repositioning ? draftPosition : tournament.bannerPosition)?.y ?? 50}%` }}
+              onPointerDown={handleDragStart}
+              onPointerMove={handleDragMove}
+              onPointerUp={handleDragEnd}
+              draggable={false}
+            />
+          ) : (
+            <AutoBanner seed={tournament.id} className="w-full h-48" />
+          )}
+          {!repositioning && <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />}
+          {!repositioning && (
+            <h1 className="absolute bottom-4 left-6 right-6 text-4xl tracking-tight">
+              <BannerTitle>{tournament.name}</BannerTitle>
+            </h1>
+          )}
+          {user.isStaff && !repositioning && (
+            <div className="absolute top-4 right-4 flex gap-2">
+              {bannerUrl && (
+                <button
+                  onClick={startRepositioning}
+                  className="bg-black/60 hover:bg-black/80 text-white text-xs px-3 py-1.5 rounded transition"
+                >
+                  Reposition
+                </button>
+              )}
+              <label className="bg-black/60 hover:bg-black/80 text-white text-xs px-3 py-1.5 rounded cursor-pointer transition">
                 <input type="file" accept="image/*" onChange={handleBannerChange} className="hidden" disabled={uploadingBanner} />
-                {uploadingBanner ? 'Uploading...' : 'Change Banner'}
+                {uploadingBanner ? 'Uploading...' : bannerUrl ? 'Change Banner' : '+ Add Banner'}
               </label>
-            )}
-          </div>
-        ) : (
-          user.isStaff && (
-            <label className="block border-b border-gray-700 p-3 text-center text-xs text-gray-400 hover:text-white cursor-pointer transition">
-              <input type="file" accept="image/*" onChange={handleBannerChange} className="hidden" disabled={uploadingBanner} />
-              {uploadingBanner ? 'Uploading...' : '+ Add a banner image'}
-            </label>
-          )
-        )}
+            </div>
+          )}
+          {repositioning && (
+            <div className="absolute inset-x-0 bottom-0 bg-black/70 p-3 flex items-center justify-between gap-2">
+              <p className="text-xs text-white">Drag the image to reposition it</p>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={handleSavePosition}
+                  disabled={savingPosition}
+                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-1 rounded text-xs transition disabled:opacity-50"
+                >
+                  {savingPosition ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={() => setRepositioning(false)}
+                  className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-xs transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="p-6">
-        {!bannerUrl && <h1 className="text-3xl font-bold mb-2">{tournament.name}</h1>}
         <p className="text-gray-400">{tournament.description}</p>
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
