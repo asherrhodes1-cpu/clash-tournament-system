@@ -167,14 +167,45 @@ const MATCH_FORMAT_RULES = [
   { icon: '⚖️', text: 'Both players must complete the same number of attacks before a winner is declared. If your opponent fails on attack 4, you can\'t win until you\'ve also done a 4th attack with a better result.' },
 ];
 
+const GENERAL_RULES = [
+  { icon: '🗓️', text: 'Each bracket round unlocks on a fixed "Day", 24 hours apart - even if your match finishes early, the next bracket round won\'t start until its Day arrives. This keeps everyone on the same pace.' },
+  { icon: '💬', text: 'Once your match is live, use "Coordinate Match" to chat with your opponent and agree on timing.' },
+  { icon: '📸', text: 'Report the result with at least one proof screenshot and who won. Both players must agree, or staff will step in to resolve a dispute.' },
+  { icon: '🚫', text: 'Submitting a false result gets you removed from the tournament and banned from future ones - so keep it honest.' },
+];
+
+function RulesPage() {
+  return (
+    <div className="max-w-2xl mx-auto space-y-8">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <h1 className="text-2xl font-bold mb-1">📋 Tournament Rules</h1>
+        <p className="text-gray-400 text-sm mb-5">Match format</p>
+        <div className="space-y-3">
+          {MATCH_FORMAT_RULES.map((step, idx) => (
+            <div key={idx} className="flex gap-3 text-sm">
+              <span className="text-xl shrink-0">{step.icon}</span>
+              <p className="text-gray-300">{step.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <p className="text-gray-400 text-sm mb-5">How the tournament runs</p>
+        <div className="space-y-3">
+          {GENERAL_RULES.map((step, idx) => (
+            <div key={idx} className="flex gap-3 text-sm">
+              <span className="text-xl shrink-0">{step.icon}</span>
+              <p className="text-gray-300">{step.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TournamentWalkthroughModal({ onClose }) {
-  const steps = [
-    ...MATCH_FORMAT_RULES,
-    { icon: '🗓️', text: 'Each bracket round unlocks on a fixed "Day", 24 hours apart - even if your match finishes early, the next bracket round won\'t start until its Day arrives. This keeps everyone on the same pace.' },
-    { icon: '💬', text: 'Once your match is live, use "Coordinate Match" to chat with your opponent and agree on timing.' },
-    { icon: '📸', text: 'Report the result with at least one proof screenshot and who won. Both players must agree, or staff will step in to resolve a dispute.' },
-    { icon: '🚫', text: 'Submitting a false result gets you removed from the tournament and banned from future ones - so keep it honest.' },
-  ];
+  const steps = [...MATCH_FORMAT_RULES, ...GENERAL_RULES];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -762,6 +793,12 @@ export default function TournamentApp() {
                 >
                   Profile
                 </button>
+                <button
+                  onClick={() => setCurrentPage('rules')}
+                  className="hover:text-neutral-300 transition"
+                >
+                  Rules
+                </button>
                 {currentUser.isStaff && (
                   <button
                     onClick={() => setCurrentPage('create')}
@@ -818,6 +855,15 @@ export default function TournamentApp() {
                   className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
                 >
                   Profile
+                </button>
+                <button
+                  onClick={() => {
+                    setCurrentPage('rules');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                >
+                  Rules
                 </button>
                 {currentUser.isStaff && (
                   <button
@@ -958,6 +1004,8 @@ export default function TournamentApp() {
             onViewProfile={viewProfile}
           />
         )}
+
+        {currentPage === 'rules' && currentUser && <RulesPage />}
       </div>
 
       {flagModalOpen && (
