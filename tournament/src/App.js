@@ -29,7 +29,7 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
 import { verifyClashAccount } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, ONE_DAY_MS } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, ONE_DAY_MS } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -2095,7 +2095,10 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
               onChange={(e) => setSignupDeadline(e.target.value)}
               className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white focus:outline-none focus:border-white"
             />
-            <p className="text-xs text-gray-400 mt-1">Leave blank to allow signups indefinitely</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Leave blank to allow signups indefinitely, or to start the bracket yourself whenever you're ready.
+              With a deadline set, the tournament seeds its bracket and starts automatically the moment it passes.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2346,6 +2349,22 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             <div>
               <p className="text-sm text-gray-400">Current Day</p>
               <p className="text-lg font-bold text-white">Day {Math.floor((Date.now() - tournament.startedAt) / ONE_DAY_MS) + 1}</p>
+            </div>
+          )}
+          {tournament.status === 'signups_open' && (
+            <div>
+              <p className="text-sm text-gray-400">Estimated Duration</p>
+              <p className="text-lg font-bold text-white">
+                {tournament.players.length >= 2
+                  ? `${estimateTournamentDays(tournament.players.length, tournament.format)} days`
+                  : 'Needs 2+ players'}
+              </p>
+            </div>
+          )}
+          {tournament.startedAt && !tournament.champion && (
+            <div>
+              <p className="text-sm text-gray-400">Est. Finish</p>
+              <p className="text-lg font-bold text-white">Day {estimateTournamentDays(tournament.players.length, tournament.format)}</p>
             </div>
           )}
           {tournament.champion && (
@@ -2685,7 +2704,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             <button onClick={() => onViewProfile(match.player1)} className="font-bold hover:underline">
               {match.player1}
             </button>
-            <div className="text-xs text-gray-400">#{match.player1Tag}</div>
+            <div className="text-xs text-gray-400">{match.player1Tag}</div>
             {match.player1Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
           </div>
           <span className="text-gray-400">vs</span>
@@ -2693,7 +2712,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             <button onClick={() => onViewProfile(match.player2)} className="font-bold hover:underline" disabled={match.player2 === 'BYE'}>
               {match.player2}
             </button>
-            <div className="text-xs text-gray-400">#{match.player2Tag}</div>
+            <div className="text-xs text-gray-400">{match.player2Tag}</div>
             {match.player2Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
           </div>
           {getStatusIcon(match.status)}

@@ -280,6 +280,15 @@ exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET]
 // clients never race each other creating duplicate next-round matches.
 // ============================================================================
 exports.advanceTournaments = onSchedule('every 5 minutes', async () => {
+  const now = Date.now();
+  const openSnap = await db.collection('tournaments').where('status', '==', 'signups_open').get();
+  for (const tournamentDoc of openSnap.docs) {
+    const tournament = tournamentDoc.data();
+    if (tournament.signupDeadline && new Date(tournament.signupDeadline).getTime() <= now) {
+      await autoStartTournament(tournamentDoc.ref, tournament);
+    }
+  }
+
   const tournamentsSnap = await db.collection('tournaments').where('status', '==', 'in_progress').get();
 
   for (const tournamentDoc of tournamentsSnap.docs) {
@@ -295,6 +304,154 @@ exports.advanceTournaments = onSchedule('every 5 minutes', async () => {
     }
   }
 });
+
+// ============================================================================
+// Auto-start — once a tournament's signup deadline passes, seed and start it
+// without staff needing to click anything. Bracket size and match count fall
+// out automatically from however many players actually signed up.
+//
+// The seeding helpers below mirror generateSeededBracket/seedDoubleElimination-
+// Bracket in tournament/src/utils.js - duplicated because Cloud Functions
+// (CommonJS) can't share an ES module with the CRA client without ejecting
+// the build. Keep the two in sync if either changes.
+// ============================================================================
+function nextPowerOfTwo(n) {
+  let p = 1;
+  while (p < n) p *= 2;
+  return p;
+}
+
+function standardSeedOrder(size) {
+  if (size === 1) return [1];
+  const prev = standardSeedOrder(size / 2);
+  const out = [];
+  prev.forEach((s) => {
+    out.push(s);
+    out.push(size + 1 - s);
+  });
+  return out;
+}
+
+function generateSeededBracket(players, playerStats) {
+  const sorted = [...players].sort((a, b) => {
+    const aStats = playerStats[a] || { bestBuilderBaseTrophies: 0 };
+    const bStats = playerStats[b] || { bestBuilderBaseTrophies: 0 };
+    return bStats.bestBuilderBaseTrophies - aStats.bestBuilderBaseTrophies;
+  });
+  const top = [];
+  const bottom = [];
+  sorted.forEach((player, index) => {
+    if (index % 2 === 0) top.push(player);
+    else bottom.unshift(player);
+  });
+  const seeded = [...top, ...bottom];
+  const pairs = [];
+  for (let i = 0; i < seeded.length; i += 2) {
+    pairs.push(i + 1 < seeded.length ? [seeded[i], seeded[i + 1]] : [seeded[i], 'BYE']);
+  }
+  return pairs;
+}
+
+function seedDoubleEliminationBracket(players, playerStats) {
+  const bracketSize = nextPowerOfTwo(players.length);
+  const sorted = [...players].sort((a, b) => {
+    const aStats = playerStats[a] || { bestBuilderBaseTrophies: 0 };
+    const bStats = playerStats[b] || { bestBuilderBaseTrophies: 0 };
+    return bStats.bestBuilderBaseTrophies - aStats.bestBuilderBaseTrophies;
+  });
+  const seedOrder = standardSeedOrder(bracketSize);
+  const slots = seedOrder.map((seed) => sorted[seed - 1] || 'BYE');
+  const pairs = [];
+  for (let i = 0; i < slots.length; i += 2) pairs.push([slots[i], slots[i + 1]]);
+  return { pairs, bracketSize };
+}
+
+// Looks up each player's last-verified Clash tag/trophies from their profile
+// (not a fresh API call) - good enough for seeding purposes and keeps a
+// scheduled job from depending on the external Clash relay to start a
+// tournament.
+async function lookupPlayerStats(usernames) {
+  const stats = {};
+  for (let i = 0; i < usernames.length; i += 30) {
+    const chunk = usernames.slice(i, i + 30).map((u) => u.toLowerCase());
+    const snap = await db.collection('users').where('usernameLower', 'in', chunk).get();
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      stats[data.username] = { tag: data.clashTag || '', bestBuilderBaseTrophies: data.bestBuilderBaseTrophies || 0 };
+    });
+  }
+  return stats;
+}
+
+function newMatchDoc({ id, tournamentId, player1, player2, round, bracket, playerStats, now }) {
+  const isBye = player2 === 'BYE';
+  return {
+    id,
+    tournamentId,
+    player1,
+    player2,
+    player1Tag: playerStats[player1]?.tag || '',
+    player2Tag: playerStats[player2]?.tag || '',
+    player1Stats: playerStats[player1] || null,
+    player2Stats: playerStats[player2] || null,
+    round,
+    ...(bracket ? { bracket } : {}),
+    status: isBye ? 'completed' : 'pending',
+    winner: isBye ? player1 : null,
+    completedAt: isBye ? now : null,
+    player1Ready: false,
+    player2Ready: false,
+    player1ReadyTime: null,
+    player2ReadyTime: null,
+    scheduledStartTime: null,
+    winner1Vote: null,
+    winner2Vote: null,
+    player1VoteTime: null,
+    player2VoteTime: null,
+    player1ScreenshotPaths: [],
+    player2ScreenshotPaths: [],
+  };
+}
+
+async function autoStartTournament(tournamentRef, tournament) {
+  const players = tournament.players || [];
+  // Fewer than 2 signups means there's no tournament to run - leave it open
+  // for staff to delete or otherwise decide rather than crashing on a
+  // degenerate 1-player bracket.
+  if (players.length < 2) return;
+
+  const playerStats = await lookupPlayerStats(players);
+  const now = Date.now();
+  const batch = db.batch();
+  const isDoubleElim = tournament.format === 'double_elimination';
+
+  if (isDoubleElim) {
+    const { pairs, bracketSize } = seedDoubleEliminationBracket(players, playerStats);
+    pairs.forEach(([p1, p2], idx) => {
+      const id = `wb-r1-${idx}`;
+      batch.set(tournamentRef.collection('matches').doc(id), newMatchDoc({
+        id, tournamentId: tournament.id, player1: p1, player2: p2, round: 1, bracket: 'winners', playerStats, now,
+      }));
+    });
+    batch.update(tournamentRef, { status: 'in_progress', startedAt: now, bracketSize, playerStats });
+  } else {
+    const bracket = generateSeededBracket(players, playerStats);
+    bracket.forEach(([p1, p2], idx) => {
+      const id = `${tournament.id}-${idx}`;
+      batch.set(tournamentRef.collection('matches').doc(id), newMatchDoc({
+        id, tournamentId: tournament.id, player1: p1, player2: p2, round: 1, playerStats, now,
+      }));
+    });
+    batch.update(tournamentRef, {
+      status: 'in_progress',
+      startedAt: now,
+      bracket: bracket.map(([player1, player2]) => ({ player1, player2 })),
+      playerStats,
+    });
+  }
+
+  await batch.commit();
+}
 
 async function handleTimeouts(tournamentRef, matches) {
   const now = Date.now();

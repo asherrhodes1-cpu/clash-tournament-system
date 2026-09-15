@@ -85,7 +85,11 @@ export async function createTournament(tournamentData, createdBy) {
     name: tournamentData.name,
     description: tournamentData.description,
     format: tournamentData.format,
-    signupDeadline: tournamentData.signupDeadline || null,
+    // Stored as a real UTC instant (not the bare "YYYY-MM-DDTHH:mm" the
+    // <input type="datetime-local"> gives us) so the server-side auto-start
+    // check reads the exact same moment the creator picked, regardless of
+    // whose timezone is doing the parsing.
+    signupDeadline: tournamentData.signupDeadline ? new Date(tournamentData.signupDeadline).toISOString() : null,
     createdBy,
     players: [],
     status: 'signups_open',

@@ -87,6 +87,19 @@ export function getRoundUnlockTime(tournament, round) {
   return tournament.startedAt + (round - 1) * ONE_DAY_MS;
 }
 
+// Rounds are paced one per day, so this doubles as "how many days will this
+// tournament take" - purely a function of player count and format, since
+// bracket size is always chosen automatically to fit however many sign up.
+export function estimateTournamentDays(playerCount, format) {
+  if (!playerCount || playerCount < 2) return 0;
+  const k = Math.ceil(Math.log2(playerCount));
+  if (format === 'double_elimination') {
+    const totalLbRounds = Math.max(2 * (k - 1), 1);
+    return totalLbRounds + 2; // grand final + a possible bracket-reset decider
+  }
+  return k;
+}
+
 export function formatCountdown(ms) {
   if (ms <= 0) return null;
   const hours = Math.floor(ms / (60 * 60 * 1000));
