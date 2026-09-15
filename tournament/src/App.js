@@ -2427,15 +2427,17 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       {viewMode === 'bracket' ? (
         <BracketView matches={matches} rounds={rounds} isDoubleElim={isDoubleElim} bracketSize={tournament.bracketSize} />
       ) : isDoubleElim ? (
-        bracketSections.map(({ bracket, round }) => (
+        bracketSections.map(({ bracket, round }) => {
+          const sectionMatches = matches.filter(m => m.bracket === bracket && m.round === round);
+          const day = sectionMatches[0]?.day ?? round;
+          return (
           <div key={`${bracket}-${round}`} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
               <h2 className="text-xl font-bold">{sectionLabel({ bracket, round })}</h2>
-              <RoundDayStatus tournament={tournament} round={round} />
+              <RoundDayStatus tournament={tournament} round={day} />
             </div>
             <div className="space-y-3">
-              {matches
-                .filter(m => m.bracket === bracket && m.round === round)
+              {sectionMatches
                 .map(match => (
                   <MatchCard
                     key={match.id}
@@ -2450,7 +2452,8 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                 ))}
             </div>
           </div>
-        ))
+          );
+        })
       ) : (
         rounds.map(round => (
           <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
@@ -2643,7 +2646,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
   const userReady = match.player1 === user.username ? match.player1Ready : match.player2Ready;
   const timeDisplay = getTimeRemainingDisplay(match.scheduledStartTime);
-  const unlockTime = getRoundUnlockTime(tournament, match.round);
+  const unlockTime = getRoundUnlockTime(tournament, match.day ?? match.round);
   const roundLocked = unlockTime && Date.now() < unlockTime;
 
   const getStatusColor = (status) => {
@@ -2745,7 +2748,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         )}
         {userIsPlayer && match.status === 'pending' && !userReady && roundLocked && (
           <div className="text-xs text-gray-400 text-right">
-            🔒 Day {match.round}<br /><RoundUnlockCountdown unlockTime={unlockTime} />
+            🔒 Day {match.day ?? match.round}<br /><RoundUnlockCountdown unlockTime={unlockTime} />
           </div>
         )}
         {userIsPlayer && match.status === 'pending' && !userReady && !roundLocked && (

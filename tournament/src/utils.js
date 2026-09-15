@@ -39,6 +39,20 @@ function nextPowerOfTwo(n) {
   return p;
 }
 
+// Standard bracket seed order (e.g. size 8 -> [1,8,4,5,2,7,3,6]), so that
+// when byes are needed they land on the strongest seeds and are spread
+// across different first-round matches - never facing each other.
+function standardSeedOrder(size) {
+  if (size === 1) return [1];
+  const prev = standardSeedOrder(size / 2);
+  const out = [];
+  prev.forEach((s) => {
+    out.push(s);
+    out.push(size + 1 - s);
+  });
+  return out;
+}
+
 // Seeds round 1 of the winners bracket for a double-elimination tournament.
 // Unlike generateSeededBracket (which just byes off one odd leftover), this
 // pads all the way up to a power of two so the bracket has a fixed, known
@@ -52,8 +66,8 @@ export function seedDoubleEliminationBracket(players, playerStats) {
     return bStats.bestBuilderBaseTrophies - aStats.bestBuilderBaseTrophies;
   });
 
-  const slots = [...sorted];
-  while (slots.length < bracketSize) slots.push('BYE');
+  const seedOrder = standardSeedOrder(bracketSize);
+  const slots = seedOrder.map((seed) => sorted[seed - 1] || 'BYE');
 
   const pairs = [];
   for (let i = 0; i < slots.length; i += 2) {

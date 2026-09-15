@@ -461,7 +461,7 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
 // LB round 2j (even) is a drop-in round; LB round 2j-1 (odd, j>1) is pure
 // consolidation of LB round (2j-2)'s survivors.
 // ============================================================================
-function buildBracketMatchDoc({ id, tournamentId, player1, player2, round, bracket, playerStats }) {
+function buildBracketMatchDoc({ id, tournamentId, player1, player2, round, day, bracket, playerStats }) {
   const now = Date.now();
   const isBye = player1 === 'BYE' || player2 === 'BYE';
   const winner = isBye ? (player1 === 'BYE' ? player2 : player1) : null;
@@ -475,6 +475,7 @@ function buildBracketMatchDoc({ id, tournamentId, player1, player2, round, brack
     player1Stats: playerStats?.[player1] || null,
     player2Stats: playerStats?.[player2] || null,
     round,
+    day,
     bracket,
     status: isBye ? 'completed' : 'pending',
     winner,
@@ -555,13 +556,17 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
       .filter((m) => m.status === 'completed' && m.winner && m.player1 !== 'BYE' && m.player2 !== 'BYE')
       .map((m) => (m.winner === m.player1 ? m.player2 : m.player1));
 
-  function createRound(bracket, round, players) {
+  // `day` gates when a match unlocks (see roundIsUnlocked in firestore.rules)
+  // and is normally just the round number - except the grand final, whose
+  // `round` field stays 1/2 for bracket-reset display logic but which must
+  // not unlock until every winners/losers round ahead of it actually has.
+  function createRound(bracket, round, players, day = round) {
     if (existsRound(bracket, round) || players.length === 0) return;
     const prefix = bracket === 'winners' ? 'wb' : bracket === 'losers' ? 'lb' : 'gf';
     pairUpWithBye(players).forEach(([p1, p2], idx) => {
       const id = `${prefix}-r${round}-${idx}`;
       batch.set(matchDocRef(id), buildBracketMatchDoc({
-        id, tournamentId: tournament.id, player1: p1, player2: p2, round, bracket, playerStats,
+        id, tournamentId: tournament.id, player1: p1, player2: p2, round, day, bracket, playerStats,
       }));
     });
     hasWrites = true;
@@ -623,7 +628,7 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
   }
 
   if (wbChampion && lbChampion && !existsRound('grand_final', 1)) {
-    createRound('grand_final', 1, [wbChampion, lbChampion]);
+    createRound('grand_final', 1, [wbChampion, lbChampion], totalLbRounds + 1);
   }
 
   if (tournament.status !== 'completed' && roundComplete('grand_final', 1)) {
@@ -635,7 +640,7 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
     } else if (gf1.status === 'completed' && !existsRound('grand_final', 2)) {
       // The losers-bracket player won game one - since both finalists now
       // have exactly one loss, a bracket-reset decider is required.
-      createRound('grand_final', 2, [gf1.player1, gf1.player2]);
+      createRound('grand_final', 2, [gf1.player1, gf1.player2], totalLbRounds + 2);
     }
   }
 

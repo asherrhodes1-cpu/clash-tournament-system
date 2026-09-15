@@ -60,8 +60,9 @@ service cloud.firestore {
         // start, so a round that got decided early still can't be played early.
         function roundIsUnlocked() {
           let t = get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
+          let day = resource.data.get('day', resource.data.round);
           return t.startedAt == null ||
-                 request.time.toMillis() >= t.startedAt + (resource.data.round - 1) * 86400000;
+                 request.time.toMillis() >= t.startedAt + (day - 1) * 86400000;
         }
 
         // A non-staff player may update only fields on a match they're actually part of,

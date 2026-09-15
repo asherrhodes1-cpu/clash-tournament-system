@@ -305,7 +305,7 @@ export async function playerReady(tournamentId, matchId, username) {
     const m = snap.data();
 
     const tSnap = await tx.get(tournamentRef(tournamentId));
-    const unlockTime = getRoundUnlockTime(tSnap.data(), m.round);
+    const unlockTime = getRoundUnlockTime(tSnap.data(), m.day ?? m.round);
     if (unlockTime && Date.now() < unlockTime) {
       throw new Error(`This round hasn't unlocked yet. Check back on Day ${m.round}.`);
     }
