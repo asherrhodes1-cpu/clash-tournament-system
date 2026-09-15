@@ -64,15 +64,24 @@ function usernameToEmail(username) {
 // authenticates our server to the API generally.
 // ============================================================================
 async function callClashApi(path, options = {}) {
-  return fetch(`${CLASH_RELAY_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${CLASH_API_KEY.value()}`,
-      'X-Relay-Secret': CLASH_RELAY_SECRET.value(),
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...options.headers,
-    },
-  });
+  try {
+    return await fetch(`${CLASH_RELAY_URL}${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${CLASH_API_KEY.value()}`,
+        'X-Relay-Secret': CLASH_RELAY_SECRET.value(),
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (err) {
+    // The relay box being unreachable (down, rebooting, DNS hiccup) is an
+    // infra problem, not the caller's fault - surface a clean, actionable
+    // error instead of letting the raw network exception bubble up as a
+    // generic "INTERNAL" the client can't do anything useful with.
+    logger.error('callClashApi: relay unreachable', err);
+    throw new HttpsError('unavailable', 'Clash of Clans verification is temporarily unavailable. Please try again in a few minutes.');
+  }
 }
 
 async function verifyAndFetchClashPlayer(cleanTag, apiToken) {
@@ -250,12 +259,7 @@ exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET]
   }
 
   const cleanTag = playerTag.startsWith('#') ? playerTag.slice(1) : playerTag;
-  const response = await fetch(`${CLASH_RELAY_URL}/v1/players/%23${cleanTag}`, {
-    headers: {
-      Authorization: `Bearer ${CLASH_API_KEY.value()}`,
-      'X-Relay-Secret': CLASH_RELAY_SECRET.value(),
-    },
-  });
+  const response = await callClashApi(`/v1/players/%23${cleanTag}`);
 
   if (!response.ok) {
     logger.warn('fetchClashPlayer: relay/API returned', response.status);
