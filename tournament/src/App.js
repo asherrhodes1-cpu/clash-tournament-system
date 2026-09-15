@@ -8,6 +8,7 @@ import {
   createTournament,
   updateTournamentBanner,
   updateTournamentBannerPosition,
+  updateTournamentFormat,
   joinTournament,
   deleteTournament,
   removePlayer,
@@ -680,6 +681,10 @@ export default function TournamentApp() {
     await updateTournamentBannerPosition(tournamentId, position);
   };
 
+  const handleUpdateFormat = async (tournamentId, format) => {
+    await updateTournamentFormat(tournamentId, format);
+  };
+
   const handleJoinTournament = async (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
@@ -969,6 +974,7 @@ export default function TournamentApp() {
             onViewProfile={viewProfile}
             onUpdateBanner={handleUpdateBanner}
             onUpdateBannerPosition={handleUpdateBannerPosition}
+            onUpdateFormat={handleUpdateFormat}
             onFlagMatch={(matchId) => {
               setFlagRelatedMatch(matchId);
               setFlagModalOpen(true);
@@ -2158,7 +2164,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition }) {
+function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat }) {
   const [viewMode, setViewMode] = useState('list');
   const [bannerUrl, setBannerUrl] = useState(null);
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -2188,6 +2194,20 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       alert(err.message);
     } finally {
       setUploadingBanner(false);
+    }
+  };
+
+  const [changingFormat, setChangingFormat] = useState(false);
+  const handleFormatChange = async (e) => {
+    const newFormat = e.target.value;
+    if (newFormat === tournament.format) return;
+    setChangingFormat(true);
+    try {
+      await onUpdateFormat(tournament.id, newFormat);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setChangingFormat(false);
     }
   };
 
@@ -2335,6 +2355,22 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           <div>
             <p className="text-sm text-gray-400">Status</p>
             <p className="text-lg font-bold text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-400">Format</p>
+            {user.isStaff && tournament.status === 'signups_open' ? (
+              <select
+                value={tournament.format}
+                onChange={handleFormatChange}
+                disabled={changingFormat}
+                className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-white"
+              >
+                <option value="single_elimination">Single Elimination</option>
+                <option value="double_elimination">Double Elimination</option>
+              </select>
+            ) : (
+              <p className="text-lg font-bold text-white">{tournament.format === 'double_elimination' ? 'Double Elimination' : 'Single Elimination'}</p>
+            )}
           </div>
           <div>
             <p className="text-sm text-gray-400">Players</p>

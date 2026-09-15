@@ -32,7 +32,12 @@ service cloud.firestore {
     match /tournaments/{tournamentId} {
       allow read: if isSignedIn();
       allow create, delete: if isStaff();
-      allow update: if isStaff() ||
+      // Format drives how the bracket gets built at start time, so staff can
+      // only change it while signups are still open - not after matches
+      // already exist for the old format.
+      allow update: if (isStaff()
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['format'])
+              || resource.data.status == 'signups_open')) ||
         (isSignedIn() && resource.data.status == 'signups_open'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players'])
           && meetsJoinRequirements());

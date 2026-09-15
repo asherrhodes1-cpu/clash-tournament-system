@@ -4,6 +4,7 @@ import {
   addDoc,
   setDoc,
   updateDoc,
+  getDoc,
   onSnapshot,
   query,
   orderBy,
@@ -109,6 +110,17 @@ export async function updateTournamentBanner(tournamentId, bannerPath) {
 
 export async function updateTournamentBannerPosition(tournamentId, bannerPosition) {
   await updateDoc(tournamentRef(tournamentId), { bannerPosition });
+}
+
+// Format only makes sense to change before the bracket exists - the
+// security rules independently enforce staff-only, but this guard keeps a
+// stale UI from ever attempting it on a tournament that's already running.
+export async function updateTournamentFormat(tournamentId, format) {
+  const snap = await getDoc(tournamentRef(tournamentId));
+  if (snap.exists() && snap.data().status !== 'signups_open') {
+    throw new Error('Format can only be changed before the tournament starts');
+  }
+  await updateDoc(tournamentRef(tournamentId), { format });
 }
 
 export async function joinTournament(tournament, user) {
