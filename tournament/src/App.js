@@ -157,11 +157,21 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
   );
 }
 
+// The actual gameplay ruleset for a single match - shared between the
+// one-time join walkthrough and the always-available reference on the
+// match page itself, since players will want to check these mid-match.
+const MATCH_FORMAT_RULES = [
+  { icon: '🏰', text: 'Join a clan together with your opponent (any clan works) so you can attack each other.' },
+  { icon: '⚔️', text: 'Play Best of 3: each round, both players attack the other\'s base once. Whoever gets more stars wins the round (higher % breaks a stars tie). First to win 2 rounds wins the match.' },
+  { icon: '🔥', text: 'Tied after 3 rounds? Sudden death: play another round. The first player to fail (0 stars) loses - unless you both fail in the same round, in which case whoever has the higher stars/% in that round wins.' },
+  { icon: '⚖️', text: 'Both players must complete the same number of attacks before a winner is declared. If your opponent fails on attack 4, you can\'t win until you\'ve also done a 4th attack with a better result.' },
+];
+
 function TournamentWalkthroughModal({ onClose }) {
   const steps = [
-    { icon: '🗓️', text: 'Rounds unlock one "Day" at a time, 24 hours apart - even if your match finishes early, the next round won\'t start until its Day arrives. This keeps everyone on the same pace.' },
+    ...MATCH_FORMAT_RULES,
+    { icon: '🗓️', text: 'Each bracket round unlocks on a fixed "Day", 24 hours apart - even if your match finishes early, the next bracket round won\'t start until its Day arrives. This keeps everyone on the same pace.' },
     { icon: '💬', text: 'Once your match is live, use "Coordinate Match" to chat with your opponent and agree on timing.' },
-    { icon: '🎮', text: 'Play your match in-game whenever you\'ve both agreed.' },
     { icon: '📸', text: 'Report the result with at least one proof screenshot and who won. Both players must agree, or staff will step in to resolve a dispute.' },
     { icon: '🚫', text: 'Submitting a false result gets you removed from the tournament and banned from future ones - so keep it honest.' },
   ];
@@ -2734,6 +2744,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
   const [screenshotPreviews, setScreenshotPreviews] = useState([]);
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
+  const [showRules, setShowRules] = useState(false);
 
   useEffect(() => {
     if (!match) return;
@@ -2842,6 +2853,26 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
         <div className="mb-6">
           <p className="text-sm text-gray-400 mb-1">You're playing against:</p>
           <p className="text-lg font-bold">{opponent}</p>
+        </div>
+
+        <div className="mb-6 border-b border-gray-600 pb-6">
+          <button
+            onClick={() => setShowRules(!showRules)}
+            className="w-full flex items-center justify-between text-sm font-medium text-gray-300 hover:text-white transition"
+          >
+            <span>📋 Match Format Rules</span>
+            <span>{showRules ? '▲' : '▼'}</span>
+          </button>
+          {showRules && (
+            <div className="space-y-3 mt-3">
+              {MATCH_FORMAT_RULES.map((step, idx) => (
+                <div key={idx} className="flex gap-3 text-xs">
+                  <span className="text-base shrink-0">{step.icon}</span>
+                  <p className="text-gray-400">{step.text}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {timeDisplay && (
