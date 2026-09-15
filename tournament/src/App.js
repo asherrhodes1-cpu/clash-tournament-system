@@ -29,7 +29,7 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
 import { verifyClashAccount } from './api/clash';
-import { getTimeRemainingDisplay } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, ONE_DAY_MS } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -152,6 +152,39 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function TournamentWalkthroughModal({ onClose }) {
+  const steps = [
+    { icon: '🗓️', text: 'Rounds unlock one "Day" at a time, 24 hours apart - even if your match finishes early, the next round won\'t start until its Day arrives. This keeps everyone on the same pace.' },
+    { icon: '💬', text: 'Once your match is live, use "Coordinate Match" to chat with your opponent and agree on timing.' },
+    { icon: '🎮', text: 'Play your match in-game whenever you\'ve both agreed.' },
+    { icon: '📸', text: 'Report the result with at least one proof screenshot and who won. Both players must agree, or staff will step in to resolve a dispute.' },
+    { icon: '🚫', text: 'Submitting a false result gets you removed from the tournament and banned from future ones - so keep it honest.' },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-md w-full">
+        <h2 className="text-2xl font-bold mb-1">🎉 You're In!</h2>
+        <p className="text-gray-400 text-sm mb-5">Here's how the tournament works:</p>
+        <div className="space-y-3 mb-6">
+          {steps.map((step, idx) => (
+            <div key={idx} className="flex gap-3 text-sm">
+              <span className="text-xl shrink-0">{step.icon}</span>
+              <p className="text-gray-300">{step.text}</p>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          className="w-full bg-white hover:bg-neutral-200 text-black font-bold py-2 px-4 rounded transition"
+        >
+          Got it
+        </button>
       </div>
     </div>
   );
@@ -526,6 +559,7 @@ export default function TournamentApp() {
   const [selectedProfileUsername, setSelectedProfileUsername] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [flagRelatedMatch, setFlagRelatedMatch] = useState(null);
 
   useEffect(() => {
@@ -610,6 +644,7 @@ export default function TournamentApp() {
     if (!tournament) return;
     try {
       await joinTournament(tournament, currentUser);
+      setShowWalkthrough(true);
     } catch (err) {
       alert(err.message);
     }
@@ -928,6 +963,10 @@ export default function TournamentApp() {
           }}
           relatedToMatch={flagRelatedMatch}
         />
+      )}
+
+      {showWalkthrough && (
+        <TournamentWalkthroughModal onClose={() => setShowWalkthrough(false)} />
       )}
     </div>
   );
@@ -1724,6 +1763,9 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
           {tournament.status === 'completed' && tournament.champion && (
             <p>🏆 Champion: <span className="text-white font-bold">{tournament.champion}</span></p>
           )}
+          {tournament.prize && (
+            <p>Prize: <span className="text-white font-bold">{tournament.prize}</span></p>
+          )}
           {hasRequirements && (
             <p>
               Requires:{' '}
@@ -1874,6 +1916,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   const [signupDeadline, setSignupDeadline] = useState('');
   const [requiredBuilderHallLevel, setRequiredBuilderHallLevel] = useState('');
   const [minBestTrophies, setMinBestTrophies] = useState('');
+  const [prize, setPrize] = useState('');
   const [bannerFile, setBannerFile] = useState(null);
   const [bannerPreview, setBannerPreview] = useState(null);
   const [error, setError] = useState('');
@@ -1907,6 +1950,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
       signupDeadline: signupDeadline || null,
       requiredBuilderHallLevel: requiredBuilderHallLevel ? parseInt(requiredBuilderHallLevel, 10) : null,
       minBestTrophies: minBestTrophies ? parseInt(minBestTrophies, 10) : null,
+      prize: prize.trim(),
     }, bannerFile);
   };
 
@@ -1959,6 +2003,17 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
               className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
               placeholder="Details about your tournament"
               rows="4"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Prize (Optional)</label>
+            <input
+              type="text"
+              value={prize}
+              onChange={(e) => setPrize(e.target.value)}
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
+              placeholder="e.g., $25 gift card, in-game gems, bragging rights"
             />
           </div>
 
@@ -2223,6 +2278,18 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             <p className="text-sm text-gray-400">Matches</p>
             <p className="text-lg font-bold">{matches.length}</p>
           </div>
+          {tournament.prize && (
+            <div>
+              <p className="text-sm text-gray-400">Prize</p>
+              <p className="text-lg font-bold text-white">🏆 {tournament.prize}</p>
+            </div>
+          )}
+          {tournament.startedAt && !tournament.champion && (
+            <div>
+              <p className="text-sm text-gray-400">Current Day</p>
+              <p className="text-lg font-bold text-white">Day {Math.floor((Date.now() - tournament.startedAt) / ONE_DAY_MS) + 1}</p>
+            </div>
+          )}
           {tournament.champion && (
             <div>
               <p className="text-sm text-gray-400">Champion</p>
@@ -2304,7 +2371,10 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       ) : isDoubleElim ? (
         bracketSections.map(({ bracket, round }) => (
           <div key={`${bracket}-${round}`} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <h2 className="text-xl font-bold mb-4">{sectionLabel({ bracket, round })}</h2>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+              <h2 className="text-xl font-bold">{sectionLabel({ bracket, round })}</h2>
+              <RoundDayStatus tournament={tournament} round={round} />
+            </div>
             <div className="space-y-3">
               {matches
                 .filter(m => m.bracket === bracket && m.round === round)
@@ -2313,6 +2383,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                     key={match.id}
                     match={match}
                     user={user}
+                    tournament={tournament}
                     onSelectMatch={() => onSelectMatch(match.id)}
                     onPlayerReady={() => onPlayerReady(match.id)}
                     onFlagMatch={() => onFlagMatch(match.id)}
@@ -2325,7 +2396,10 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       ) : (
         rounds.map(round => (
           <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <h2 className="text-xl font-bold mb-4">Round {round}</h2>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+              <h2 className="text-xl font-bold">Round {round}</h2>
+              <RoundDayStatus tournament={tournament} round={round} />
+            </div>
             <div className="space-y-3">
               {matches
                 .filter(m => m.round === round)
@@ -2334,6 +2408,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                     key={match.id}
                     match={match}
                     user={user}
+                    tournament={tournament}
                     onSelectMatch={() => onSelectMatch(match.id)}
                     onPlayerReady={() => onPlayerReady(match.id)}
                     onFlagMatch={() => onFlagMatch(match.id)}
@@ -2482,11 +2557,36 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
   );
 }
 
-function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch, onViewProfile }) {
+function RoundUnlockCountdown({ unlockTime }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const remaining = unlockTime - now;
+  if (remaining <= 0) return <span className="text-white font-bold">Live</span>;
+  return <span className="text-gray-300">Unlocks in {formatCountdown(remaining)}</span>;
+}
+
+function RoundDayStatus({ tournament, round }) {
+  const unlockTime = getRoundUnlockTime(tournament, round);
+  return (
+    <span className="text-sm text-gray-400">
+      Day {round}
+      {unlockTime && <> — <RoundUnlockCountdown unlockTime={unlockTime} /></>}
+    </span>
+  );
+}
+
+function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFlagMatch, onViewProfile }) {
   const userIsPlayer = match.player1 === user.username || match.player2 === user.username;
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
   const userReady = match.player1 === user.username ? match.player1Ready : match.player2Ready;
   const timeDisplay = getTimeRemainingDisplay(match.scheduledStartTime);
+  const unlockTime = getRoundUnlockTime(tournament, match.round);
+  const roundLocked = unlockTime && Date.now() < unlockTime;
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -2585,7 +2685,12 @@ function MatchCard({ match, user, onSelectMatch, onPlayerReady, onFlagMatch, onV
             💬 Coordinate Match
           </button>
         )}
-        {userIsPlayer && match.status === 'pending' && !userReady && (
+        {userIsPlayer && match.status === 'pending' && !userReady && roundLocked && (
+          <div className="text-xs text-gray-400 text-right">
+            🔒 Day {match.round}<br /><RoundUnlockCountdown unlockTime={unlockTime} />
+          </div>
+        )}
+        {userIsPlayer && match.status === 'pending' && !userReady && !roundLocked && (
           <button
             onClick={onPlayerReady}
             className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"

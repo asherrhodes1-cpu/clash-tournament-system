@@ -63,6 +63,23 @@ export function seedDoubleEliminationBracket(players, playerStats) {
   return { pairs, bracketSize };
 }
 
+export const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+// Every round is pinned to a fixed 24h-spaced "day" counted from the
+// tournament's start, so a round decided early still can't be played early -
+// everyone advances at the same pace.
+export function getRoundUnlockTime(tournament, round) {
+  if (!tournament?.startedAt) return null;
+  return tournament.startedAt + (round - 1) * ONE_DAY_MS;
+}
+
+export function formatCountdown(ms) {
+  if (ms <= 0) return null;
+  const hours = Math.floor(ms / (60 * 60 * 1000));
+  const minutes = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+  return `${hours}h ${minutes}m`;
+}
+
 export function getTimeRemaining(startTime) {
   if (!startTime) return null;
   const now = new Date().getTime();

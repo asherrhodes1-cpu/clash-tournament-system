@@ -16,7 +16,7 @@ import {
   collectionGroup,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { generateSeededBracket, seedDoubleEliminationBracket } from '../utils';
+import { generateSeededBracket, seedDoubleEliminationBracket, getRoundUnlockTime } from '../utils';
 import { fetchClashPlayerData } from './clash';
 
 const TOURNAMENTS = 'tournaments';
@@ -93,6 +93,7 @@ export async function createTournament(tournamentData, createdBy) {
     removedPlayers: [],
     requiredBuilderHallLevel: tournamentData.requiredBuilderHallLevel || null,
     minBestTrophies: tournamentData.minBestTrophies || null,
+    prize: tournamentData.prize || '',
     bannerPath: null,
   });
   return id;
@@ -241,6 +242,7 @@ export async function startTournament(tournament) {
 
       batch.update(tournamentRef(tournament.id), {
         status: 'in_progress',
+        startedAt: now,
         bracketSize,
         playerStats,
       });
@@ -279,6 +281,7 @@ export async function startTournament(tournament) {
 
       batch.update(tournamentRef(tournament.id), {
         status: 'in_progress',
+        startedAt: now,
         // Firestore doesn't allow arrays nested directly inside arrays, so store
         // pairs as objects instead of the [player1, player2] tuples used internally.
         bracket: bracket.map(([player1, player2]) => ({ player1, player2 })),
@@ -300,6 +303,12 @@ export async function playerReady(tournamentId, matchId, username) {
     const snap = await tx.get(ref);
     if (!snap.exists()) return;
     const m = snap.data();
+
+    const tSnap = await tx.get(tournamentRef(tournamentId));
+    const unlockTime = getRoundUnlockTime(tSnap.data(), m.round);
+    if (unlockTime && Date.now() < unlockTime) {
+      throw new Error(`This round hasn't unlocked yet. Check back on Day ${m.round}.`);
+    }
 
     const isPlayer1 = username === m.player1;
     const now = Date.now();

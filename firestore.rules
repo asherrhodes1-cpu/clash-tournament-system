@@ -56,11 +56,20 @@ service cloud.firestore {
                  (resource.data.player2 == myUsername() && resource.data.winner2Vote != null);
         }
 
+        // Every round is pinned to a fixed 24h-spaced day from the tournament's
+        // start, so a round that got decided early still can't be played early.
+        function roundIsUnlocked() {
+          let t = get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
+          return t.startedAt == null ||
+                 request.time.toMillis() >= t.startedAt + (resource.data.round - 1) * 86400000;
+        }
+
         // A non-staff player may update only fields on a match they're actually part of,
         // and only before they've already submitted a result for it.
         allow update: if isSignedIn() &&
           (resource.data.player1 == myUsername() || resource.data.player2 == myUsername()) &&
           !playerAlreadyVoted() &&
+          roundIsUnlocked() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'player1Ready', 'player1ReadyTime', 'player2Ready', 'player2ReadyTime',
             'winner1Vote', 'player1VoteTime', 'winner2Vote', 'player2VoteTime',
