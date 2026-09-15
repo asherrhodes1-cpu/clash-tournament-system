@@ -2151,10 +2151,15 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
               src={bannerUrl}
               alt=""
               className={`w-full h-48 object-cover ${repositioning ? 'cursor-move' : ''}`}
-              style={{ objectPosition: `${(repositioning ? draftPosition : tournament.bannerPosition)?.x ?? 50}% ${(repositioning ? draftPosition : tournament.bannerPosition)?.y ?? 50}%` }}
+              style={{
+                objectPosition: `${(repositioning ? draftPosition : tournament.bannerPosition)?.x ?? 50}% ${(repositioning ? draftPosition : tournament.bannerPosition)?.y ?? 50}%`,
+                touchAction: repositioning ? 'none' : 'auto',
+                userSelect: 'none',
+              }}
               onPointerDown={handleDragStart}
               onPointerMove={handleDragMove}
               onPointerUp={handleDragEnd}
+              onPointerCancel={handleDragEnd}
               draggable={false}
             />
           ) : (
