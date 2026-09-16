@@ -75,7 +75,7 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-md w-full">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <h2 className="text-2xl font-bold mb-4">Report Issue to Staff</h2>
 
         {error && (
@@ -211,7 +211,7 @@ function TournamentWalkthroughModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-md w-full">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
         <h2 className="text-2xl font-bold mb-1">🎉 You're In!</h2>
         <p className="text-gray-400 text-sm mb-5">Here's how the tournament works:</p>
         <div className="space-y-3 mb-6">
@@ -2295,6 +2295,16 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
 
   const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b);
   const isDoubleElim = tournament.format === 'double_elimination';
+
+  // Purely for deciding whether a "next day unlocks in..." hint makes sense
+  // to show once the current round is live - an approximation from player
+  // count (double-elim tournaments pin down the real bracketSize at start).
+  const approxBracketSize = tournament.bracketSize
+    || Math.pow(2, Math.ceil(Math.log2(Math.max(tournament.players.length, 2))));
+  const finalWinnersRound = Math.round(Math.log2(approxBracketSize));
+  const finalLosersRound = Math.max(2 * (finalWinnersRound - 1), 1);
+  const finalSingleElimRound = Math.ceil(Math.log2(Math.max(tournament.players.length, 2)));
+
   const bracketOrder = { winners: 0, losers: 1, grand_final: 2 };
   const bracketSections = isDoubleElim
     ? [...new Set(matches.map(m => `${m.bracket}:${m.round}`))]
@@ -2559,11 +2569,14 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         bracketSections.map(({ bracket, round }) => {
           const sectionMatches = matches.filter(m => m.bracket === bracket && m.round === round);
           const day = sectionMatches[0]?.day ?? round;
+          const isFinalRound = bracket === 'winners' ? round === finalWinnersRound
+            : bracket === 'losers' ? round === finalLosersRound
+            : true; // grand final has no predictable "next day" to point to
           return (
           <div key={`${bracket}-${round}`} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
               <h2 className="text-xl font-bold">{sectionLabel({ bracket, round })}</h2>
-              <RoundDayStatus tournament={tournament} round={day} />
+              <RoundDayStatus tournament={tournament} round={day} isFinalRound={isFinalRound} />
             </div>
             <div className="space-y-3">
               {sectionMatches
@@ -2588,7 +2601,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
               <h2 className="text-xl font-bold">Round {round}</h2>
-              <RoundDayStatus tournament={tournament} round={round} />
+              <RoundDayStatus tournament={tournament} round={round} isFinalRound={round === finalSingleElimRound} />
             </div>
             <div className="space-y-3">
               {matches
@@ -2759,7 +2772,7 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
   );
 }
 
-function RoundUnlockCountdown({ unlockTime }) {
+function RoundUnlockCountdown({ unlockTime, nextUnlockTime }) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -2768,16 +2781,28 @@ function RoundUnlockCountdown({ unlockTime }) {
   }, []);
 
   const remaining = unlockTime - now;
-  if (remaining <= 0) return <span className="text-white font-bold">Live</span>;
-  return <span className="text-gray-300">Unlocks in {formatCountdown(remaining)}</span>;
+  if (remaining > 0) {
+    return <span className="text-gray-300">Unlocks in {formatCountdown(remaining)}</span>;
+  }
+
+  const nextRemaining = nextUnlockTime ? nextUnlockTime - now : null;
+  if (nextRemaining > 0) {
+    return (
+      <span className="text-white font-bold">
+        Live <span className="text-gray-400 font-normal">— next day in {formatCountdown(nextRemaining)}</span>
+      </span>
+    );
+  }
+  return <span className="text-white font-bold">Live</span>;
 }
 
-function RoundDayStatus({ tournament, round }) {
+function RoundDayStatus({ tournament, round, isFinalRound }) {
   const unlockTime = getRoundUnlockTime(tournament, round);
+  const nextUnlockTime = isFinalRound ? null : getRoundUnlockTime(tournament, round + 1);
   return (
     <span className="text-sm text-gray-400">
       Day {round}
-      {unlockTime && <> — <RoundUnlockCountdown unlockTime={unlockTime} /></>}
+      {unlockTime && <> — <RoundUnlockCountdown unlockTime={unlockTime} nextUnlockTime={nextUnlockTime} /></>}
     </span>
   );
 }
