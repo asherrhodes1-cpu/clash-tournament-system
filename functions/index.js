@@ -296,7 +296,15 @@ exports.advanceTournaments = onSchedule('every 5 minutes', async () => {
   const openSnap = await db.collection('tournaments').where('status', '==', 'signups_open').get();
   for (const tournamentDoc of openSnap.docs) {
     const tournament = tournamentDoc.data();
-    if (tournament.signupDeadline && new Date(tournament.signupDeadline).getTime() <= now) {
+    // Only trust a deadline stored as an unambiguous UTC instant (always
+    // ends in 'Z' - the format createTournament writes today). A tournament
+    // created before that fix may still hold a bare "YYYY-MM-DDTHH:mm"
+    // string with no timezone; parsing that here (this process runs in
+    // UTC) doesn't reflect the creator's actual local time and once made a
+    // real tournament auto-start hours early. Leave those for staff to
+    // start manually (or re-save the deadline) until it's in the new form.
+    const deadline = tournament.signupDeadline;
+    if (typeof deadline === 'string' && deadline.endsWith('Z') && new Date(deadline).getTime() <= now) {
       await autoStartTournament(tournamentDoc.ref, tournament);
     }
   }

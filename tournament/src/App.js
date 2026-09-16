@@ -9,6 +9,7 @@ import {
   updateTournamentBanner,
   updateTournamentBannerPosition,
   updateTournamentFormat,
+  updateTournamentSignupDeadline,
   joinTournament,
   deleteTournament,
   removePlayer,
@@ -685,6 +686,10 @@ export default function TournamentApp() {
     await updateTournamentFormat(tournamentId, format);
   };
 
+  const handleUpdateSignupDeadline = async (tournamentId, deadline) => {
+    await updateTournamentSignupDeadline(tournamentId, deadline);
+  };
+
   const handleJoinTournament = async (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
@@ -975,6 +980,7 @@ export default function TournamentApp() {
             onUpdateBanner={handleUpdateBanner}
             onUpdateBannerPosition={handleUpdateBannerPosition}
             onUpdateFormat={handleUpdateFormat}
+            onUpdateSignupDeadline={handleUpdateSignupDeadline}
             onFlagMatch={(matchId) => {
               setFlagRelatedMatch(matchId);
               setFlagModalOpen(true);
@@ -2164,7 +2170,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat }) {
+function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat, onUpdateSignupDeadline }) {
   const [viewMode, setViewMode] = useState('list');
   const [bannerUrl, setBannerUrl] = useState(null);
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -2208,6 +2214,27 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       alert(err.message);
     } finally {
       setChangingFormat(false);
+    }
+  };
+
+  const [editingDeadline, setEditingDeadline] = useState(false);
+  const [deadlineDraft, setDeadlineDraft] = useState('');
+  const [savingDeadline, setSavingDeadline] = useState(false);
+
+  const startEditingDeadline = () => {
+    setDeadlineDraft(toDatetimeLocalValue(tournament.signupDeadline));
+    setEditingDeadline(true);
+  };
+
+  const handleSaveDeadline = async () => {
+    setSavingDeadline(true);
+    try {
+      await onUpdateSignupDeadline(tournament.id, deadlineDraft || null);
+      setEditingDeadline(false);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSavingDeadline(false);
     }
   };
 
@@ -2372,6 +2399,48 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
               <p className="text-lg font-bold text-white">{tournament.format === 'double_elimination' ? 'Double Elimination' : 'Single Elimination'}</p>
             )}
           </div>
+          {tournament.status === 'signups_open' && (
+            <div>
+              <p className="text-sm text-gray-400">Signup Deadline</p>
+              {user.isStaff && editingDeadline ? (
+                <div className="space-y-1">
+                  <input
+                    type="datetime-local"
+                    value={deadlineDraft}
+                    onChange={(e) => setDeadlineDraft(e.target.value)}
+                    className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-white"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSaveDeadline}
+                      disabled={savingDeadline}
+                      className="text-xs bg-white text-black px-2 py-1 rounded font-bold"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingDeadline(false)}
+                      disabled={savingDeadline}
+                      className="text-xs border border-white text-white px-2 py-1 rounded"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-lg font-bold text-white">
+                    {tournament.signupDeadline ? new Date(tournament.signupDeadline).toLocaleString() : 'None - starts manually'}
+                  </p>
+                  {user.isStaff && (
+                    <button onClick={startEditingDeadline} className="text-xs text-gray-400 hover:text-white underline">
+                      Edit
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <p className="text-sm text-gray-400">Players</p>
             <p className="text-lg font-bold">{tournament.players.length}</p>
@@ -2420,7 +2489,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             </div>
           )}
         </div>
-        {tournament.signupDeadline && (
+        {tournament.signupDeadline && tournament.status !== 'signups_open' && (
           <div className="mt-4 p-3 bg-gray-700 rounded">
             <p className="text-sm text-gray-400">Signup Deadline</p>
             <p className="text-white">{new Date(tournament.signupDeadline).toLocaleString()}</p>
@@ -2542,6 +2611,18 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       )}
     </div>
   );
+}
+
+// Converts a stored UTC instant back into the "YYYY-MM-DDTHH:mm" shape an
+// <input type="datetime-local"> expects, using the viewer's own local time -
+// so the field always reads back exactly what it would show if you'd just
+// picked "now" in that same timezone.
+function toDatetimeLocalValue(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function ordinal(n) {

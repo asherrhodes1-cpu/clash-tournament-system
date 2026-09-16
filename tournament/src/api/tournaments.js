@@ -123,6 +123,20 @@ export async function updateTournamentFormat(tournamentId, format) {
   await updateDoc(tournamentRef(tournamentId), { format });
 }
 
+// Stored as a real UTC instant (not the bare "YYYY-MM-DDTHH:mm" an
+// <input type="datetime-local"> gives us) so the server-side auto-start
+// check reads the exact same moment the staff member picked, regardless of
+// whose timezone is doing the parsing. Pass null/empty to clear it.
+export async function updateTournamentSignupDeadline(tournamentId, deadline) {
+  const snap = await getDoc(tournamentRef(tournamentId));
+  if (snap.exists() && snap.data().status !== 'signups_open') {
+    throw new Error('Signup deadline can only be changed before the tournament starts');
+  }
+  await updateDoc(tournamentRef(tournamentId), {
+    signupDeadline: deadline ? new Date(deadline).toISOString() : null,
+  });
+}
+
 export async function joinTournament(tournament, user) {
   if (tournament.signupDeadline && new Date(tournament.signupDeadline) < new Date()) {
     throw new Error('Signups for this tournament have closed');
