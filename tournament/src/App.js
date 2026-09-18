@@ -141,7 +141,7 @@ function FlagReportModal({ onClose, onSubmit, relatedToMatch = null, relatedToTo
           <div className="flex gap-3">
             <button
               type="submit"
-              className="flex-1 bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition"
+              className="flex-1 bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-gray-900 font-bold py-2 px-4 rounded transition"
             >
               Submit Report
             </button>
@@ -224,7 +224,7 @@ function TournamentWalkthroughModal({ onClose }) {
         </div>
         <button
           onClick={onClose}
-          className="w-full bg-white hover:bg-neutral-200 text-black font-bold py-2 px-4 rounded transition"
+          className="w-full bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold py-2 px-4 rounded transition"
         >
           Got it
         </button>
@@ -404,7 +404,7 @@ function StaffDashboard({ flags, onUpdateFlagStatus, onAddResponse }) {
                 />
                 <button
                   onClick={() => handleAddResponse(selectedFlag.id)}
-                  className="bg-white hover:bg-neutral-200 text-gray-900 font-bold px-4 py-2 rounded transition"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-gray-900 font-bold px-4 py-2 rounded transition"
                 >
                   Send
                 </button>
@@ -434,7 +434,7 @@ function StaffDashboard({ flags, onUpdateFlagStatus, onAddResponse }) {
                 )}
                 <button
                   onClick={() => handleStatusChange(selectedFlag.id, 'resolved')}
-                  className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded transition"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-4 py-2 rounded transition"
                 >
                   Mark Resolved
                 </button>
@@ -810,7 +810,10 @@ export default function TournamentApp() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center gap-2">
-                <img src="/logo.png" alt="MercifulAj" className="w-9 h-9 object-contain" />
+                <img src="/badges/rainbow.png" alt="Rainbow League" className="w-9 h-9 object-contain" />
+                <span className="font-display font-bold text-lg tracking-tight hidden sm:inline">
+                  RAINBOW <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">LEAGUE</span>
+                </span>
               </div>
 
               <div className="hidden md:flex items-center gap-6">
@@ -978,7 +981,7 @@ export default function TournamentApp() {
                 <p className="text-gray-400 mb-6">Only staff members can create tournaments.</p>
                 <button
                   onClick={() => setCurrentPage('dashboard')}
-                  className="bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-6 rounded transition"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-gray-900 font-bold py-2 px-6 rounded transition"
                 >
                   Back to Dashboard
                 </button>
@@ -1445,7 +1448,11 @@ function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onSta
 }
 
 function medalFor(place) {
-  return place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : '🎖️';
+  if (place === 1) return '/badges/rainbow.png';
+  if (place === 2) return '/badges/diamond.png';
+  if (place === 3) return '/badges/ruby.png';
+  if (place <= 10) return '/badges/emerald.png';
+  return null;
 }
 
 function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack }) {
@@ -1635,7 +1642,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                 placeholder="Say something about yourself..."
               />
               <div className="flex gap-2">
-                <button onClick={handleSaveBio} className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-1 rounded text-sm transition">
+                <button onClick={handleSaveBio} className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-1 rounded text-sm transition">
                   Save
                 </button>
                 <button
@@ -1689,7 +1696,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                   In Discord: Settings → Advanced → enable Developer Mode. Then right-click your name anywhere and click "Copy User ID".
                 </p>
                 <div className="flex gap-2">
-                  <button onClick={handleSaveDiscordId} className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-1 rounded text-sm transition">
+                  <button onClick={handleSaveDiscordId} className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-1 rounded text-sm transition">
                     Save
                   </button>
                   <button
@@ -1721,7 +1728,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                 className={
                   profile?.clashVerified
                     ? 'text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition'
-                    : 'text-xs bg-white hover:bg-neutral-200 text-black font-bold px-2 py-1 rounded transition'
+                    : 'text-xs bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-2 py-1 rounded transition'
                 }
               >
                 {profile?.clashVerified ? 'Re-verify' : 'Verify Now'}
@@ -1815,7 +1822,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                 <button
                   type="submit"
                   disabled={verifying}
-                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-1 rounded text-sm transition disabled:opacity-50"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-1 rounded text-sm transition disabled:opacity-50"
                 >
                   {verifying ? 'Verifying...' : 'Submit'}
                 </button>
@@ -1838,11 +1845,15 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
           </div>
           <div>
             <p className="text-sm text-gray-400">Championships</p>
-            <p className="text-2xl font-bold">🥇 {championships}</p>
+            <p className="text-2xl font-bold flex items-center gap-2">
+              <img src="/badges/rainbow.png" alt="" className="w-7 h-7 object-contain" /> {championships}
+            </p>
           </div>
           <div>
             <p className="text-sm text-gray-400">Runner-up Finishes</p>
-            <p className="text-2xl font-bold">🥈 {runnerUps}</p>
+            <p className="text-2xl font-bold flex items-center gap-2">
+              <img src="/badges/diamond.png" alt="" className="w-7 h-7 object-contain" /> {runnerUps}
+            </p>
           </div>
         </div>
       </div>
@@ -1855,7 +1866,9 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {placed.map(t => (
               <div key={t.id} className="bg-gray-700 rounded p-4 flex items-center gap-3">
-                <span className="text-3xl">{medalFor(t.placements[username])}</span>
+                {medalFor(t.placements[username]) && (
+                  <img src={medalFor(t.placements[username])} alt={`${ordinal(t.placements[username])} place`} className="w-12 h-12 object-contain shrink-0" />
+                )}
                 <div>
                   <p className="font-bold">{ordinal(t.placements[username])} place</p>
                   <p className="text-sm text-gray-300">{t.name}</p>
@@ -1914,7 +1927,10 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
           <p>Creator: {tournament.createdBy}</p>
           <p>Players: {tournament.players.length} | Status: <span className="text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
           {tournament.status === 'completed' && tournament.champion && (
-            <p>🏆 Champion: <span className="text-white font-bold">{tournament.champion}</span></p>
+            <p className="flex items-center gap-1.5">
+              <img src="/badges/rainbow.png" alt="" className="w-4 h-4 object-contain" /> Champion:{' '}
+              <span className="text-amber-300 font-bold">{tournament.champion}</span>
+            </p>
           )}
           {tournament.prize && (
             <p>Prize: <span className="text-white font-bold">{tournament.prize}</span></p>
@@ -1938,7 +1954,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         {canJoin && (
           <button
             onClick={() => onJoin(tournament.id)}
-            className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
+            className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-4 py-2 rounded text-sm transition"
           >
             Join
           </button>
@@ -1960,7 +1976,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         {isCreator && tournament.status === 'signups_open' && tournament.players.length >= 2 && (
           <button
             onClick={() => onStart(tournament.id)}
-            className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
+            className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-4 py-2 rounded text-sm transition"
           >
             Start Tournament
           </button>
@@ -2230,7 +2246,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
           <div className="flex gap-4">
             <button
               type="submit"
-              className="flex-1 bg-white hover:bg-neutral-200 text-gray-900 font-bold py-2 px-4 rounded transition"
+              className="flex-1 bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-gray-900 font-bold py-2 px-4 rounded transition"
             >
               Create Tournament
             </button>
@@ -2451,7 +2467,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                 <button
                   onClick={handleSavePosition}
                   disabled={savingPosition}
-                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-1 rounded text-xs transition disabled:opacity-50"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-1 rounded text-xs transition disabled:opacity-50"
                 >
                   {savingPosition ? 'Saving...' : 'Save'}
                 </button>
@@ -2503,7 +2519,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                     <button
                       onClick={handleSaveDeadline}
                       disabled={savingDeadline}
-                      className="text-xs bg-white text-black px-2 py-1 rounded font-bold"
+                      className="text-xs bg-gradient-to-r from-amber-200 to-yellow-500 text-gray-900 px-2 py-1 rounded font-bold"
                     >
                       Save
                     </button>
@@ -2539,7 +2555,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           {tournament.startedAt && (
             <div>
               <p className="text-sm text-gray-400">Players Remaining</p>
-              <p className="text-lg font-bold">{getPlayersRemaining(tournament, matches).length}</p>
+              <p className="text-lg font-bold bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">{getPlayersRemaining(tournament, matches).length}</p>
             </div>
           )}
           {tournament.prize && (
@@ -2569,9 +2585,9 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
               <p className="text-sm text-gray-400">Champion</p>
               <button
                 onClick={() => onViewProfile(tournament.champion)}
-                className="text-lg font-bold text-white hover:underline"
+                className="text-lg font-bold text-amber-300 hover:underline flex items-center gap-1.5"
               >
-                {tournament.champion}
+                <img src="/badges/rainbow.png" alt="" className="w-5 h-5 object-contain" /> {tournament.champion}
               </button>
             </div>
           )}
@@ -2624,7 +2640,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           <button
             onClick={() => setViewMode('list')}
             className={`px-3 py-1 rounded text-sm border transition ${
-              viewMode === 'list' ? 'bg-white text-black border-white' : 'border-gray-600 text-gray-300 hover:border-white'
+              viewMode === 'list' ? 'border-amber-400 text-amber-300' : 'border-gray-600 text-gray-300 hover:border-white'
             }`}
           >
             List
@@ -2632,7 +2648,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           <button
             onClick={() => setViewMode('bracket')}
             className={`px-3 py-1 rounded text-sm border transition ${
-              viewMode === 'bracket' ? 'bg-white text-black border-white' : 'border-gray-600 text-gray-300 hover:border-white'
+              viewMode === 'bracket' ? 'border-amber-400 text-amber-300' : 'border-gray-600 text-gray-300 hover:border-white'
             }`}
           >
             Bracket
@@ -2640,7 +2656,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           <button
             onClick={() => setViewMode('remaining')}
             className={`px-3 py-1 rounded text-sm border transition ${
-              viewMode === 'remaining' ? 'bg-white text-black border-white' : 'border-gray-600 text-gray-300 hover:border-white'
+              viewMode === 'remaining' ? 'border-amber-400 text-amber-300' : 'border-gray-600 text-gray-300 hover:border-white'
             }`}
           >
             Players Remaining
@@ -2755,8 +2771,8 @@ function PlayersRemainingView({ tournament, matches, onViewProfile }) {
         <div className="space-y-2">
           {sorted.map((player) => (
             <div key={player} className="flex items-center justify-between bg-gray-700 rounded px-4 py-2">
-              <button onClick={() => onViewProfile(player)} className="hover:underline text-left font-bold">
-                {player === tournament.champion && '🏆 '}
+              <button onClick={() => onViewProfile(player)} className="hover:underline text-left font-bold flex items-center gap-1.5">
+                {player === tournament.champion && <img src="/badges/rainbow.png" alt="" className="w-4 h-4 object-contain" />}
                 {player}
               </button>
               {stats[player] && (
@@ -2808,16 +2824,19 @@ function TournamentResults({ tournament, onViewProfile }) {
   const standings = buildStandings(tournament);
 
   return (
-    <div className="bg-gray-800 rounded-lg border-2 border-white p-6">
+    <div className="bg-gray-800 rounded-lg border-2 border-amber-400/50 p-6">
       <div className="text-center mb-6">
         <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Tournament Complete</p>
-        <h2 className="text-2xl font-bold">🏆 {tournament.champion} wins {tournament.name}!</h2>
+        <img src="/badges/rainbow.png" alt="" className="w-14 h-14 object-contain mx-auto mb-2" />
+        <h2 className="text-2xl font-bold">
+          <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">{tournament.champion}</span> wins {tournament.name}!
+        </h2>
       </div>
       <div className="space-y-2">
         {standings.map(({ place, players }) => (
           <div key={place} className="flex items-center justify-between bg-gray-700 rounded px-4 py-3">
-            <span className="font-bold text-white">
-              {place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'} {ordinal(place)} place
+            <span className="font-bold text-white flex items-center gap-2">
+              {medalFor(place) && <img src={medalFor(place)} alt="" className="w-6 h-6 object-contain" />} {ordinal(place)} place
             </span>
             <span className="text-gray-200 space-x-2">
               {players.map((p, idx) => (
@@ -2854,7 +2873,7 @@ function BracketColumns({ matches, rounds, labelForRound }) {
                   <div
                     key={idx}
                     className={`flex justify-between items-center px-2 py-1 rounded ${
-                      isWinner ? 'bg-white text-black font-bold' : 'text-gray-300'
+                      isWinner ? 'bg-amber-200/20 border border-amber-400/50 text-amber-300 font-bold' : 'text-gray-300'
                     }`}
                   >
                     <span>{p || 'TBD'}</span>
@@ -2954,6 +2973,8 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   const roundLocked = unlockTime && Date.now() < unlockTime;
   const [forcingWinner, setForcingWinner] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const isPlayer1Winner = match.status === 'completed' && !!match.winner && match.winner === match.player1;
+  const isPlayer2Winner = match.status === 'completed' && !!match.winner && match.winner === match.player2;
 
   const handleForceWinner = (winner) => {
     if (!window.confirm(`Force ${winner} as the winner of this match? This immediately completes it.`)) return;
@@ -2993,19 +3014,19 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
     <div className={`${getStatusColor(match.status)} rounded p-4 flex items-center justify-between flex-wrap gap-4`}>
       <div className="flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <div>
-            <button onClick={() => onViewProfile(match.player1)} className="font-bold hover:underline">
-              {match.player1}
+          <div className={isPlayer1Winner ? 'bg-amber-400/10 border border-amber-400/40 rounded px-2 py-1' : isPlayer2Winner ? 'opacity-60' : ''}>
+            <button onClick={() => onViewProfile(match.player1)} className={`font-bold hover:underline ${isPlayer1Winner ? 'text-amber-300' : ''}`}>
+              {isPlayer1Winner && '🏆 '}{match.player1}
             </button>
-            <div className="text-xs text-gray-400">{match.player1Tag}</div>
+            <div className={`text-xs ${isPlayer1Winner ? 'text-amber-300/70' : 'text-gray-400'}`}>{match.player1Tag}</div>
             {match.player1Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
           </div>
           <span className="text-gray-400">vs</span>
-          <div>
-            <button onClick={() => onViewProfile(match.player2)} className="font-bold hover:underline" disabled={match.player2 === 'BYE'}>
-              {match.player2}
+          <div className={isPlayer2Winner ? 'bg-amber-400/10 border border-amber-400/40 rounded px-2 py-1' : isPlayer1Winner ? 'opacity-60' : ''}>
+            <button onClick={() => onViewProfile(match.player2)} className={`font-bold hover:underline ${isPlayer2Winner ? 'text-amber-300' : ''}`} disabled={match.player2 === 'BYE'}>
+              {isPlayer2Winner && '🏆 '}{match.player2}
             </button>
-            <div className="text-xs text-gray-400">{match.player2Tag}</div>
+            <div className={`text-xs ${isPlayer2Winner ? 'text-amber-300/70' : 'text-gray-400'}`}>{match.player2Tag}</div>
             {match.player2Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
           </div>
           {getStatusIcon(match.status)}
@@ -3026,12 +3047,11 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             <p className="text-white">⚠️ Both players disqualified — neither reported a result</p>
           ) : match.status === 'completed' && match.resolvedReason === 'grace_period' ? (
             <p className="text-white">🕊️ Neither player reported — both advance under a one-time grace period</p>
-          ) : match.status === 'completed' && (
-            <p>
-              Winner: <span className="text-white font-bold">{match.winner}</span>
-              {match.resolvedReason === 'opponent_timeout' && <span className="text-gray-400"> (opponent unresponsive)</span>}
-              {match.resolvedReason === 'opponent_no_show' && <span className="text-gray-400"> (opponent never readied up)</span>}
-              {match.resolvedReason === 'staff_override' && <span className="text-gray-400"> (set by staff)</span>}
+          ) : match.status === 'completed' && (match.resolvedReason === 'opponent_timeout' || match.resolvedReason === 'opponent_no_show' || match.resolvedReason === 'staff_override') && (
+            <p className="text-xs text-gray-400">
+              {match.resolvedReason === 'opponent_timeout' && 'Opponent unresponsive'}
+              {match.resolvedReason === 'opponent_no_show' && 'Opponent never readied up'}
+              {match.resolvedReason === 'staff_override' && 'Set by staff'}
             </p>
           )}
           {match.status === 'disputed' && (
@@ -3085,7 +3105,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         {userIsPlayer && match.status === 'pending' && !userReady && !roundLocked && (
           <button
             onClick={onPlayerReady}
-            className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
+            className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-4 py-2 rounded text-sm transition"
           >
             I'm Ready
           </button>
@@ -3096,7 +3116,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         {userIsPlayer && !userVote && ['active', 'scheduled', 'waiting_for_opponent'].includes(match.status) && (
           <button
             onClick={onSelectMatch}
-            className="bg-white hover:bg-neutral-200 text-black font-bold px-4 py-2 rounded text-sm transition"
+            className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-4 py-2 rounded text-sm transition"
           >
             Report Result
           </button>
@@ -3387,7 +3407,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
           />
           <button
             onClick={handleSendMessage}
-            className="bg-white hover:bg-neutral-200 p-2 rounded transition"
+            className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 p-2 rounded transition"
           >
             <Send className="w-5 h-5 text-gray-900" />
           </button>
@@ -3493,7 +3513,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
                 disabled={selectedWinner !== null || screenshots.length === 0}
                 className={`w-full p-3 rounded font-bold transition ${
                   selectedWinner === match.player1
-                    ? 'bg-white text-black'
+                    ? 'bg-gradient-to-r from-amber-200 to-yellow-500 text-gray-900'
                     : 'bg-gray-700 hover:bg-gray-600'
                 } ${selectedWinner !== null && selectedWinner !== match.player1 ? 'opacity-50' : ''} ${screenshots.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -3504,7 +3524,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
                 disabled={selectedWinner !== null || screenshots.length === 0}
                 className={`w-full p-3 rounded font-bold transition ${
                   selectedWinner === match.player2
-                    ? 'bg-white text-black'
+                    ? 'bg-gradient-to-r from-amber-200 to-yellow-500 text-gray-900'
                     : 'bg-gray-700 hover:bg-gray-600'
                 } ${selectedWinner !== null && selectedWinner !== match.player2 ? 'opacity-50' : ''} ${screenshots.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -3614,13 +3634,13 @@ function DisputeReview({ matches, onResolveDispute }) {
               <div className="flex gap-2 ml-4">
                 <button
                   onClick={() => onResolveDispute(dispute.id, dispute.winner1Vote)}
-                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-2 rounded text-sm transition"
                 >
                   Accept {dispute.winner1Vote}
                 </button>
                 <button
                   onClick={() => onResolveDispute(dispute.id, dispute.winner2Vote)}
-                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-2 rounded text-sm transition"
                 >
                   Accept {dispute.winner2Vote}
                 </button>
@@ -3649,13 +3669,13 @@ function DisputeReview({ matches, onResolveDispute }) {
               <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={() => onResolveDispute(match.id, match.player1)}
-                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-2 rounded text-sm transition"
                 >
                   Award to {match.player1}
                 </button>
                 <button
                   onClick={() => onResolveDispute(match.id, match.player2)}
-                  className="bg-white hover:bg-neutral-200 text-black font-bold px-3 py-2 rounded text-sm transition"
+                  className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-2 rounded text-sm transition"
                 >
                   Award to {match.player2}
                 </button>
