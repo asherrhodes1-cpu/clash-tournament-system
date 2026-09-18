@@ -30,8 +30,8 @@ import {
   getTournamentBannerUrl,
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
-import { verifyClashAccount, fetchClashPlayerData } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getPlayersRemaining } from './utils';
+import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getPlayersRemaining, COUNTRIES } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -1464,6 +1464,9 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
   const [uploading, setUploading] = useState(false);
   const [editingDiscordId, setEditingDiscordId] = useState(false);
   const [discordIdDraft, setDiscordIdDraft] = useState('');
+  const [editingCountry, setEditingCountry] = useState(false);
+  const [countryDraft, setCountryDraft] = useState('');
+  const [localRanking, setLocalRanking] = useState(undefined);
   const [showVerifyForm, setShowVerifyForm] = useState(false);
   const [verifyClashTag, setVerifyClashTag] = useState('');
   const [editingVerifyTag, setEditingVerifyTag] = useState(false);
@@ -1478,6 +1481,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
   useEffect(() => {
     setProfileLoaded(false);
     setLiveStats(undefined);
+    setLocalRanking(undefined);
     return subscribeToUserProfile(username, (p) => {
       setProfile(p);
       setProfileLoaded(true);
@@ -1569,12 +1573,27 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
     }
   };
 
+  const handleSaveCountry = async (e) => {
+    e.preventDefault();
+    try {
+      await updateProfile(profile.id, { country: countryDraft ? parseInt(countryDraft, 10) : '' });
+      setEditingCountry(false);
+      setLocalRanking(undefined);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const handleRefreshLiveStats = async () => {
     if (!profile?.clashTag) return;
     setLoadingLiveStats(true);
     try {
-      const data = await fetchClashPlayerData(profile.clashTag);
+      const [data, ranking] = await Promise.all([
+        fetchClashPlayerData(profile.clashTag),
+        profile.country ? fetchLocalRanking(profile.clashTag, profile.country) : Promise.resolve(undefined),
+      ]);
       setLiveStats(data);
+      setLocalRanking(profile.country ? ranking : undefined);
     } finally {
       setLoadingLiveStats(false);
     }
@@ -1717,6 +1736,57 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
           </div>
         )}
 
+        {isOwnProfile && (
+          <div className="mt-4 p-3 bg-gray-700 rounded">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+              <span className="text-sm font-bold">🌍 Country</span>
+              {!editingCountry && (
+                <button
+                  onClick={() => { setCountryDraft(profile?.country || ''); setEditingCountry(true); }}
+                  className="text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition"
+                >
+                  {profile?.country ? 'Edit' : 'Set up'}
+                </button>
+              )}
+            </div>
+            {editingCountry ? (
+              <form onSubmit={handleSaveCountry} className="space-y-2 mt-2">
+                <select
+                  value={countryDraft}
+                  onChange={(e) => setCountryDraft(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-white"
+                >
+                  <option value="">No country selected</option>
+                  {COUNTRIES.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400">
+                  Clash of Clans doesn't expose which country an account is in, so this is used only to check your local leaderboard ranking.
+                </p>
+                <div className="flex gap-2">
+                  <button type="submit" className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-1 rounded text-sm transition">
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingCountry(false)}
+                    className="border border-gray-600 hover:border-white px-3 py-1 rounded text-sm transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="text-xs text-gray-400">
+                {profile?.country
+                  ? `Used for local ranking: ${COUNTRIES.find((c) => c.id === profile.country)?.name || profile.country}`
+                  : 'Set your country to see your local Builder Base ranking.'}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="mt-4 p-3 bg-gray-700 rounded">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <span className={`text-sm font-bold ${profile?.clashVerified ? 'text-white' : 'text-gray-400 font-normal'}`}>
@@ -1777,6 +1847,20 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                     {liveStats.builderBaseLeague && <p>League: <span className="font-bold text-white">{liveStats.builderBaseLeague}</span></p>}
                     {liveStats.clanName && <p>Clan: <span className="font-bold text-white">{liveStats.clanName}</span></p>}
                     {liveStats.versusBattleWins != null && <p>Builder Base Wins: <span className="font-bold text-white">{liveStats.versusBattleWins}</span></p>}
+                    {profile?.country && (
+                      <p>
+                        Local Ranking ({COUNTRIES.find((c) => c.id === profile.country)?.name}):{' '}
+                        <span className="font-bold text-white">
+                          {localRanking === undefined
+                            ? '—'
+                            : localRanking === null
+                            ? 'Unavailable right now'
+                            : localRanking.rank == null
+                            ? `Outside the top ${localRanking.checkedTop}`
+                            : `#${localRanking.rank}`}
+                        </span>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

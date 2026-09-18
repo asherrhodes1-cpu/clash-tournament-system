@@ -290,6 +290,37 @@ exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET]
 });
 
 // ============================================================================
+// fetchLocalRanking — where a player currently ranks in their country's
+// Builder Base leaderboard. The player API has no "country" field, so the
+// caller supplies the location id the player picked on their own profile.
+// The rankings endpoint only returns the top 200 for a location, so anyone
+// outside that range simply isn't in the list - there's no exact rank to
+// give them beyond "outside the top 200".
+// ============================================================================
+exports.fetchLocalRanking = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be signed in');
+  }
+
+  const { playerTag, locationId } = request.data || {};
+  if (!playerTag || typeof playerTag !== 'string' || !locationId) {
+    throw new HttpsError('invalid-argument', 'playerTag and locationId are required');
+  }
+
+  const cleanTag = `#${playerTag.replace(/^#/, '').toUpperCase()}`;
+  const response = await callClashApi(`/v1/locations/${locationId}/rankings/players-builder-base?limit=200`);
+
+  if (!response.ok) {
+    logger.warn('fetchLocalRanking: relay/API returned', response.status);
+    return { found: false };
+  }
+
+  const data = await response.json();
+  const entry = (data.items || []).find((p) => p.tag === cleanTag);
+  return { found: true, rank: entry ? entry.rank : null, checkedTop: 200 };
+});
+
+// ============================================================================
 // advanceTournaments — scheduled job, sole writer for match timeouts and
 // round-advancement/champion-crowning. Runs server-side so N connected
 // clients never race each other creating duplicate next-round matches.
