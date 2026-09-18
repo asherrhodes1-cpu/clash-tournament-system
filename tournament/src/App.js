@@ -30,7 +30,7 @@ import {
   getTournamentBannerUrl,
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
-import { verifyClashAccount } from './api/clash';
+import { verifyClashAccount, fetchClashPlayerData } from './api/clash';
 import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getPlayersRemaining } from './utils';
 
 // ============================================================================
@@ -600,6 +600,7 @@ export default function TournamentApp() {
   const [selectedTournamentId, setSelectedTournamentId] = useState(null);
   const [selectedMatchId, setSelectedMatchId] = useState(null);
   const [selectedProfileUsername, setSelectedProfileUsername] = useState(null);
+  const [profileNavStack, setProfileNavStack] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
   const [showWalkthrough, setShowWalkthrough] = useState(false);
@@ -659,9 +660,31 @@ export default function TournamentApp() {
     setMobileMenuOpen(false);
   };
 
+  // Snapshots enough of the current view (page + whatever it was showing) so
+  // "Back" can restore it exactly, even through a chain of profile-to-profile
+  // clicks - each click pushes one more snapshot onto the stack.
   const viewProfile = (username) => {
+    setProfileNavStack((prev) => [
+      ...prev,
+      { page: currentPage, tournamentId: selectedTournamentId, matchId: selectedMatchId, profileUsername: selectedProfileUsername },
+    ]);
     setSelectedProfileUsername(username);
     setCurrentPage('profile');
+  };
+
+  const handleBackFromProfile = () => {
+    setProfileNavStack((prev) => {
+      if (prev.length === 0) {
+        setCurrentPage('dashboard');
+        return prev;
+      }
+      const last = prev[prev.length - 1];
+      setCurrentPage(last.page);
+      setSelectedTournamentId(last.tournamentId);
+      setSelectedMatchId(last.matchId);
+      setSelectedProfileUsername(last.profileUsername);
+      return prev.slice(0, -1);
+    });
   };
 
   const handleCreateTournament = async (tournamentData, bannerFile) => {
@@ -1014,6 +1037,7 @@ export default function TournamentApp() {
             currentUser={currentUser}
             tournaments={tournaments}
             onViewProfile={viewProfile}
+            onBack={handleBackFromProfile}
           />
         )}
 
@@ -1424,7 +1448,7 @@ function medalFor(place) {
   return place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : '🎖️';
 }
 
-function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
+function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack }) {
   const [profile, setProfile] = useState(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
@@ -1439,11 +1463,14 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
   const [verifyApiToken, setVerifyApiToken] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState('');
+  const [liveStats, setLiveStats] = useState(undefined);
+  const [loadingLiveStats, setLoadingLiveStats] = useState(false);
 
   const isOwnProfile = currentUser.username === username;
 
   useEffect(() => {
     setProfileLoaded(false);
+    setLiveStats(undefined);
     return subscribeToUserProfile(username, (p) => {
       setProfile(p);
       setProfileLoaded(true);
@@ -1535,6 +1562,17 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
     }
   };
 
+  const handleRefreshLiveStats = async () => {
+    if (!profile?.clashTag) return;
+    setLoadingLiveStats(true);
+    try {
+      const data = await fetchClashPlayerData(profile.clashTag);
+      setLiveStats(data);
+    } finally {
+      setLoadingLiveStats(false);
+    }
+  };
+
   const placed = tournaments
     .filter(t => t.status === 'completed' && t.placements && t.placements[username])
     .sort((a, b) => a.placements[username] - b.placements[username]);
@@ -1544,14 +1582,20 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
 
   if (profileLoaded && !profile) {
     return (
-      <div className="text-center">
+      <div className="text-center space-y-4">
         <p className="text-gray-400">No player found with that username</p>
+        <button onClick={onBack} className="text-sm text-gray-300 hover:text-white underline">
+          ← Back
+        </button>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
+      <button onClick={onBack} className="text-sm text-gray-300 hover:text-white flex items-center gap-1 transition">
+        ← Back
+      </button>
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
         <div className="flex items-center gap-4">
           <div className="relative shrink-0">
@@ -1686,16 +1730,50 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile }) {
           </div>
 
           {profile?.clashVerified && (
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <div className="bg-gray-800 rounded p-3 text-center">
-                <p className="text-xs text-gray-400 uppercase tracking-wide">Builder Hall</p>
-                <p className="text-xl font-bold text-white mt-1">{profile.builderHallLevel}</p>
+            <>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="bg-gray-800 rounded p-3 text-center">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Builder Hall</p>
+                  <p className="text-xl font-bold text-white mt-1">{profile.builderHallLevel}</p>
+                </div>
+                <div className="bg-gray-800 rounded p-3 text-center">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Best Trophies</p>
+                  <p className="text-xl font-bold text-white mt-1">{profile.bestBuilderBaseTrophies}</p>
+                </div>
               </div>
-              <div className="bg-gray-800 rounded p-3 text-center">
-                <p className="text-xs text-gray-400 uppercase tracking-wide">Best Trophies</p>
-                <p className="text-xl font-bold text-white mt-1">{profile.bestBuilderBaseTrophies}</p>
+
+              <div className="mt-3">
+                {liveStats === undefined ? (
+                  <button
+                    onClick={handleRefreshLiveStats}
+                    disabled={loadingLiveStats}
+                    className="text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition disabled:opacity-50"
+                  >
+                    {loadingLiveStats ? 'Fetching live stats...' : '🔄 Pull Live Clash Stats'}
+                  </button>
+                ) : liveStats === null ? (
+                  <p className="text-xs text-gray-400">Couldn't reach the Clash of Clans API right now.</p>
+                ) : (
+                  <div className="bg-gray-800 rounded p-3 text-sm space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400 uppercase tracking-wide">Live from Supercell</span>
+                      <button
+                        onClick={handleRefreshLiveStats}
+                        disabled={loadingLiveStats}
+                        className="text-xs text-gray-400 hover:text-white underline disabled:opacity-50"
+                      >
+                        {loadingLiveStats ? 'Refreshing...' : 'Refresh'}
+                      </button>
+                    </div>
+                    <p>Current Trophies: <span className="font-bold text-white">{liveStats.builderBaseTrophies}</span></p>
+                    <p>Best Trophies: <span className="font-bold text-white">{liveStats.bestBuilderBaseTrophies}</span></p>
+                    {liveStats.builderBaseLeague && <p>League: <span className="font-bold text-white">{liveStats.builderBaseLeague}</span></p>}
+                    {liveStats.clanName && <p>Clan: <span className="font-bold text-white">{liveStats.clanName}</span></p>}
+                    {liveStats.versusBattleWins != null && <p>Builder Base Wins: <span className="font-bold text-white">{liveStats.versusBattleWins}</span></p>}
+                  </div>
+                )}
               </div>
-            </div>
+            </>
           )}
 
           {isOwnProfile && showVerifyForm && (
@@ -2450,6 +2528,12 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             <p className="text-sm text-gray-400">Matches</p>
             <p className="text-lg font-bold">{matches.length}</p>
           </div>
+          {tournament.startedAt && (
+            <div>
+              <p className="text-sm text-gray-400">Players Remaining</p>
+              <p className="text-lg font-bold">{getPlayersRemaining(tournament, matches).length}</p>
+            </div>
+          )}
           {tournament.prize && (
             <div>
               <p className="text-sm text-gray-400">Prize</p>

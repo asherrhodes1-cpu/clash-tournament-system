@@ -283,6 +283,9 @@ exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET]
     builderBaseTrophies: data.builderBaseTrophies || 0,
     builderBaseHall: data.builderHallLevel || 0,
     townHallLevel: data.townHallLevel,
+    builderBaseLeague: data.builderBaseLeague?.name || null,
+    clanName: data.clan?.name || null,
+    versusBattleWins: data.versusBattleWinCount ?? null,
   };
 });
 
