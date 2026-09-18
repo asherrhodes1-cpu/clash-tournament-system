@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import { signUp, logIn, logOut, subscribeToAuthState, adminResetPassword } from './api/auth';
 import {
   subscribeToTournaments,
@@ -2366,7 +2366,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
 
 function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat, onUpdateSignupDeadline }) {
   const [viewMode, setViewMode] = useState('list');
-  const [roundOverrides, setRoundOverrides] = useState({});
+  const [selectedDay, setSelectedDay] = useState(null);
   const [bannerUrl, setBannerUrl] = useState(null);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [repositioning, setRepositioning] = useState(false);
@@ -2488,17 +2488,21 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       .join(' ');
   };
 
-  // A finished round defaults to collapsed so completed days don't bury the
-  // current one under a long scroll - but a click always overrides that
-  // default, whichever direction, until the section's own completeness
-  // flips (e.g. its last match resolves) and the override is forgotten.
-  const isRoundCollapsed = (key, isComplete) => roundOverrides[key] ?? isComplete;
-  const toggleRound = (key, isComplete) => {
-    setRoundOverrides((prev) => ({ ...prev, [key]: !isRoundCollapsed(key, isComplete) }));
-  };
-
   const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b);
   const isDoubleElim = tournament.format === 'double_elimination';
+
+  // Double elimination's winners/losers/grand-final sections each carry
+  // their own "day" (a round in one bracket can land on the same day as a
+  // different round in the other), so a single elimination round IS its
+  // day, but here the day has to be read off the section's own matches.
+  const matchDay = (m) => (isDoubleElim ? (m.day ?? m.round) : m.round);
+  const allDays = [...new Set(matches.map(matchDay))].sort((a, b) => a - b);
+  const isDayComplete = (d) => matches.filter((m) => matchDay(m) === d).every((m) => m.status === 'completed');
+  // Defaults to the earliest day that isn't fully decided yet - i.e. the
+  // current day - so clicking into the list view doesn't dump you on Day 1
+  // of a tournament that's already well underway.
+  const defaultDay = allDays.find((d) => !isDayComplete(d)) ?? allDays[allDays.length - 1];
+  const activeDay = selectedDay ?? defaultDay;
 
   const bracketOrder = { winners: 0, losers: 1, grand_final: 2 };
   const bracketSections = isDoubleElim
@@ -2701,31 +2705,6 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         </div>
       </div>
 
-      {user.isStaff && (
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-          <h2 className="text-xl font-bold mb-4">Players ({tournament.players.length})</h2>
-          {tournament.players.length === 0 ? (
-            <p className="text-gray-400 text-sm">No players yet</p>
-          ) : (
-            <div className="space-y-2">
-              {tournament.players.map(player => (
-                <div key={player} className="flex items-center justify-between bg-gray-700 rounded px-4 py-2">
-                  <button onClick={() => onViewProfile(player)} className="hover:underline text-left">
-                    {player}
-                  </button>
-                  <button
-                    onClick={() => onRemovePlayer(tournament.id, player)}
-                    className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-xs transition"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {user.isStaff && matches.filter(m => m.status === 'disputed' || m.status === 'needs_staff_review').length > 0 && (
         <DisputeReview matches={matches} onResolveDispute={onResolveDispute} />
       )}
@@ -2764,90 +2743,118 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         </div>
       </div>
 
+      {viewMode === 'list' && allDays.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {allDays.map((d) => (
+            <button
+              key={d}
+              onClick={() => setSelectedDay(d)}
+              className={`px-3 py-1 rounded text-sm border transition ${
+                activeDay === d ? 'border-amber-400 text-amber-300' : 'border-gray-600 text-gray-300 hover:border-white'
+              }`}
+            >
+              Day {d}
+            </button>
+          ))}
+        </div>
+      )}
+
       {viewMode === 'remaining' ? (
-        <PlayersRemainingView tournament={tournament} matches={matches} onViewProfile={onViewProfile} />
+        <>
+          {user.isStaff && (
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <h2 className="text-xl font-bold mb-4">Players ({tournament.players.length})</h2>
+              {tournament.players.length === 0 ? (
+                <p className="text-gray-400 text-sm">No players yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {tournament.players.map(player => (
+                    <div key={player} className="flex items-center justify-between bg-gray-700 rounded px-4 py-2">
+                      <button onClick={() => onViewProfile(player)} className="hover:underline text-left">
+                        {player}
+                      </button>
+                      <button
+                        onClick={() => onRemovePlayer(tournament.id, player)}
+                        className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-xs transition"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <PlayersRemainingView tournament={tournament} matches={matches} onViewProfile={onViewProfile} />
+        </>
       ) : viewMode === 'bracket' ? (
         <BracketView matches={matches} rounds={rounds} isDoubleElim={isDoubleElim} bracketSize={tournament.bracketSize} />
       ) : isDoubleElim ? (
-        bracketSections.map(({ bracket, round }) => {
-          const sectionMatches = matches.filter(m => m.bracket === bracket && m.round === round);
-          const day = sectionMatches[0]?.day ?? round;
-          const unlockTime = sectionMatches[0]?.unlockAt ?? getRoundUnlockTime(tournament, day);
-          const sectionKey = `${bracket}:${round}`;
-          const isComplete = sectionMatches.every(m => m.status === 'completed');
-          const collapsed = isRoundCollapsed(sectionKey, isComplete);
-          return (
-          <div key={sectionKey} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <button
-              onClick={() => toggleRound(sectionKey, isComplete)}
-              className="w-full flex items-center justify-between flex-wrap gap-2 mb-4 text-left"
-            >
-              <span className="flex items-center gap-2">
-                {collapsed ? <ChevronRight className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+        bracketSections
+          .filter(({ bracket, round }) => {
+            const sectionMatches = matches.filter(m => m.bracket === bracket && m.round === round);
+            return (sectionMatches[0]?.day ?? round) === activeDay;
+          })
+          .map(({ bracket, round }) => {
+            const sectionMatches = matches.filter(m => m.bracket === bracket && m.round === round);
+            const day = sectionMatches[0]?.day ?? round;
+            const unlockTime = sectionMatches[0]?.unlockAt ?? getRoundUnlockTime(tournament, day);
+            return (
+            <div key={`${bracket}-${round}`} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                 <h2 className="text-xl font-bold">{sectionLabel({ bracket, round })}</h2>
-              </span>
-              <RoundDayStatus round={day} unlockTime={unlockTime} />
-            </button>
-            {!collapsed && (
-            <div className="space-y-3">
-              {sectionMatches
-                .map(match => (
-                  <MatchCard
-                    key={match.id}
-                    match={match}
-                    user={user}
-                    tournament={tournament}
-                    onSelectMatch={() => onSelectMatch(match.id)}
-                    onPlayerReady={() => onPlayerReady(match.id)}
-                    onFlagMatch={() => onFlagMatch(match.id)}
-                    onViewProfile={onViewProfile}
-                    onResolveDispute={onResolveDispute}
-                  />
-                ))}
+                <RoundDayStatus round={day} unlockTime={unlockTime} />
+              </div>
+              <div className="space-y-3">
+                {sectionMatches
+                  .map(match => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      user={user}
+                      tournament={tournament}
+                      onSelectMatch={() => onSelectMatch(match.id)}
+                      onPlayerReady={() => onPlayerReady(match.id)}
+                      onFlagMatch={() => onFlagMatch(match.id)}
+                      onViewProfile={onViewProfile}
+                      onResolveDispute={onResolveDispute}
+                    />
+                  ))}
+              </div>
             </div>
-            )}
-          </div>
-          );
-        })
+            );
+          })
       ) : (
-        rounds.map(round => {
-          const roundMatches = matches.filter(m => m.round === round);
-          const unlockTime = roundMatches[0]?.unlockAt ?? getRoundUnlockTime(tournament, round);
-          const isComplete = roundMatches.every(m => m.status === 'completed');
-          const collapsed = isRoundCollapsed(round, isComplete);
-          return (
-          <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <button
-              onClick={() => toggleRound(round, isComplete)}
-              className="w-full flex items-center justify-between flex-wrap gap-2 mb-4 text-left"
-            >
-              <span className="flex items-center gap-2">
-                {collapsed ? <ChevronRight className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+        rounds
+          .filter((round) => round === activeDay)
+          .map(round => {
+            const roundMatches = matches.filter(m => m.round === round);
+            const unlockTime = roundMatches[0]?.unlockAt ?? getRoundUnlockTime(tournament, round);
+            return (
+            <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                 <h2 className="text-xl font-bold">Round {round}</h2>
-              </span>
-              <RoundDayStatus round={round} unlockTime={unlockTime} />
-            </button>
-            {!collapsed && (
-            <div className="space-y-3">
-              {roundMatches
-                .map(match => (
-                  <MatchCard
-                    key={match.id}
-                    match={match}
-                    user={user}
-                    tournament={tournament}
-                    onSelectMatch={() => onSelectMatch(match.id)}
-                    onPlayerReady={() => onPlayerReady(match.id)}
-                    onFlagMatch={() => onFlagMatch(match.id)}
-                    onViewProfile={onViewProfile}
-                    onResolveDispute={onResolveDispute}
-                  />
-                ))}
+                <RoundDayStatus round={round} unlockTime={unlockTime} />
+              </div>
+              <div className="space-y-3">
+                {roundMatches
+                  .map(match => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      user={user}
+                      tournament={tournament}
+                      onSelectMatch={() => onSelectMatch(match.id)}
+                      onPlayerReady={() => onPlayerReady(match.id)}
+                      onFlagMatch={() => onFlagMatch(match.id)}
+                      onViewProfile={onViewProfile}
+                      onResolveDispute={onResolveDispute}
+                    />
+                  ))}
+              </div>
             </div>
-            )}
-          </div>
-          );
-        })
+            );
+          })
       )}
     </div>
   );
