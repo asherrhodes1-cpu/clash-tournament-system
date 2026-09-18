@@ -154,6 +154,32 @@ export function getTimeRemainingDisplay(startTime) {
   return { text: remaining, color: 'text-neutral-400' };
 }
 
+// Builder Base league tiers, lowest to highest, mapped to their icon.
+// The API returns a full name like "Emerald League III" - only the tier
+// word (before "League") identifies the icon, the roman numeral within a
+// tier doesn't change it. Legend League (the top, numberless tier) has no
+// icon supplied, so it falls back to no icon rather than a wrong one.
+const LEAGUE_ICONS = {
+  Wood: '/leagues/Icon_BB_League_Wood.png',
+  Clay: '/leagues/Icon_BB_League_Clay.png',
+  Stone: '/leagues/Icon_BB_League_Stone.png',
+  Copper: '/leagues/Icon_BB_League_Copper.png',
+  Brass: '/leagues/Icon_BB_League_Brass.png',
+  Iron: '/leagues/Icon_BB_League_Iron.png',
+  Steel: '/leagues/Icon_BB_League_Steel.png',
+  Titanium: '/leagues/Icon_BB_League_Titanium.png',
+  Platinum: '/leagues/Icon_BB_League_Platinum.png',
+  Emerald: '/leagues/Icon_BB_League_Emerald.png',
+  Ruby: '/leagues/Icon_BB_League_Ruby.png',
+  Diamond: '/leagues/Icon_BB_League_Diamond.png',
+};
+
+export function getLeagueIconUrl(leagueName) {
+  if (!leagueName) return null;
+  const tier = leagueName.split(' ')[0];
+  return LEAGUE_ICONS[tier] || null;
+}
+
 // Clash of Clans location ids for the countries a player can pick as their
 // "local ranking" home country - the player API has no country field of its
 // own, so this has to be self-reported. Pulled from the real /locations

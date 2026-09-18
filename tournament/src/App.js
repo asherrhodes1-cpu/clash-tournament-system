@@ -31,7 +31,7 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getPlayersRemaining, COUNTRIES } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getPlayersRemaining, COUNTRIES, getLeagueIconUrl } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -1842,10 +1842,26 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                         {loadingLiveStats ? 'Refreshing...' : 'Refresh'}
                       </button>
                     </div>
-                    <p>Current Trophies: <span className="font-bold text-white">{liveStats.builderBaseTrophies}</span></p>
+                    <p className="flex items-center gap-1.5">
+                      Current Trophies:
+                      {getLeagueIconUrl(liveStats.builderBaseLeague) ? (
+                        <img src={getLeagueIconUrl(liveStats.builderBaseLeague)} alt="" className="w-4 h-4" />
+                      ) : '🏆'}
+                      <span className="font-bold text-white">
+                        {liveStats.builderBaseTrophies}{liveStats.builderBaseLeague ? ` (${liveStats.builderBaseLeague})` : ''}
+                      </span>
+                    </p>
                     <p>Best Trophies: <span className="font-bold text-white">{liveStats.bestBuilderBaseTrophies}</span></p>
-                    {liveStats.builderBaseLeague && <p>League: <span className="font-bold text-white">{liveStats.builderBaseLeague}</span></p>}
-                    {liveStats.clanName && <p>Clan: <span className="font-bold text-white">{liveStats.clanName}</span></p>}
+                    {liveStats.clanName && (
+                      <p className="flex items-center gap-1.5">
+                        Clan:
+                        {liveStats.clanBadgeUrl && <img src={liveStats.clanBadgeUrl} alt="" className="w-4 h-4" />}
+                        <span className="font-bold text-white">{liveStats.clanName}</span>
+                      </p>
+                    )}
+                    {liveStats.bestSeasonRank != null && (
+                      <p>🌍 Best Global Season: <span className="font-bold text-white">#{liveStats.bestSeasonRank}{liveStats.bestSeasonId ? ` (${liveStats.bestSeasonId})` : ''}</span></p>
+                    )}
                     {liveStats.versusBattleWins != null && <p>Builder Base Wins: <span className="font-bold text-white">{liveStats.versusBattleWins}</span></p>}
                     {profile?.country && (
                       <p>
@@ -3090,9 +3106,14 @@ function PlayerStatStrip({ tag }) {
   if (!tag || tag === 'BYE') return null;
   if (!stats) return null;
 
+  const leagueIcon = getLeagueIconUrl(stats.builderBaseLeague);
+
   return (
     <div className="text-xs text-gray-400 mt-1 space-y-0.5">
-      <div>🏆 {stats.builderBaseTrophies}{stats.builderBaseLeague ? ` · ${stats.builderBaseLeague}` : ''}</div>
+      <div className="flex items-center gap-1">
+        {leagueIcon ? <img src={leagueIcon} alt="" className="w-4 h-4" /> : <span>🏆</span>}
+        <span>{stats.builderBaseTrophies}{stats.builderBaseLeague ? ` · ${stats.builderBaseLeague}` : ''}</span>
+      </div>
       {stats.clanName && (
         <div className="flex items-center gap-1">
           {stats.clanBadgeUrl && <img src={stats.clanBadgeUrl} alt="" className="w-4 h-4" />}
