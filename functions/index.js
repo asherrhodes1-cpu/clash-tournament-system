@@ -16,6 +16,7 @@ const DISCORD_MATCH_WEBHOOK_URL = defineSecret('DISCORD_MATCH_WEBHOOK_URL');
 const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const TERMINAL_STATUSES = ['completed', 'disputed', 'needs_staff_review'];
 
 async function postToDiscord(webhookUrl, content) {
@@ -415,6 +416,7 @@ function newMatchDoc({ id, tournamentId, player1, player2, round, bracket, playe
     player1Stats: playerStats[player1] || null,
     player2Stats: playerStats[player2] || null,
     round,
+    unlockAt: now,
     ...(bracket ? { bracket } : {}),
     status: isBye ? 'completed' : 'pending',
     winner: isBye ? player1 : null,
@@ -479,6 +481,27 @@ async function handleTimeouts(tournamentRef, matches) {
   let hasWrites = false;
 
   for (const m of matches) {
+    const matchRef = tournamentRef.collection('matches').doc(m.id);
+
+    // One player readied up, the other never did - after the same timeout
+    // used everywhere else, the ready player wins by forfeit rather than
+    // waiting forever on an opponent who may not show up at all.
+    if (m.status === 'pending' && m.player1Ready !== m.player2Ready) {
+      const readyTime = m.player1Ready ? m.player1ReadyTime : m.player2ReadyTime;
+      if (readyTime && now - readyTime > TIMEOUT_MS) {
+        const winner = m.player1Ready ? m.player1 : m.player2;
+        batch.update(matchRef, {
+          status: 'completed',
+          winner,
+          autoResolvedAt: now,
+          resolvedReason: 'opponent_no_show',
+          completedAt: now,
+        });
+        hasWrites = true;
+      }
+      continue;
+    }
+
     const isTimeoutEligible = ['active', 'scheduled', 'waiting_for_opponent'].includes(m.status);
     if (!isTimeoutEligible || !m.scheduledStartTime) continue;
 
@@ -487,7 +510,6 @@ async function handleTimeouts(tournamentRef, matches) {
 
     const player1Reported = !!m.winner1Vote;
     const player2Reported = !!m.winner2Vote;
-    const matchRef = tournamentRef.collection('matches').doc(m.id);
 
     if (!player1Reported && !player2Reported) {
       batch.update(matchRef, {
@@ -579,6 +601,7 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
           player1Stats: tournament.playerStats?.[winners[i]] || null,
           player2Stats: tournament.playerStats?.[winners[i + 1]] || null,
           round: nextRound,
+          unlockAt: now + ONE_DAY_MS,
           status: 'pending',
           player1Ready: false,
           player2Ready: false,
@@ -605,6 +628,7 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
           player1Stats: tournament.playerStats?.[winners[i]] || null,
           player2Stats: null,
           round: nextRound,
+          unlockAt: now + ONE_DAY_MS,
           status: 'completed',
           winner: winners[i],
           completedAt: now,
@@ -638,7 +662,7 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
 // LB round 2j (even) is a drop-in round; LB round 2j-1 (odd, j>1) is pure
 // consolidation of LB round (2j-2)'s survivors.
 // ============================================================================
-function buildBracketMatchDoc({ id, tournamentId, player1, player2, round, day, bracket, playerStats }) {
+function buildBracketMatchDoc({ id, tournamentId, player1, player2, round, day, unlockAt, bracket, playerStats }) {
   const now = Date.now();
   const isBye = player1 === 'BYE' || player2 === 'BYE';
   const winner = isBye ? (player1 === 'BYE' ? player2 : player1) : null;
@@ -653,6 +677,7 @@ function buildBracketMatchDoc({ id, tournamentId, player1, player2, round, day, 
     player2Stats: playerStats?.[player2] || null,
     round,
     day,
+    unlockAt,
     bracket,
     status: isBye ? 'completed' : 'pending',
     winner,
@@ -733,17 +758,20 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
       .filter((m) => m.status === 'completed' && m.winner && m.player1 !== 'BYE' && m.player2 !== 'BYE')
       .map((m) => (m.winner === m.player1 ? m.player2 : m.player1));
 
-  // `day` gates when a match unlocks (see roundIsUnlocked in firestore.rules)
-  // and is normally just the round number - except the grand final, whose
-  // `round` field stays 1/2 for bracket-reset display logic but which must
-  // not unlock until every winners/losers round ahead of it actually has.
+  // `day` is a cosmetic sequential label ("Day N") - it does NOT gate
+  // anything. Gating is `unlockAt`, always set to "right now" (this round's
+  // actual creation time) plus 24h, so every round gets a real, fixed 24h
+  // window regardless of how long the rounds before it took. A fixed
+  // schedule from tournament start (the old approach) drifts out of sync
+  // the moment any round runs long - the whole point of switching to this.
   function createRound(bracket, round, players, day = round) {
     if (existsRound(bracket, round) || players.length === 0) return;
     const prefix = bracket === 'winners' ? 'wb' : bracket === 'losers' ? 'lb' : 'gf';
+    const unlockAt = Date.now() + ONE_DAY_MS;
     pairUpWithBye(players).forEach(([p1, p2], idx) => {
       const id = `${prefix}-r${round}-${idx}`;
       batch.set(matchDocRef(id), buildBracketMatchDoc({
-        id, tournamentId: tournament.id, player1: p1, player2: p2, round, day, bracket, playerStats,
+        id, tournamentId: tournament.id, player1: p1, player2: p2, round, day, unlockAt, bracket, playerStats,
       }));
     });
     hasWrites = true;

@@ -61,13 +61,17 @@ service cloud.firestore {
                  (resource.data.player2 == myUsername() && resource.data.winner2Vote != null);
         }
 
-        // Every round is pinned to a fixed 24h-spaced day from the tournament's
-        // start, so a round that got decided early still can't be played early.
+        // Each round unlocks a real 24h after it was actually created
+        // (unlockAt, set once at creation) rather than a fixed multiple of
+        // 24h from tournament start - the latter drifts out of sync with
+        // reality the moment any earlier round runs long. Matches from
+        // before unlockAt existed fall back to that old fixed-day formula.
         function roundIsUnlocked() {
           let t = get(/databases/$(database)/documents/tournaments/$(tournamentId)).data;
           let day = resource.data.get('day', resource.data.round);
-          return t.startedAt == null ||
-                 request.time.toMillis() >= t.startedAt + (day - 1) * 86400000;
+          let fallbackUnlockAt = t.startedAt == null ? 0 : t.startedAt + (day - 1) * 86400000;
+          let unlockAt = resource.data.get('unlockAt', fallbackUnlockAt);
+          return t.startedAt == null || request.time.toMillis() >= unlockAt;
         }
 
         // A non-staff player may update only fields on a match they're actually part of,

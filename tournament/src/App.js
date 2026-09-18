@@ -31,7 +31,7 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
 import { verifyClashAccount } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, ONE_DAY_MS } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -2296,15 +2296,6 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
   const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b);
   const isDoubleElim = tournament.format === 'double_elimination';
 
-  // Purely for deciding whether a "next day unlocks in..." hint makes sense
-  // to show once the current round is live - an approximation from player
-  // count (double-elim tournaments pin down the real bracketSize at start).
-  const approxBracketSize = tournament.bracketSize
-    || Math.pow(2, Math.ceil(Math.log2(Math.max(tournament.players.length, 2))));
-  const finalWinnersRound = Math.round(Math.log2(approxBracketSize));
-  const finalLosersRound = Math.max(2 * (finalWinnersRound - 1), 1);
-  const finalSingleElimRound = Math.ceil(Math.log2(Math.max(tournament.players.length, 2)));
-
   const bracketOrder = { winners: 0, losers: 1, grand_final: 2 };
   const bracketSections = isDoubleElim
     ? [...new Set(matches.map(m => `${m.bracket}:${m.round}`))]
@@ -2465,12 +2456,6 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
               <p className="text-lg font-bold text-white">🏆 {tournament.prize}</p>
             </div>
           )}
-          {tournament.startedAt && !tournament.champion && (
-            <div>
-              <p className="text-sm text-gray-400">Current Day</p>
-              <p className="text-lg font-bold text-white">Day {Math.floor((Date.now() - tournament.startedAt) / ONE_DAY_MS) + 1}</p>
-            </div>
-          )}
           {tournament.status === 'signups_open' && (
             <div>
               <p className="text-sm text-gray-400">Estimated Duration</p>
@@ -2569,14 +2554,12 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         bracketSections.map(({ bracket, round }) => {
           const sectionMatches = matches.filter(m => m.bracket === bracket && m.round === round);
           const day = sectionMatches[0]?.day ?? round;
-          const isFinalRound = bracket === 'winners' ? round === finalWinnersRound
-            : bracket === 'losers' ? round === finalLosersRound
-            : true; // grand final has no predictable "next day" to point to
+          const unlockTime = sectionMatches[0]?.unlockAt ?? getRoundUnlockTime(tournament, day);
           return (
           <div key={`${bracket}-${round}`} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
               <h2 className="text-xl font-bold">{sectionLabel({ bracket, round })}</h2>
-              <RoundDayStatus tournament={tournament} round={day} isFinalRound={isFinalRound} />
+              <RoundDayStatus round={day} unlockTime={unlockTime} />
             </div>
             <div className="space-y-3">
               {sectionMatches
@@ -2597,15 +2580,17 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           );
         })
       ) : (
-        rounds.map(round => (
+        rounds.map(round => {
+          const roundMatches = matches.filter(m => m.round === round);
+          const unlockTime = roundMatches[0]?.unlockAt ?? getRoundUnlockTime(tournament, round);
+          return (
           <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
               <h2 className="text-xl font-bold">Round {round}</h2>
-              <RoundDayStatus tournament={tournament} round={round} isFinalRound={round === finalSingleElimRound} />
+              <RoundDayStatus round={round} unlockTime={unlockTime} />
             </div>
             <div className="space-y-3">
-              {matches
-                .filter(m => m.round === round)
+              {roundMatches
                 .map(match => (
                   <MatchCard
                     key={match.id}
@@ -2620,7 +2605,8 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                 ))}
             </div>
           </div>
-        ))
+          );
+        })
       )}
     </div>
   );
@@ -2772,7 +2758,7 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
   );
 }
 
-function RoundUnlockCountdown({ unlockTime, nextUnlockTime }) {
+function RoundUnlockCountdown({ unlockTime }) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -2781,28 +2767,19 @@ function RoundUnlockCountdown({ unlockTime, nextUnlockTime }) {
   }, []);
 
   const remaining = unlockTime - now;
-  if (remaining > 0) {
-    return <span className="text-gray-300">Unlocks in {formatCountdown(remaining)}</span>;
-  }
-
-  const nextRemaining = nextUnlockTime ? nextUnlockTime - now : null;
-  if (nextRemaining > 0) {
-    return (
-      <span className="text-white font-bold">
-        Live <span className="text-gray-400 font-normal">— next day in {formatCountdown(nextRemaining)}</span>
-      </span>
-    );
-  }
-  return <span className="text-white font-bold">Live</span>;
+  if (remaining <= 0) return <span className="text-white font-bold">Live</span>;
+  return <span className="text-gray-300">Unlocks in {formatCountdown(remaining)}</span>;
 }
 
-function RoundDayStatus({ tournament, round, isFinalRound }) {
-  const unlockTime = getRoundUnlockTime(tournament, round);
-  const nextUnlockTime = isFinalRound ? null : getRoundUnlockTime(tournament, round + 1);
+// `unlockTime` comes from the round's own matches (their unlockAt, set once
+// at creation) rather than a schedule computed from tournament start - a
+// round that hasn't been created yet has no unlockTime and simply isn't
+// shown, instead of guessing when it "should" arrive.
+function RoundDayStatus({ round, unlockTime }) {
   return (
     <span className="text-sm text-gray-400">
       Day {round}
-      {unlockTime && <> — <RoundUnlockCountdown unlockTime={unlockTime} nextUnlockTime={nextUnlockTime} /></>}
+      {unlockTime && <> — <RoundUnlockCountdown unlockTime={unlockTime} /></>}
     </span>
   );
 }
@@ -2812,7 +2789,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
   const userReady = match.player1 === user.username ? match.player1Ready : match.player2Ready;
   const timeDisplay = getTimeRemainingDisplay(match.scheduledStartTime);
-  const unlockTime = getRoundUnlockTime(tournament, match.day ?? match.round);
+  const unlockTime = match.unlockAt ?? getRoundUnlockTime(tournament, match.day ?? match.round);
   const roundLocked = unlockTime && Date.now() < unlockTime;
 
   const getStatusColor = (status) => {
@@ -2877,7 +2854,11 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             <p className="text-white">🎮 Match is LIVE - Play now in-game and report results</p>
           )}
           {match.status === 'completed' && (
-            <p>Winner: <span className="text-white font-bold">{match.winner}</span></p>
+            <p>
+              Winner: <span className="text-white font-bold">{match.winner}</span>
+              {match.resolvedReason === 'opponent_timeout' && <span className="text-gray-400"> (opponent unresponsive)</span>}
+              {match.resolvedReason === 'opponent_no_show' && <span className="text-gray-400"> (opponent never readied up)</span>}
+            </p>
           )}
           {match.status === 'disputed' && (
             <p className="text-white">Disputed • {match.player1} voted: {match.winner1Vote} | {match.player2} voted: {match.winner2Vote}</p>

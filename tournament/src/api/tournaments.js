@@ -252,6 +252,7 @@ export async function startTournament(tournament) {
           player1Stats: playerStats[pair[0]] || null,
           player2Stats: playerStats[pair[1]] || null,
           round: 1,
+          unlockAt: now,
           bracket: 'winners',
           status: isBye ? 'completed' : 'pending',
           winner: isBye ? pair[0] : null,
@@ -292,6 +293,7 @@ export async function startTournament(tournament) {
           player1Stats: playerStats[pair[0]] || null,
           player2Stats: playerStats[pair[1]] || null,
           round: 1,
+          unlockAt: now,
           status: isBye ? 'completed' : 'pending',
           winner: isBye ? pair[0] : null,
           completedAt: isBye ? now : null,
@@ -334,10 +336,17 @@ export async function playerReady(tournamentId, matchId, username) {
     if (!snap.exists()) return;
     const m = snap.data();
 
-    const tSnap = await tx.get(tournamentRef(tournamentId));
-    const unlockTime = getRoundUnlockTime(tSnap.data(), m.day ?? m.round);
+    // unlockAt is set once, at the moment this round was actually created -
+    // giving it a real, fixed 24h window regardless of how long earlier
+    // rounds took. Older matches (from before this field existed) fall back
+    // to the static day-number formula.
+    let unlockTime = m.unlockAt;
+    if (unlockTime == null) {
+      const tSnap = await tx.get(tournamentRef(tournamentId));
+      unlockTime = getRoundUnlockTime(tSnap.data(), m.day ?? m.round);
+    }
     if (unlockTime && Date.now() < unlockTime) {
-      throw new Error(`This round hasn't unlocked yet. Check back on Day ${m.round}.`);
+      throw new Error(`This round hasn't unlocked yet. Check back soon.`);
     }
 
     const isPlayer1 = username === m.player1;
