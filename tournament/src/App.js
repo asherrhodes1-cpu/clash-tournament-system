@@ -1896,9 +1896,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                         <span className="font-bold text-white">{liveStats.clanName}</span>
                       </p>
                     )}
-                    {liveStats.bestSeasonRank != null && (
-                      <p>🌍 Best Global Season: <span className="font-bold text-white">#{liveStats.bestSeasonRank}{liveStats.bestSeasonId ? ` (${liveStats.bestSeasonId})` : ''}</span></p>
-                    )}
+                    <p>🌍 Best Season: <span className="font-bold text-white">{formatBestSeason(liveStats)}</span></p>
                     {liveStats.versusBattleWins != null && <p>Builder Base Wins: <span className="font-bold text-white">{liveStats.versusBattleWins}</span></p>}
                     {profile?.country && (
                       <p>
@@ -3206,6 +3204,16 @@ function useLiveClashStats(tag) {
   return stats;
 }
 
+// A season with a rank shows the rank; one Supercell only reports trophies
+// for shows those; and no best season at all means the player has never
+// been ranked - say so rather than leaving the line out.
+function formatBestSeason(stats) {
+  const season = stats.bestSeasonId ? ` (${stats.bestSeasonId})` : '';
+  if (stats.bestSeasonRank != null) return `#${stats.bestSeasonRank}${season}`;
+  if (stats.bestSeasonTrophies != null) return `${stats.bestSeasonTrophies} trophies${season}`;
+  return 'Unranked';
+}
+
 // Global live rank isn't something Supercell's API exposes (only a
 // per-country leaderboard, and only an all-time best-season rank) - best
 // season rank is the closest real substitute for "how good is this player,
@@ -3229,9 +3237,7 @@ function PlayerStatStrip({ tag }) {
           <span>{stats.clanName}</span>
         </div>
       )}
-      {stats.bestSeasonRank != null && (
-        <div>🌍 Best Season: #{stats.bestSeasonRank}{stats.bestSeasonId ? ` (${stats.bestSeasonId})` : ''}</div>
-      )}
+      <div>🌍 Best Season: {formatBestSeason(stats)}</div>
     </div>
   );
 }
