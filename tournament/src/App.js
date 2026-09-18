@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { signUp, logIn, logOut, subscribeToAuthState, adminResetPassword } from './api/auth';
 import {
   subscribeToTournaments,
@@ -2250,6 +2250,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
 
 function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat, onUpdateSignupDeadline }) {
   const [viewMode, setViewMode] = useState('list');
+  const [roundOverrides, setRoundOverrides] = useState({});
   const [bannerUrl, setBannerUrl] = useState(null);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [repositioning, setRepositioning] = useState(false);
@@ -2369,6 +2370,15 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+  };
+
+  // A finished round defaults to collapsed so completed days don't bury the
+  // current one under a long scroll - but a click always overrides that
+  // default, whichever direction, until the section's own completeness
+  // flips (e.g. its last match resolves) and the override is forgotten.
+  const isRoundCollapsed = (key, isComplete) => roundOverrides[key] ?? isComplete;
+  const toggleRound = (key, isComplete) => {
+    setRoundOverrides((prev) => ({ ...prev, [key]: !isRoundCollapsed(key, isComplete) }));
   };
 
   const rounds = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b);
@@ -2520,14 +2530,12 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
               )}
             </div>
           )}
-          <div>
-            <p className="text-sm text-gray-400">Players</p>
-            <p className="text-lg font-bold">{tournament.players.length}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-400">Matches</p>
-            <p className="text-lg font-bold">{matches.length}</p>
-          </div>
+          {!tournament.startedAt && (
+            <div>
+              <p className="text-sm text-gray-400">Players</p>
+              <p className="text-lg font-bold">{tournament.players.length}</p>
+            </div>
+          )}
           {tournament.startedAt && (
             <div>
               <p className="text-sm text-gray-400">Players Remaining</p>
@@ -2649,12 +2657,22 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           const sectionMatches = matches.filter(m => m.bracket === bracket && m.round === round);
           const day = sectionMatches[0]?.day ?? round;
           const unlockTime = sectionMatches[0]?.unlockAt ?? getRoundUnlockTime(tournament, day);
+          const sectionKey = `${bracket}:${round}`;
+          const isComplete = sectionMatches.every(m => m.status === 'completed');
+          const collapsed = isRoundCollapsed(sectionKey, isComplete);
           return (
-          <div key={`${bracket}-${round}`} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-              <h2 className="text-xl font-bold">{sectionLabel({ bracket, round })}</h2>
+          <div key={sectionKey} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <button
+              onClick={() => toggleRound(sectionKey, isComplete)}
+              className="w-full flex items-center justify-between flex-wrap gap-2 mb-4 text-left"
+            >
+              <span className="flex items-center gap-2">
+                {collapsed ? <ChevronRight className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                <h2 className="text-xl font-bold">{sectionLabel({ bracket, round })}</h2>
+              </span>
               <RoundDayStatus round={day} unlockTime={unlockTime} />
-            </div>
+            </button>
+            {!collapsed && (
             <div className="space-y-3">
               {sectionMatches
                 .map(match => (
@@ -2671,6 +2689,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                   />
                 ))}
             </div>
+            )}
           </div>
           );
         })
@@ -2678,12 +2697,21 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         rounds.map(round => {
           const roundMatches = matches.filter(m => m.round === round);
           const unlockTime = roundMatches[0]?.unlockAt ?? getRoundUnlockTime(tournament, round);
+          const isComplete = roundMatches.every(m => m.status === 'completed');
+          const collapsed = isRoundCollapsed(round, isComplete);
           return (
           <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-              <h2 className="text-xl font-bold">Round {round}</h2>
+            <button
+              onClick={() => toggleRound(round, isComplete)}
+              className="w-full flex items-center justify-between flex-wrap gap-2 mb-4 text-left"
+            >
+              <span className="flex items-center gap-2">
+                {collapsed ? <ChevronRight className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                <h2 className="text-xl font-bold">Round {round}</h2>
+              </span>
               <RoundDayStatus round={round} unlockTime={unlockTime} />
-            </div>
+            </button>
+            {!collapsed && (
             <div className="space-y-3">
               {roundMatches
                 .map(match => (
@@ -2700,6 +2728,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                   />
                 ))}
             </div>
+            )}
           </div>
           );
         })
