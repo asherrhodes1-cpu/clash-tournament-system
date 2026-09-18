@@ -31,7 +31,7 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile } from './api/users';
 import { verifyClashAccount } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getPlayersRemaining } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -2526,7 +2526,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         <TournamentResults tournament={tournament} onViewProfile={onViewProfile} />
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-bold">Bracket</h2>
         <div className="flex gap-2">
           <button
@@ -2545,10 +2545,20 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           >
             Bracket
           </button>
+          <button
+            onClick={() => setViewMode('remaining')}
+            className={`px-3 py-1 rounded text-sm border transition ${
+              viewMode === 'remaining' ? 'bg-white text-black border-white' : 'border-gray-600 text-gray-300 hover:border-white'
+            }`}
+          >
+            Players Remaining
+          </button>
         </div>
       </div>
 
-      {viewMode === 'bracket' ? (
+      {viewMode === 'remaining' ? (
+        <PlayersRemainingView tournament={tournament} matches={matches} onViewProfile={onViewProfile} />
+      ) : viewMode === 'bracket' ? (
         <BracketView matches={matches} rounds={rounds} isDoubleElim={isDoubleElim} bracketSize={tournament.bracketSize} />
       ) : isDoubleElim ? (
         bracketSections.map(({ bracket, round }) => {
@@ -2609,6 +2619,42 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           </div>
           );
         })
+      )}
+    </div>
+  );
+}
+
+function PlayersRemainingView({ tournament, matches, onViewProfile }) {
+  const remaining = getPlayersRemaining(tournament, matches);
+  const total = tournament.players.length;
+  const stats = tournament.playerStats || {};
+
+  const sorted = [...remaining].sort((a, b) => (stats[b]?.bestBuilderBaseTrophies || 0) - (stats[a]?.bestBuilderBaseTrophies || 0));
+
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+      <h2 className="text-xl font-bold mb-4">
+        {remaining.length} of {total} Players Remaining
+      </h2>
+      {sorted.length === 0 ? (
+        <p className="text-gray-400 text-sm">No players remaining</p>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map((player) => (
+            <div key={player} className="flex items-center justify-between bg-gray-700 rounded px-4 py-2">
+              <button onClick={() => onViewProfile(player)} className="hover:underline text-left font-bold">
+                {player === tournament.champion && '🏆 '}
+                {player}
+              </button>
+              {stats[player] && (
+                <span className="text-sm text-gray-400">
+                  {stats[player].tag && <span className="mr-3">{stats[player].tag}</span>}
+                  🏆 {stats[player].bestBuilderBaseTrophies ?? 0}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -2794,6 +2840,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   const unlockTime = match.unlockAt ?? getRoundUnlockTime(tournament, match.day ?? match.round);
   const roundLocked = unlockTime && Date.now() < unlockTime;
   const [forcingWinner, setForcingWinner] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const handleForceWinner = (winner) => {
     if (!window.confirm(`Force ${winner} as the winner of this match? This immediately completes it.`)) return;
@@ -2899,6 +2946,16 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         </div>
       </div>
       <div className="flex gap-2 ml-4 flex-wrap">
+        <button
+          onClick={() => setShowDetails(true)}
+          className="border border-gray-600 text-gray-300 hover:border-white hover:text-white px-3 py-2 rounded text-sm transition"
+          title="View match overview"
+        >
+          🔍 Details
+        </button>
+        {showDetails && (
+          <MatchDetailModal match={match} tournament={tournament} onClose={() => setShowDetails(false)} onViewProfile={onViewProfile} />
+        )}
         {userIsPlayer && match.status !== 'completed' && (
           <button
             onClick={onSelectMatch}
@@ -2976,6 +3033,138 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             </button>
           )
         )}
+      </div>
+    </div>
+  );
+}
+
+// A spectator-friendly overview of a single match - readable by anyone
+// (unlike MatchPage, which is the participant-only coordinate/report flow),
+// so people can check on any match's status, timing, and proof without
+// needing to be one of the two players in it.
+function MatchDetailModal({ match, tournament, onClose, onViewProfile }) {
+  const [screenshotUrls, setScreenshotUrls] = useState({ player1: [], player2: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      Promise.all((match.player1ScreenshotPaths || []).map((p) => getScreenshotUrl(p))),
+      Promise.all((match.player2ScreenshotPaths || []).map((p) => getScreenshotUrl(p))),
+    ]).then(([player1, player2]) => {
+      if (!cancelled) setScreenshotUrls({ player1, player2 });
+    });
+    return () => { cancelled = true; };
+  }, [match.id, match.player1ScreenshotPaths, match.player2ScreenshotPaths]);
+
+  const formatStatus = (status) =>
+    status.replace(/_/g, ' ').split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+  const resultExplanation = () => {
+    if (match.status !== 'completed') return null;
+    if (match.resolvedReason === 'mutual_no_show') return 'Both players disqualified — neither reported a result.';
+    if (match.resolvedReason === 'grace_period') return 'Neither player reported — both advanced under a one-time grace period.';
+    const reasons = {
+      opponent_timeout: 'opponent unresponsive after voting closed',
+      opponent_no_show: 'opponent never readied up',
+      staff_override: 'set manually by staff',
+    };
+    if (!match.winner) return null;
+    const suffix = reasons[match.resolvedReason] ? ` (${reasons[match.resolvedReason]})` : '';
+    return `${match.winner} won${suffix}.`;
+  };
+
+  const renderPlayer = (name, tag, stats, ready, readyTime, vote) => (
+    <div className="flex-1 bg-gray-700 rounded p-4">
+      <button
+        onClick={() => onViewProfile(name)}
+        className="font-bold text-lg hover:underline text-left disabled:no-underline disabled:cursor-default"
+        disabled={name === 'BYE'}
+      >
+        {match.status === 'completed' && match.winner === name && '🏆 '}
+        {name || 'TBD'}
+      </button>
+      {tag && <div className="text-xs text-gray-400 mt-1">{tag}</div>}
+      {stats?.bestBuilderBaseTrophies != null && (
+        <div className="text-xs text-gray-400">🏆 {stats.bestBuilderBaseTrophies} trophies</div>
+      )}
+      {match.status === 'pending' && (
+        <div className={`text-xs mt-2 ${ready ? 'text-white' : 'text-gray-400'}`}>
+          {ready ? `✓ Ready${readyTime ? ` at ${new Date(readyTime).toLocaleString()}` : ''}` : 'Not ready yet'}
+        </div>
+      )}
+      {vote && <div className="text-xs mt-2 text-white">Voted: {vote}</div>}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Match Overview</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="text-sm text-gray-400 mb-4">
+          {tournament.format === 'double_elimination' && match.bracket && (
+            <span className="capitalize">{match.bracket.replace('_', ' ')} bracket • </span>
+          )}
+          Round {match.round} • <span className="text-white">{formatStatus(match.status)}</span>
+        </div>
+
+        <div className="flex gap-3 items-stretch">
+          {renderPlayer(match.player1, match.player1Tag, match.player1Stats, match.player1Ready, match.player1ReadyTime, match.winner1Vote)}
+          <div className="flex items-center text-gray-400 font-bold">vs</div>
+          {renderPlayer(match.player2, match.player2Tag, match.player2Stats, match.player2Ready, match.player2ReadyTime, match.winner2Vote)}
+        </div>
+
+        {resultExplanation() && (
+          <div className="mt-4 p-3 bg-neutral-900 border border-neutral-700 rounded text-sm text-white">
+            {resultExplanation()}
+          </div>
+        )}
+
+        {(match.scheduledStartTime || match.completedAt || match.timeoutAt) && (
+          <div className="mt-4 text-xs text-gray-400 space-y-1">
+            {match.scheduledStartTime && <p>Scheduled: {new Date(match.scheduledStartTime).toLocaleString()}</p>}
+            {match.completedAt && <p>Completed: {new Date(match.completedAt).toLocaleString()}</p>}
+            {match.timeoutAt && <p>Flagged to staff: {new Date(match.timeoutAt).toLocaleString()}</p>}
+          </div>
+        )}
+
+        {(screenshotUrls.player1.length > 0 || screenshotUrls.player2.length > 0) && (
+          <div className="mt-4 pt-4 border-t border-gray-700">
+            <p className="text-sm font-medium mb-2">📸 Proof Screenshots</p>
+            {screenshotUrls.player1.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs text-gray-400 mb-1">{match.player1}</p>
+                <div className="flex flex-wrap gap-2">
+                  {screenshotUrls.player1.map((url, idx) => (
+                    <img key={idx} src={url} alt="" className="max-h-48 rounded border border-gray-600" />
+                  ))}
+                </div>
+              </div>
+            )}
+            {screenshotUrls.player2.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-400 mb-1">{match.player2}</p>
+                <div className="flex flex-wrap gap-2">
+                  {screenshotUrls.player2.map((url, idx) => (
+                    <img key={idx} src={url} alt="" className="max-h-48 rounded border border-gray-600" />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button onClick={onClose} className="w-full mt-6 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded transition">
+          Close
+        </button>
       </div>
     </div>
   );

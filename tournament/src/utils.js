@@ -100,6 +100,27 @@ export function estimateTournamentDays(playerCount, format) {
   return k;
 }
 
+// A player is eliminated once their loss count reaches the format's
+// threshold - 1 loss ends you in single elimination, 2 in double elimination
+// (a losers-bracket drop from the winners bracket is only your first loss,
+// so this single counter naturally handles winners-bracket losses, losers-
+// bracket losses, and even a grand-final bracket reset without needing to
+// special-case which bracket a loss happened in).
+export function getPlayersRemaining(tournament, matches) {
+  const lossThreshold = tournament?.format === 'double_elimination' ? 2 : 1;
+  const lossCounts = {};
+
+  for (const m of matches) {
+    if (m.status !== 'completed' || !m.winner) continue;
+    if (m.player1 === 'BYE' || m.player2 === 'BYE') continue;
+    const loser = m.winner === m.player1 ? m.player2 : m.player1;
+    if (!loser) continue;
+    lossCounts[loser] = (lossCounts[loser] || 0) + 1;
+  }
+
+  return (tournament?.players || []).filter((p) => (lossCounts[p] || 0) < lossThreshold);
+}
+
 export function formatCountdown(ms) {
   if (ms <= 0) return null;
   const hours = Math.floor(ms / (60 * 60 * 1000));
