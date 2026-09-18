@@ -1,9 +1,11 @@
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const crypto = require('crypto');
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
-const { defineSecret } = require('firebase-functions/params');
+const { defineSecret, defineString } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
+const { dueReminders, discordTime } = require('./reminders');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -11,46 +13,78 @@ const db = admin.firestore();
 const STAFF_INVITE_CODE = defineSecret('STAFF_INVITE_CODE');
 const CLASH_API_KEY = defineSecret('CLASH_API_KEY');
 const CLASH_RELAY_SECRET = defineSecret('CLASH_RELAY_SECRET');
-const DISCORD_WEBHOOK_URL = defineSecret('DISCORD_WEBHOOK_URL');
-const DISCORD_MATCH_WEBHOOK_URL = defineSecret('DISCORD_MATCH_WEBHOOK_URL');
+const DISCORD_BOT_TOKEN = defineSecret('DISCORD_BOT_TOKEN');
+const DISCORD_ANNOUNCE_CHANNEL_ID = defineString('DISCORD_ANNOUNCE_CHANNEL_ID');
+const DISCORD_MATCH_CHANNEL_ID = defineString('DISCORD_MATCH_CHANNEL_ID');
+const DISCORD_PUBLIC_KEY = defineString('DISCORD_PUBLIC_KEY');
 const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-async function postToDiscord(webhookUrl, content) {
+const DISCORD_API = 'https://discord.com/api/v10';
+
+// Returns the parsed response on success and null on any failure, so callers
+// that can fall back (DM -> channel) don't need their own try/catch.
+async function discordApi(path, body) {
   try {
-    await fetch(webhookUrl, {
+    const res = await fetch(`${DISCORD_API}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
+      headers: {
+        Authorization: `Bot ${DISCORD_BOT_TOKEN.value()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     });
+    if (!res.ok) {
+      logger.error('discordApi failed', { path, status: res.status, body: await res.text() });
+      return null;
+    }
+    return await res.json();
   } catch (err) {
-    logger.error('postToDiscord failed', err);
+    logger.error('discordApi failed', err);
+    return null;
   }
+}
+
+// allowed_mentions is pinned to explicit user ids so a player's chat text
+// can never smuggle in an @everyone/@here or role ping.
+function postToChannel(channelId, content, mentionIds = []) {
+  return discordApi(`/channels/${channelId}/messages`, {
+    content,
+    allowed_mentions: { parse: [], users: mentionIds },
+  });
+}
+
+async function sendDm(discordId, content) {
+  const dm = await discordApi('/users/@me/channels', { recipient_id: discordId });
+  if (!dm?.id) return false;
+  return !!(await postToChannel(dm.id, content));
 }
 
 // Official tournament-wide announcements: new tournaments, disputes needing
 // staff, champions being crowned.
 function notifyDiscord(content) {
-  return postToDiscord(DISCORD_WEBHOOK_URL.value(), content);
+  return postToChannel(DISCORD_ANNOUNCE_CHANNEL_ID.value(), content);
 }
 
-// Per-match/chat pings that @mention specific players - kept in a separate
-// channel so they don't spam everyone unless they're the one tagged.
-function notifyMatchChannel(content) {
-  return postToDiscord(DISCORD_MATCH_WEBHOOK_URL.value(), content);
-}
-
-// Resolves a username to an @mention if they've linked a Discord User ID,
-// otherwise just returns the plain username so the message still reads fine.
-async function resolveMention(username) {
-  if (!username || username === 'BYE') return username;
+async function getDiscordId(username) {
+  if (!username || username === 'BYE') return null;
   const usernameDoc = await db.collection('usernames').doc(username.toLowerCase()).get();
-  if (!usernameDoc.exists) return username;
+  if (!usernameDoc.exists) return null;
   const userDoc = await db.collection('users').doc(usernameDoc.data().uid).get();
-  const discordId = userDoc.exists ? userDoc.data().discordId : null;
-  return discordId ? `<@${discordId}>` : username;
+  return (userDoc.exists && userDoc.data().discordId) || null;
+}
+
+// Per-player pings: DM the player when they've linked Discord, and fall back
+// to an @mention in the match channel when they haven't or their DMs are
+// closed, so a missed DM never means a missed attack.
+async function notifyPlayer(username, content) {
+  if (!username || username === 'BYE') return;
+  const discordId = await getDiscordId(username);
+  if (discordId && (await sendDm(discordId, content))) return;
+  const prefix = discordId ? `<@${discordId}>` : `**${username}**`;
+  await postToChannel(DISCORD_MATCH_CHANNEL_ID.value(), `${prefix} ${content}`, discordId ? [discordId] : []);
 }
 
 function usernameToEmail(username) {
@@ -329,7 +363,7 @@ exports.fetchLocalRanking = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET
 // round-advancement/champion-crowning. Runs server-side so N connected
 // clients never race each other creating duplicate next-round matches.
 // ============================================================================
-exports.advanceTournaments = onSchedule('every 5 minutes', async () => {
+exports.advanceTournaments = onSchedule({ schedule: 'every 5 minutes', secrets: [DISCORD_BOT_TOKEN] }, async () => {
   const now = Date.now();
   const openSnap = await db.collection('tournaments').where('status', '==', 'signups_open').get();
   for (const tournamentDoc of openSnap.docs) {
@@ -355,6 +389,7 @@ exports.advanceTournaments = onSchedule('every 5 minutes', async () => {
     const matches = matchesSnap.docs.map((d) => d.data());
 
     await handleTimeouts(tournamentDoc.ref, tournament, matches);
+    await sendMatchReminders(tournamentDoc.ref, matches);
     if (tournament.format === 'double_elimination') {
       await handleDoubleEliminationAdvancement(tournamentDoc.ref, tournament, matches);
     } else {
@@ -362,6 +397,22 @@ exports.advanceTournaments = onSchedule('every 5 minutes', async () => {
     }
   }
 });
+
+// Marks each reminder on the match before sending it, so a failure partway
+// through can at worst skip a reminder rather than repeat one every 5 minutes.
+async function sendMatchReminders(tournamentRef, matches) {
+  const now = Date.now();
+  for (const m of matches) {
+    for (const reminder of dueReminders(m, now)) {
+      try {
+        await tournamentRef.collection('matches').doc(m.id).update({ [`remindersSent.${reminder.key}`]: true });
+        await Promise.all(reminder.recipients.map((name) => notifyPlayer(name, reminder.text)));
+      } catch (err) {
+        logger.error('sendMatchReminders failed', { matchId: m.id, key: reminder.key, err });
+      }
+    }
+  }
+}
 
 // ============================================================================
 // Auto-start — once a tournament's signup deadline passes, seed and start it
@@ -957,7 +1008,7 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
 // other code path needs to know about them.
 // ============================================================================
 exports.notifyTournamentCreated = onDocumentCreated(
-  { document: 'tournaments/{tournamentId}', secrets: [DISCORD_WEBHOOK_URL] },
+  { document: 'tournaments/{tournamentId}', secrets: [DISCORD_BOT_TOKEN] },
   async (event) => {
     const t = event.data.data();
     await notifyDiscord(`🏆 New tournament created: **${t.name}** — sign up now!`);
@@ -965,7 +1016,7 @@ exports.notifyTournamentCreated = onDocumentCreated(
 );
 
 exports.notifyMatchNeedsReview = onDocumentUpdated(
-  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_WEBHOOK_URL] },
+  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_BOT_TOKEN] },
   async (event) => {
     const before = event.data.before.data();
     const after = event.data.after.data();
@@ -978,7 +1029,7 @@ exports.notifyMatchNeedsReview = onDocumentUpdated(
 );
 
 exports.notifyChampionCrowned = onDocumentUpdated(
-  { document: 'tournaments/{tournamentId}', secrets: [DISCORD_WEBHOOK_URL] },
+  { document: 'tournaments/{tournamentId}', secrets: [DISCORD_BOT_TOKEN] },
   async (event) => {
     const before = event.data.before.data();
     const after = event.data.after.data();
@@ -989,18 +1040,27 @@ exports.notifyChampionCrowned = onDocumentUpdated(
 );
 
 exports.notifyMatchReady = onDocumentCreated(
-  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_MATCH_WEBHOOK_URL] },
+  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_BOT_TOKEN] },
   async (event) => {
     const m = event.data.data();
     if (!m.player1 || !m.player2 || m.player1 === 'BYE' || m.player2 === 'BYE') return;
 
-    const [p1, p2] = await Promise.all([resolveMention(m.player1), resolveMention(m.player2)]);
-    await notifyMatchChannel(`⚔️ New match: ${p1} vs ${p2} — head to the app to ready up!`);
+    // Later rounds are created a day before they open, so "ready up" would
+    // be premature - say when it opens instead (the unlock reminder then
+    // pings again at that moment).
+    const when = m.unlockAt && m.unlockAt > Date.now()
+      ? `It opens ${discordTime(m.unlockAt)}.`
+      : 'Head to the app to ready up!';
+    const text = `⚔️ New match: **${m.player1}** vs **${m.player2}**. ${when}`;
+    const alreadyOpen = !m.unlockAt || m.unlockAt <= Date.now();
+    // This message already told them it's live; skip the separate unlock ping.
+    if (alreadyOpen) await event.data.ref.update({ 'remindersSent.unlock': true });
+    await Promise.all([notifyPlayer(m.player1, text), notifyPlayer(m.player2, text)]);
   }
 );
 
 exports.notifyNewChatMessage = onDocumentCreated(
-  { document: 'tournaments/{tournamentId}/matches/{matchId}/messages/{messageId}', secrets: [DISCORD_MATCH_WEBHOOK_URL] },
+  { document: 'tournaments/{tournamentId}/matches/{matchId}/messages/{messageId}', secrets: [DISCORD_BOT_TOKEN] },
   async (event) => {
     const msg = event.data.data();
     const { tournamentId, matchId } = event.params;
@@ -1012,8 +1072,104 @@ exports.notifyNewChatMessage = onDocumentCreated(
     const recipient = match.player1 === msg.sender ? match.player2 : match.player1;
     if (!recipient || recipient === 'BYE') return;
 
-    const mention = await resolveMention(recipient);
     const preview = msg.text.length > 200 ? `${msg.text.slice(0, 200)}...` : msg.text;
-    await notifyMatchChannel(`💬 ${mention}, new message from **${msg.sender}**: ${preview}`);
+    await notifyPlayer(recipient, `💬 New message from **${msg.sender}**: ${preview}`);
   }
 );
+
+// ============================================================================
+// Discord account linking - the player asks for a one-time code while signed
+// in to the app, then redeems it with /link in Discord. Needing both sides
+// proves the same person owns the tournament account and the Discord account,
+// which typing a User ID into a profile field never did.
+// ============================================================================
+const LINK_CODE_TTL_MS = 10 * 60 * 1000;
+// No 0/O/1/I so a code read off the screen can't be mistyped.
+const LINK_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function generateLinkCode() {
+  let code = '';
+  for (let i = 0; i < 6; i++) code += LINK_CODE_ALPHABET[crypto.randomInt(LINK_CODE_ALPHABET.length)];
+  return code;
+}
+
+exports.createDiscordLinkCode = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in first');
+  const uid = request.auth.uid;
+
+  // One live code per player, so old ones don't pile up.
+  const stale = await db.collection('discordLinkCodes').where('uid', '==', uid).get();
+  const batch = db.batch();
+  stale.docs.forEach((d) => batch.delete(d.ref));
+
+  const code = generateLinkCode();
+  const expiresAt = Date.now() + LINK_CODE_TTL_MS;
+  batch.set(db.collection('discordLinkCodes').doc(code), { uid, expiresAt });
+  await batch.commit();
+  return { code, expiresAt };
+});
+
+// Ed25519 public keys wrapped in the fixed SPKI header Node's crypto expects.
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+function verifyDiscordSignature(req) {
+  const signature = req.get('X-Signature-Ed25519');
+  const timestamp = req.get('X-Signature-Timestamp');
+  if (!signature || !timestamp || !req.rawBody) return false;
+  try {
+    const key = crypto.createPublicKey({
+      key: Buffer.concat([ED25519_SPKI_PREFIX, Buffer.from(DISCORD_PUBLIC_KEY.value(), 'hex')]),
+      format: 'der',
+      type: 'spki',
+    });
+    return crypto.verify(null, Buffer.concat([Buffer.from(timestamp), req.rawBody]), key, Buffer.from(signature, 'hex'));
+  } catch (err) {
+    return false;
+  }
+}
+
+// Only the invoking player sees these (flags: 64 = ephemeral).
+function ephemeralReply(content) {
+  return { type: 4, data: { content, flags: 64 } };
+}
+
+async function redeemLinkCode(rawCode, discordId) {
+  const code = String(rawCode || '').trim().toUpperCase();
+  const codeRef = db.collection('discordLinkCodes').doc(code || '_');
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(codeRef);
+    if (!snap.exists) return 'That code isn\'t valid. Get a fresh one from your profile in the app.';
+    const { uid, expiresAt } = snap.data();
+    tx.delete(codeRef);
+    if (Date.now() > expiresAt) return 'That code has expired. Get a fresh one from your profile in the app.';
+    tx.update(db.collection('users').doc(uid), { discordId: discordId });
+    return '✅ Linked! You\'ll now get your match reminders and chat messages here by DM.';
+  });
+}
+
+exports.discordInteractions = onRequest(async (req, res) => {
+  if (req.method !== 'POST' || !verifyDiscordSignature(req)) {
+    res.status(401).send('invalid request signature');
+    return;
+  }
+
+  const interaction = req.body;
+  if (interaction.type === 1) { // PING - Discord checks the endpoint with this
+    res.json({ type: 1 });
+    return;
+  }
+
+  if (interaction.type === 2 && interaction.data?.name === 'link') {
+    const discordId = interaction.member?.user?.id || interaction.user?.id;
+    const codeOption = interaction.data.options?.find((o) => o.name === 'code');
+    try {
+      res.json(ephemeralReply(await redeemLinkCode(codeOption?.value, discordId)));
+    } catch (err) {
+      logger.error('link redeem failed', err);
+      res.json(ephemeralReply('Something went wrong linking your account. Try again in a moment.'));
+    }
+    return;
+  }
+
+  res.json(ephemeralReply('Unknown command.'));
+});

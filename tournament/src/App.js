@@ -29,7 +29,7 @@ import {
   uploadTournamentBanner,
   getTournamentBannerUrl,
 } from './api/storage';
-import { subscribeToUserProfile, updateProfile } from './api/users';
+import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './api/users';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
 import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getPlayersRemaining, COUNTRIES, getLeagueIconUrl } from './utils';
 
@@ -1464,6 +1464,8 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
   const [uploading, setUploading] = useState(false);
   const [editingDiscordId, setEditingDiscordId] = useState(false);
   const [discordIdDraft, setDiscordIdDraft] = useState('');
+  const [discordLinkCode, setDiscordLinkCode] = useState(null);
+  const [gettingLinkCode, setGettingLinkCode] = useState(false);
   const [editingCountry, setEditingCountry] = useState(false);
   const [countryDraft, setCountryDraft] = useState('');
   const [localRanking, setLocalRanking] = useState(undefined);
@@ -1494,6 +1496,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
 
   useEffect(() => {
     setDiscordIdDraft(profile?.discordId || '');
+    setDiscordLinkCode(null);
   }, [profile?.discordId]);
 
   useEffect(() => {
@@ -1528,6 +1531,17 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
       setEditingBio(false);
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleGetLinkCode = async () => {
+    setGettingLinkCode(true);
+    try {
+      setDiscordLinkCode(await createDiscordLinkCode());
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setGettingLinkCode(false);
     }
   };
 
@@ -1693,16 +1707,31 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
           <div className="mt-4 p-3 bg-gray-700 rounded">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
               <span className="text-sm font-bold">💬 Discord Notifications</span>
-              {!editingDiscordId && (
+              {!editingDiscordId && !discordLinkCode && (
                 <button
-                  onClick={() => setEditingDiscordId(true)}
-                  className="text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition"
+                  onClick={handleGetLinkCode}
+                  disabled={gettingLinkCode}
+                  className="text-xs border border-gray-600 hover:border-white px-2 py-1 rounded transition disabled:opacity-50"
                 >
-                  {profile?.discordId ? 'Edit' : 'Set up'}
+                  {gettingLinkCode ? 'Getting code...' : profile?.discordId ? 'Re-link' : 'Link Discord'}
                 </button>
               )}
             </div>
-            {editingDiscordId ? (
+            {discordLinkCode ? (
+              <div className="space-y-2 mt-2">
+                <p className="text-xs text-gray-300">In our Discord server, run:</p>
+                <p className="font-mono text-lg font-bold text-white bg-gray-800 rounded px-3 py-2 select-all">
+                  /link code:{discordLinkCode.code}
+                </p>
+                <p className="text-xs text-gray-400">The code expires in 10 minutes and works once.</p>
+                <button
+                  onClick={() => setDiscordLinkCode(null)}
+                  className="border border-gray-600 hover:border-white px-3 py-1 rounded text-sm transition"
+                >
+                  Done
+                </button>
+              </div>
+            ) : editingDiscordId ? (
               <div className="space-y-2 mt-2">
                 <input
                   type="text"
@@ -1727,11 +1756,19 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-gray-400">
-                {profile?.discordId
-                  ? "You'll be @mentioned in Discord for your matches and new chat messages."
-                  : 'Add your Discord User ID to get @mentioned for your matches and new chat messages.'}
-              </p>
+              <div>
+                <p className="text-xs text-gray-400">
+                  {profile?.discordId
+                    ? "Linked. The bot will DM you about your matches and new chat messages."
+                    : 'Link your Discord and the bot will DM you about your matches and new chat messages.'}
+                </p>
+                <button
+                  onClick={() => setEditingDiscordId(true)}
+                  className="text-xs text-gray-400 hover:text-white underline mt-1"
+                >
+                  Enter my Discord ID manually instead
+                </button>
+              </div>
             )}
           </div>
         )}

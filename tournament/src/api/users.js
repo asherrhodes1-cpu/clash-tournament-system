@@ -1,5 +1,6 @@
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../firebase';
 
 export function subscribeToUserProfile(username, onChange) {
   const usernameLower = username.trim().toLowerCase();
@@ -11,4 +12,11 @@ export function subscribeToUserProfile(username, onChange) {
 
 export async function updateProfile(uid, updates) {
   await updateDoc(doc(db, 'users', uid), updates);
+}
+
+const createDiscordLinkCodeCallable = httpsCallable(functions, 'createDiscordLinkCode');
+
+export async function createDiscordLinkCode() {
+  const result = await createDiscordLinkCodeCallable();
+  return result.data;
 }
