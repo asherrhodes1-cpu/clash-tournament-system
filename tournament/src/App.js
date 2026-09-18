@@ -3009,7 +3009,7 @@ function BracketColumns({ matches, rounds, labelForRound, totalRounds }) {
       {rounds.map(round => (
         <div key={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
           <h3 className="text-center font-bold text-gray-400 mb-2">
-            {labelForRound ? labelForRound(round, maxRound) : (round === maxRound ? 'Final' : `Round ${round}`)}
+            {labelForRound ? labelForRound(round, maxRound) : (round === maxRound ? `Day ${round} · Final` : `Day ${round}`)}
           </h3>
           {matches.filter(m => m.round === round).map(match => (
             <div key={match.id} className="bg-gray-700 rounded border border-gray-600 p-2 text-sm space-y-1">
@@ -3035,6 +3035,14 @@ function BracketColumns({ matches, rounds, labelForRound, totalRounds }) {
   );
 }
 
+// Single elimination doesn't store its bracket size, but every round halves
+// (rounding up, an odd player gets a bye), so the full number of rounds falls
+// out of how many matches round 1 has.
+function singleElimTotalRounds(matches) {
+  const roundOneMatches = matches.filter((m) => m.round === 1).length;
+  return roundOneMatches ? 1 + Math.ceil(Math.log2(roundOneMatches)) : undefined;
+}
+
 function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
   if (isDoubleElim) {
     const k = Math.round(Math.log2(bracketSize || 2));
@@ -3054,7 +3062,7 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
           <BracketColumns
             matches={wbMatches}
             rounds={wbRounds}
-            labelForRound={(r) => (r === k ? 'Winners Final' : `Round ${r}`)}
+            labelForRound={(r) => (r === k ? `Day ${r} · Winners Final` : `Day ${r}`)}
           />
         </div>
         {lbRounds.length > 0 && (
@@ -3063,7 +3071,7 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
             <BracketColumns
               matches={lbMatches}
               rounds={lbRounds}
-              labelForRound={(r) => (r === totalLbRounds ? 'Losers Final' : `Round ${r}`)}
+              labelForRound={(r) => (r === totalLbRounds ? `Day ${r} · Losers Final` : `Day ${r}`)}
             />
           </div>
         )}
@@ -3079,11 +3087,7 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
-      <BracketColumns
-        matches={matches}
-        rounds={rounds}
-        totalRounds={bracketSize ? Math.round(Math.log2(bracketSize)) : undefined}
-      />
+      <BracketColumns matches={matches} rounds={rounds} totalRounds={singleElimTotalRounds(matches)} />
     </div>
   );
 }
