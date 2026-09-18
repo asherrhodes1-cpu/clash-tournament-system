@@ -2962,8 +2962,10 @@ function TournamentResults({ tournament, onViewProfile }) {
   );
 }
 
-function BracketColumns({ matches, rounds, labelForRound }) {
-  const maxRound = rounds.length ? Math.max(...rounds) : 0;
+function BracketColumns({ matches, rounds, labelForRound, totalRounds }) {
+  // Rounds are created one at a time, so the highest round that exists so far
+  // isn't necessarily the last one - callers that know the real total pass it.
+  const maxRound = totalRounds ?? (rounds.length ? Math.max(...rounds) : 0);
 
   return (
     <div className="flex gap-8 min-w-max pb-2">
@@ -3040,7 +3042,11 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
-      <BracketColumns matches={matches} rounds={rounds} />
+      <BracketColumns
+        matches={matches}
+        rounds={rounds}
+        totalRounds={bracketSize ? Math.round(Math.log2(bracketSize)) : undefined}
+      />
     </div>
   );
 }
