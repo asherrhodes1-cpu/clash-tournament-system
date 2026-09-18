@@ -2999,38 +2999,49 @@ function TournamentResults({ tournament, onViewProfile }) {
   );
 }
 
-function BracketColumns({ matches, rounds, labelForRound, totalRounds }) {
-  // Rounds are created one at a time, so the highest round that exists so far
-  // isn't necessarily the last one - callers that know the real total pass it.
+function BracketMatchBox({ match, placeholder }) {
+  return (
+    <div className={`bg-gray-700 rounded border border-gray-600 p-2 text-sm space-y-1 ${placeholder ? 'opacity-50 border-dashed' : ''}`}>
+      {[match?.player1, match?.player2].map((p, idx) => {
+        const isWinner = match?.status === 'completed' && match.winner === p;
+        return (
+          <div
+            key={idx}
+            className={`flex justify-between items-center px-2 py-1 rounded ${
+              isWinner ? 'bg-amber-200/20 border border-amber-400/50 text-amber-300 font-bold' : 'text-gray-300'
+            }`}
+          >
+            <span>{p || 'TBD'}</span>
+            {isWinner && <span>✓</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Rounds are created one at a time as the previous one finishes, so callers
+// pass every round the bracket will have plus how many matches a not-yet-
+// created round should show, and the rest of the bracket is drawn as empty
+// TBD placeholders instead of only ever showing what exists so far.
+function BracketColumns({ matches, rounds, labelForRound, totalRounds, expectedMatchCount }) {
   const maxRound = totalRounds ?? (rounds.length ? Math.max(...rounds) : 0);
 
   return (
     <div className="flex gap-8 min-w-max pb-2">
-      {rounds.map(round => (
-        <div key={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
-          <h3 className="text-center font-bold text-gray-400 mb-2">
-            {labelForRound ? labelForRound(round, maxRound) : (round === maxRound ? `Day ${round} · Final` : `Day ${round}`)}
-          </h3>
-          {matches.filter(m => m.round === round).map(match => (
-            <div key={match.id} className="bg-gray-700 rounded border border-gray-600 p-2 text-sm space-y-1">
-              {[match.player1, match.player2].map((p, idx) => {
-                const isWinner = match.status === 'completed' && match.winner === p;
-                return (
-                  <div
-                    key={idx}
-                    className={`flex justify-between items-center px-2 py-1 rounded ${
-                      isWinner ? 'bg-amber-200/20 border border-amber-400/50 text-amber-300 font-bold' : 'text-gray-300'
-                    }`}
-                  >
-                    <span>{p || 'TBD'}</span>
-                    {isWinner && <span>✓</span>}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      ))}
+      {rounds.map(round => {
+        const roundMatches = matches.filter(m => m.round === round);
+        const placeholders = roundMatches.length === 0 ? (expectedMatchCount?.(round) ?? 0) : 0;
+        return (
+          <div key={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
+            <h3 className="text-center font-bold text-gray-400 mb-2">
+              {labelForRound ? labelForRound(round, maxRound) : (round === maxRound ? `Day ${round} · Final` : `Day ${round}`)}
+            </h3>
+            {roundMatches.map(match => <BracketMatchBox key={match.id} match={match} />)}
+            {Array.from({ length: placeholders }, (_, i) => <BracketMatchBox key={`tbd-${i}`} placeholder />)}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -3043,17 +3054,31 @@ function singleElimTotalRounds(matches) {
   return roundOneMatches ? 1 + Math.ceil(Math.log2(roundOneMatches)) : undefined;
 }
 
+// Every match yields one winner, so a round with c matches feeds
+// ceil(c / 2) matches into the next one.
+function singleElimExpectedCount(matches, round) {
+  const actual = matches.filter((m) => m.round === round).length;
+  if (actual) return actual;
+  return round > 1 ? Math.ceil(singleElimExpectedCount(matches, round - 1) / 2) : 0;
+}
+
+const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
+
 function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
   if (isDoubleElim) {
-    const k = Math.round(Math.log2(bracketSize || 2));
+    const size = bracketSize || 2;
+    const k = Math.round(Math.log2(size));
     const totalLbRounds = Math.max(2 * (k - 1), 1);
 
     const wbMatches = matches.filter(m => m.bracket === 'winners');
     const lbMatches = matches.filter(m => m.bracket === 'losers');
     const gfMatches = matches.filter(m => m.bracket === 'grand_final');
-    const wbRounds = [...new Set(wbMatches.map(m => m.round))].sort((a, b) => a - b);
-    const lbRounds = [...new Set(lbMatches.map(m => m.round))].sort((a, b) => a - b);
-    const gfRounds = [...new Set(gfMatches.map(m => m.round))].sort((a, b) => a - b);
+    // Losers rounds come in pairs of equal size (a drop-in round, then a
+    // consolidation round), each pair half the size of the last.
+    const lbExpected = (r) => Math.max(1, size / 2 ** (Math.floor((r + 1) / 2) + 1));
+    // Bracket reset only happens if the losers-bracket finalist wins game
+    // one, so only game one is ever drawn ahead of time.
+    const gfRounds = [...new Set([1, ...gfMatches.map(m => m.round)])].sort((a, b) => a - b);
 
     return (
       <div className="space-y-6">
@@ -3061,33 +3086,42 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
           <h3 className="font-bold mb-4">Winners Bracket</h3>
           <BracketColumns
             matches={wbMatches}
-            rounds={wbRounds}
+            rounds={range(k)}
+            expectedMatchCount={(r) => size / 2 ** r}
             labelForRound={(r) => (r === k ? `Day ${r} · Winners Final` : `Day ${r}`)}
           />
         </div>
-        {lbRounds.length > 0 && (
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
-            <h3 className="font-bold mb-4">Losers Bracket</h3>
-            <BracketColumns
-              matches={lbMatches}
-              rounds={lbRounds}
-              labelForRound={(r) => (r === totalLbRounds ? `Day ${r} · Losers Final` : `Day ${r}`)}
-            />
-          </div>
-        )}
-        {gfRounds.length > 0 && (
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
-            <h3 className="font-bold mb-4">Grand Final</h3>
-            <BracketColumns matches={gfMatches} rounds={gfRounds} labelForRound={(r) => (r === 1 ? 'Game 1' : 'Bracket Reset')} />
-          </div>
-        )}
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+          <h3 className="font-bold mb-4">Losers Bracket</h3>
+          <BracketColumns
+            matches={lbMatches}
+            rounds={range(totalLbRounds)}
+            expectedMatchCount={lbExpected}
+            labelForRound={(r) => (r === totalLbRounds ? `Day ${r} · Losers Final` : `Day ${r}`)}
+          />
+        </div>
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+          <h3 className="font-bold mb-4">Grand Final</h3>
+          <BracketColumns
+            matches={gfMatches}
+            rounds={gfRounds}
+            expectedMatchCount={() => 1}
+            labelForRound={(r) => (r === 1 ? 'Game 1' : 'Bracket Reset')}
+          />
+        </div>
       </div>
     );
   }
 
+  const totalRounds = singleElimTotalRounds(matches);
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
-      <BracketColumns matches={matches} rounds={rounds} totalRounds={singleElimTotalRounds(matches)} />
+      <BracketColumns
+        matches={matches}
+        rounds={totalRounds ? range(totalRounds) : rounds}
+        totalRounds={totalRounds}
+        expectedMatchCount={(r) => singleElimExpectedCount(matches, r)}
+      />
     </div>
   );
 }
