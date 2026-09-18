@@ -479,6 +479,7 @@ async function handleTimeouts(tournamentRef, matches) {
   const now = Date.now();
   const batch = db.batch();
   let hasWrites = false;
+  const disqualified = [];
 
   for (const m of matches) {
     const matchRef = tournamentRef.collection('matches').doc(m.id);
@@ -512,11 +513,19 @@ async function handleTimeouts(tournamentRef, matches) {
     const player2Reported = !!m.winner2Vote;
 
     if (!player1Reported && !player2Reported) {
+      // Both readied up but neither ever reported a result - disqualify
+      // both rather than stalling the bracket on a staff review that might
+      // never come. The match ends with no winner, so round-advancement's
+      // existing winner-filtering (already built to skip removed players)
+      // just routes around this match like it would a bye.
       batch.update(matchRef, {
-        status: 'needs_staff_review',
-        timeoutAt: now,
-        resolvedReason: 'no_report_timeout',
+        status: 'completed',
+        winner: null,
+        autoResolvedAt: now,
+        resolvedReason: 'mutual_no_show',
+        completedAt: now,
       });
+      disqualified.push(m.player1, m.player2);
       hasWrites = true;
     } else if (player1Reported !== player2Reported) {
       const winner = player1Reported ? m.winner1Vote : m.winner2Vote;
@@ -529,6 +538,14 @@ async function handleTimeouts(tournamentRef, matches) {
       });
       hasWrites = true;
     }
+  }
+
+  if (disqualified.length > 0) {
+    const uniqueDisqualified = [...new Set(disqualified)];
+    batch.update(tournamentRef, {
+      players: admin.firestore.FieldValue.arrayRemove(...uniqueDisqualified),
+      removedPlayers: admin.firestore.FieldValue.arrayUnion(...uniqueDisqualified),
+    });
   }
 
   if (hasWrites) await batch.commit();

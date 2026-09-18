@@ -2853,7 +2853,9 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           {match.status === 'active' && (
             <p className="text-white">🎮 Match is LIVE - Play now in-game and report results</p>
           )}
-          {match.status === 'completed' && (
+          {match.status === 'completed' && match.resolvedReason === 'mutual_no_show' ? (
+            <p className="text-white">⚠️ Both players disqualified — neither reported a result</p>
+          ) : match.status === 'completed' && (
             <p>
               Winner: <span className="text-white font-bold">{match.winner}</span>
               {match.resolvedReason === 'opponent_timeout' && <span className="text-gray-400"> (opponent unresponsive)</span>}
