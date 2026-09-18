@@ -31,7 +31,7 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './api/users';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getPlayersRemaining, COUNTRIES, getLeagueIconUrl } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, ONE_DAY_MS, getPlayersRemaining, COUNTRIES, getLeagueIconUrl } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -2840,7 +2840,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             <div key={`${bracket}-${round}`} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
               <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                 <h2 className="text-xl font-bold">{sectionLabel({ bracket, round })}</h2>
-                <RoundDayStatus round={day} unlockTime={unlockTime} />
+                <RoundDayStatus round={day} unlockTime={unlockTime} totalDays={getGuaranteedDays(tournament)} />
               </div>
               <div className="space-y-3">
                 {sectionMatches
@@ -2871,7 +2871,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             <div key={round} className="bg-gray-800 rounded-lg border border-gray-700 p-6">
               <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
                 <h2 className="text-xl font-bold">Round {round}</h2>
-                <RoundDayStatus round={round} unlockTime={unlockTime} />
+                <RoundDayStatus round={round} unlockTime={unlockTime} totalDays={getGuaranteedDays(tournament)} />
               </div>
               <div className="space-y-3">
                 {roundMatches
@@ -3104,12 +3104,33 @@ function RoundUnlockCountdown({ unlockTime }) {
 // `unlockTime` comes from the round's own matches (their unlockAt, set once
 // at creation) rather than a schedule computed from tournament start - a
 // round that hasn't been created yet has no unlockTime and simply isn't
-// shown, instead of guessing when it "should" arrive.
-function RoundDayStatus({ round, unlockTime }) {
+// shown, instead of guessing when it "should" arrive. A live day still knows
+// when the next one opens, though: days are chained 24h slots, so that's
+// just this day's unlockTime + 24h.
+function RoundDayStatus({ round, unlockTime, totalDays }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const isLive = unlockTime && now >= unlockTime;
+  const nextDayAt = unlockTime && unlockTime + ONE_DAY_MS;
+  const hasNextDay = totalDays && round < totalDays;
+
   return (
     <span className="text-sm text-gray-400">
       Day {round}
       {unlockTime && <> — <RoundUnlockCountdown unlockTime={unlockTime} /></>}
+      {isLive && hasNextDay && (
+        <>
+          {' · '}
+          {nextDayAt > now
+            ? <>Day {round + 1} unlocks in <span className="text-gray-300">{formatCountdown(nextDayAt - now)}</span></>
+            : `Day ${round + 1} unlocks once every match is decided`}
+        </>
+      )}
     </span>
   );
 }

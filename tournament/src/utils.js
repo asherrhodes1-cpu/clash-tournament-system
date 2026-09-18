@@ -100,6 +100,18 @@ export function estimateTournamentDays(playerCount, format) {
   return k;
 }
 
+// Days guaranteed to happen for a given bracket, so the UI only promises a
+// "next day" countdown when one really exists. Double elimination leaves
+// out the bracket-reset decider, which only happens if the losers-bracket
+// finalist wins grand final game one.
+export function getGuaranteedDays(tournament) {
+  if (tournament?.bracketSize) {
+    const k = Math.round(Math.log2(tournament.bracketSize));
+    return tournament.format === 'double_elimination' ? Math.max(2 * (k - 1), 1) + 1 : k;
+  }
+  return estimateTournamentDays(tournament?.players?.length, tournament?.format);
+}
+
 // A player is eliminated once their loss count reaches the format's
 // threshold - 1 loss ends you in single elimination, 2 in double elimination
 // (a losers-bracket drop from the winners bracket is only your first loss,

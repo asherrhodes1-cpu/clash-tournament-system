@@ -6,6 +6,7 @@ const { defineSecret, defineString } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
 const { dueReminders, discordTime } = require('./reminders');
+const { nextRoundUnlockAt } = require('./schedule');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -20,7 +21,6 @@ const DISCORD_PUBLIC_KEY = defineString('DISCORD_PUBLIC_KEY');
 const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
@@ -717,6 +717,7 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
 
     if (winners.length > 1) {
       const now = Date.now();
+      const roundUnlockAt = nextRoundUnlockAt(matches, now);
       const batch = db.batch();
       let matchIdx = 0;
       let i = 0;
@@ -733,7 +734,7 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
           player1Stats: tournament.playerStats?.[winners[i]] || null,
           player2Stats: tournament.playerStats?.[winners[i + 1]] || null,
           round: nextRound,
-          unlockAt: now + ONE_DAY_MS,
+          unlockAt: roundUnlockAt,
           status: 'pending',
           player1Ready: false,
           player2Ready: false,
@@ -760,7 +761,7 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
           player1Stats: tournament.playerStats?.[winners[i]] || null,
           player2Stats: null,
           round: nextRound,
-          unlockAt: now + ONE_DAY_MS,
+          unlockAt: roundUnlockAt,
           status: 'completed',
           winner: winners[i],
           completedAt: now,
@@ -901,15 +902,14 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
       .map((m) => (m.winner === m.player1 ? m.player2 : m.player1));
 
   // `day` is a cosmetic sequential label ("Day N") - it does NOT gate
-  // anything. Gating is `unlockAt`, always set to "right now" (this round's
-  // actual creation time) plus 24h, so every round gets a real, fixed 24h
-  // window regardless of how long the rounds before it took. A fixed
-  // schedule from tournament start (the old approach) drifts out of sync
-  // the moment any round runs long - the whole point of switching to this.
+  // anything. Gating is `unlockAt`: each day opens 24h after the latest one
+  // opened (see nextRoundUnlockAt), or straight away if the rounds before it
+  // overran, so every day is a real 24h window. Computed once per pass so
+  // every round created together opens together.
+  const unlockAt = nextRoundUnlockAt(matches);
   function createRound(bracket, round, players, day = round) {
     if (existsRound(bracket, round) || players.length === 0) return;
     const prefix = bracket === 'winners' ? 'wb' : bracket === 'losers' ? 'lb' : 'gf';
-    const unlockAt = Date.now() + ONE_DAY_MS;
     pairUpWithBye(players).forEach(([p1, p2], idx) => {
       const id = `${prefix}-r${round}-${idx}`;
       batch.set(matchDocRef(id), buildBracketMatchDoc({
