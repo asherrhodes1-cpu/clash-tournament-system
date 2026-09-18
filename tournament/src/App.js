@@ -3048,6 +3048,64 @@ function RoundDayStatus({ round, unlockTime }) {
   );
 }
 
+// Shared across every mounted card so the same player's tag is only ever
+// fetched once per session, no matter how many matches they appear in -
+// collapsed rounds don't mount their cards at all, so in practice this only
+// ever fetches for whichever round is actually expanded.
+const liveStatsCache = new Map();
+const liveStatsInFlight = new Map();
+
+function useLiveClashStats(tag) {
+  const [stats, setStats] = useState(() => (tag ? liveStatsCache.get(tag) : undefined));
+
+  useEffect(() => {
+    if (!tag || tag === 'BYE') {
+      setStats(undefined);
+      return;
+    }
+    if (liveStatsCache.has(tag)) {
+      setStats(liveStatsCache.get(tag));
+      return;
+    }
+    let cancelled = false;
+    const promise = liveStatsInFlight.get(tag) || fetchClashPlayerData(tag).then((data) => {
+      liveStatsCache.set(tag, data);
+      liveStatsInFlight.delete(tag);
+      return data;
+    });
+    liveStatsInFlight.set(tag, promise);
+    promise.then((data) => { if (!cancelled) setStats(data); });
+    return () => { cancelled = true; };
+  }, [tag]);
+
+  return stats;
+}
+
+// Global live rank isn't something Supercell's API exposes (only a
+// per-country leaderboard, and only an all-time best-season rank) - best
+// season rank is the closest real substitute for "how good is this player,
+// globally", so that's what shows here instead of a live global rank.
+function PlayerStatStrip({ tag }) {
+  const stats = useLiveClashStats(tag);
+  if (!tag || tag === 'BYE') return null;
+  if (!stats) return null;
+
+  return (
+    <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+      <div>🏆 {stats.builderBaseTrophies}{stats.builderBaseLeague ? ` · ${stats.builderBaseLeague}` : ''}</div>
+      {stats.clanName && (
+        <div className="flex items-center gap-1">
+          {stats.clanBadgeUrl && <img src={stats.clanBadgeUrl} alt="" className="w-4 h-4" />}
+          <span>{stats.clanName}</span>
+        </div>
+      )}
+      {stats.bestSeasonRank != null && (
+        <div>🌍 Best Season: #{stats.bestSeasonRank}{stats.bestSeasonId ? ` (${stats.bestSeasonId})` : ''}</div>
+      )}
+    </div>
+  );
+}
+
 function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFlagMatch, onViewProfile, onResolveDispute }) {
   const userIsPlayer = match.player1 === user.username || match.player2 === user.username;
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
@@ -3104,6 +3162,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             </button>
             <div className={`text-xs ${isPlayer1Winner ? 'text-amber-300/70' : 'text-gray-400'}`}>{match.player1Tag}</div>
             {match.player1Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
+            <PlayerStatStrip tag={match.player1Tag} />
           </div>
           <span className="text-gray-400">vs</span>
           <div className={isPlayer2Winner ? 'bg-amber-400/10 border border-amber-400/40 rounded px-2 py-1' : isPlayer1Winner ? 'opacity-60' : ''}>
@@ -3112,6 +3171,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             </button>
             <div className={`text-xs ${isPlayer2Winner ? 'text-amber-300/70' : 'text-gray-400'}`}>{match.player2Tag}</div>
             {match.player2Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
+            <PlayerStatStrip tag={match.player2Tag} />
           </div>
           {getStatusIcon(match.status)}
         </div>
@@ -3255,6 +3315,32 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   );
 }
 
+function MatchDetailPlayerCard({ name, tag, stats, ready, readyTime, vote, isWinner, isPending, onViewProfile }) {
+  return (
+    <div className="flex-1 bg-gray-700 rounded p-4">
+      <button
+        onClick={() => onViewProfile(name)}
+        className="font-bold text-lg hover:underline text-left disabled:no-underline disabled:cursor-default"
+        disabled={name === 'BYE'}
+      >
+        {isWinner && '🏆 '}
+        {name || 'TBD'}
+      </button>
+      {tag && <div className="text-xs text-gray-400 mt-1">{tag}</div>}
+      {stats?.bestBuilderBaseTrophies != null && (
+        <div className="text-xs text-gray-400">🏆 {stats.bestBuilderBaseTrophies} trophies</div>
+      )}
+      <PlayerStatStrip tag={tag} />
+      {isPending && (
+        <div className={`text-xs mt-2 ${ready ? 'text-white' : 'text-gray-400'}`}>
+          {ready ? `✓ Ready${readyTime ? ` at ${new Date(readyTime).toLocaleString()}` : ''}` : 'Not ready yet'}
+        </div>
+      )}
+      {vote && <div className="text-xs mt-2 text-white">Voted: {vote}</div>}
+    </div>
+  );
+}
+
 // A spectator-friendly overview of a single match - readable by anyone
 // (unlike MatchPage, which is the participant-only coordinate/report flow),
 // so people can check on any match's status, timing, and proof without
@@ -3291,26 +3377,17 @@ function MatchDetailModal({ match, tournament, onClose, onViewProfile }) {
   };
 
   const renderPlayer = (name, tag, stats, ready, readyTime, vote) => (
-    <div className="flex-1 bg-gray-700 rounded p-4">
-      <button
-        onClick={() => onViewProfile(name)}
-        className="font-bold text-lg hover:underline text-left disabled:no-underline disabled:cursor-default"
-        disabled={name === 'BYE'}
-      >
-        {match.status === 'completed' && match.winner === name && '🏆 '}
-        {name || 'TBD'}
-      </button>
-      {tag && <div className="text-xs text-gray-400 mt-1">{tag}</div>}
-      {stats?.bestBuilderBaseTrophies != null && (
-        <div className="text-xs text-gray-400">🏆 {stats.bestBuilderBaseTrophies} trophies</div>
-      )}
-      {match.status === 'pending' && (
-        <div className={`text-xs mt-2 ${ready ? 'text-white' : 'text-gray-400'}`}>
-          {ready ? `✓ Ready${readyTime ? ` at ${new Date(readyTime).toLocaleString()}` : ''}` : 'Not ready yet'}
-        </div>
-      )}
-      {vote && <div className="text-xs mt-2 text-white">Voted: {vote}</div>}
-    </div>
+    <MatchDetailPlayerCard
+      name={name}
+      tag={tag}
+      stats={stats}
+      ready={ready}
+      readyTime={readyTime}
+      vote={vote}
+      isWinner={match.status === 'completed' && match.winner === name}
+      isPending={match.status === 'pending'}
+      onViewProfile={onViewProfile}
+    />
   );
 
   return (
