@@ -25,6 +25,8 @@ body {
 
 h1, h2, h3, .font-display {
   font-family: 'Clash Regular', 'Plus Jakarta Sans', sans-serif;
+  -webkit-text-stroke: 1px black;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
 }
 
 code {

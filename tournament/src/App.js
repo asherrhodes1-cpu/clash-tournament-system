@@ -1195,10 +1195,10 @@ function LoginPage() {
     return (
       <div className="max-w-md mx-auto mt-20">
         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
-          <h1 className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-3">
+          <div className="text-3xl font-bold mb-8 text-center flex items-center justify-center gap-3">
             <Trophy className="w-10 h-10 text-white" />
             Create Account
-          </h1>
+          </div>
 
           {error && (
             <div className="mb-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm">
