@@ -409,6 +409,10 @@ export async function reportMatch(tournamentId, matchId, username, selectedWinne
   });
 }
 
+// Also doubles as staff's general-purpose "force a winner" override - not
+// just for disputes/timeouts, but any still-open match, so a clog like a
+// pile of players who never readied up doesn't need to wait on the
+// automated timeout/grace machinery to get unstuck.
 export async function resolveDispute(tournamentId, matchId, winner, resolvedByUsername) {
   await runTransaction(db, async (tx) => {
     const ref = matchRef(tournamentId, matchId);
@@ -416,7 +420,7 @@ export async function resolveDispute(tournamentId, matchId, winner, resolvedByUs
     if (!snap.exists()) return;
     const m = snap.data();
 
-    if (!['disputed', 'needs_staff_review'].includes(m.status)) {
+    if (m.status === 'completed') {
       throw new Error('This match was already resolved.');
     }
 
@@ -424,6 +428,7 @@ export async function resolveDispute(tournamentId, matchId, winner, resolvedByUs
       status: 'completed',
       winner,
       resolvedBy: resolvedByUsername,
+      resolvedReason: 'staff_override',
       completedAt: Date.now(),
     });
   });

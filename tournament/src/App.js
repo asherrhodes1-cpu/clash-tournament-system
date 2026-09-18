@@ -2573,6 +2573,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                     onPlayerReady={() => onPlayerReady(match.id)}
                     onFlagMatch={() => onFlagMatch(match.id)}
                     onViewProfile={onViewProfile}
+                    onResolveDispute={onResolveDispute}
                   />
                 ))}
             </div>
@@ -2601,6 +2602,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                     onPlayerReady={() => onPlayerReady(match.id)}
                     onFlagMatch={() => onFlagMatch(match.id)}
                     onViewProfile={onViewProfile}
+                    onResolveDispute={onResolveDispute}
                   />
                 ))}
             </div>
@@ -2784,13 +2786,20 @@ function RoundDayStatus({ round, unlockTime }) {
   );
 }
 
-function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFlagMatch, onViewProfile }) {
+function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFlagMatch, onViewProfile, onResolveDispute }) {
   const userIsPlayer = match.player1 === user.username || match.player2 === user.username;
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
   const userReady = match.player1 === user.username ? match.player1Ready : match.player2Ready;
   const timeDisplay = getTimeRemainingDisplay(match.scheduledStartTime);
   const unlockTime = match.unlockAt ?? getRoundUnlockTime(tournament, match.day ?? match.round);
   const roundLocked = unlockTime && Date.now() < unlockTime;
+  const [forcingWinner, setForcingWinner] = useState(false);
+
+  const handleForceWinner = (winner) => {
+    if (!window.confirm(`Force ${winner} as the winner of this match? This immediately completes it.`)) return;
+    onResolveDispute(match.id, winner);
+    setForcingWinner(false);
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -2855,11 +2864,14 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           )}
           {match.status === 'completed' && match.resolvedReason === 'mutual_no_show' ? (
             <p className="text-white">⚠️ Both players disqualified — neither reported a result</p>
+          ) : match.status === 'completed' && match.resolvedReason === 'grace_period' ? (
+            <p className="text-white">🕊️ Neither player reported — both advance under a one-time grace period</p>
           ) : match.status === 'completed' && (
             <p>
               Winner: <span className="text-white font-bold">{match.winner}</span>
               {match.resolvedReason === 'opponent_timeout' && <span className="text-gray-400"> (opponent unresponsive)</span>}
               {match.resolvedReason === 'opponent_no_show' && <span className="text-gray-400"> (opponent never readied up)</span>}
+              {match.resolvedReason === 'staff_override' && <span className="text-gray-400"> (set by staff)</span>}
             </p>
           )}
           {match.status === 'disputed' && (
@@ -2930,6 +2942,39 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           >
             🚩 Flag
           </button>
+        )}
+        {user.isStaff && match.status !== 'completed' && match.player2 !== 'BYE' && (
+          forcingWinner ? (
+            <div className="flex gap-2 items-center flex-wrap">
+              <span className="text-xs text-gray-400">Force winner:</span>
+              <button
+                onClick={() => handleForceWinner(match.player1)}
+                className="text-xs border border-white text-white hover:bg-white hover:text-black px-2 py-1 rounded transition"
+              >
+                {match.player1}
+              </button>
+              <button
+                onClick={() => handleForceWinner(match.player2)}
+                className="text-xs border border-white text-white hover:bg-white hover:text-black px-2 py-1 rounded transition"
+              >
+                {match.player2}
+              </button>
+              <button
+                onClick={() => setForcingWinner(false)}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setForcingWinner(true)}
+              className="border border-neutral-600 text-neutral-400 hover:border-white hover:text-white px-3 py-2 rounded text-sm transition"
+              title="Manually pick a winner, bypassing ready-up/reporting"
+            >
+              ⚙️ Force Winner
+            </button>
+          )
         )}
       </div>
     </div>
@@ -3291,6 +3336,9 @@ function DisputeReview({ matches, onResolveDispute }) {
                 </p>
                 <p className="text-sm text-neutral-300 mb-2">
                   🕐 No results reported within 16 hours
+                  {match.resolvedReason === 'no_report_timeout_repeat' && (
+                    <span className="text-white font-bold"> — repeat offense, already used their grace period</span>
+                  )}
                 </p>
                 <p className="text-xs text-gray-300 mb-3">
                   Timed out: {new Date(match.timeoutAt).toLocaleString()}

@@ -17,7 +17,6 @@ const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const TERMINAL_STATUSES = ['completed', 'disputed', 'needs_staff_review'];
 
 async function postToDiscord(webhookUrl, content) {
   try {
@@ -317,7 +316,7 @@ exports.advanceTournaments = onSchedule('every 5 minutes', async () => {
     const matchesSnap = await tournamentDoc.ref.collection('matches').get();
     const matches = matchesSnap.docs.map((d) => d.data());
 
-    await handleTimeouts(tournamentDoc.ref, matches);
+    await handleTimeouts(tournamentDoc.ref, tournament, matches);
     if (tournament.format === 'double_elimination') {
       await handleDoubleEliminationAdvancement(tournamentDoc.ref, tournament, matches);
     } else {
@@ -404,7 +403,7 @@ async function lookupPlayerStats(usernames) {
   return stats;
 }
 
-function newMatchDoc({ id, tournamentId, player1, player2, round, bracket, playerStats, now }) {
+function newMatchDoc({ id, tournamentId, player1, player2, round, bracket, playerStats, now, unlockAt = now }) {
   const isBye = player2 === 'BYE';
   return {
     id,
@@ -416,7 +415,7 @@ function newMatchDoc({ id, tournamentId, player1, player2, round, bracket, playe
     player1Stats: playerStats[player1] || null,
     player2Stats: playerStats[player2] || null,
     round,
-    unlockAt: now,
+    unlockAt,
     ...(bracket ? { bracket } : {}),
     status: isBye ? 'completed' : 'pending',
     winner: isBye ? player1 : null,
@@ -475,11 +474,13 @@ async function autoStartTournament(tournamentRef, tournament) {
   await batch.commit();
 }
 
-async function handleTimeouts(tournamentRef, matches) {
+async function handleTimeouts(tournamentRef, tournament, matches) {
   const now = Date.now();
   const batch = db.batch();
   let hasWrites = false;
   const disqualified = [];
+  const newlyGraced = [];
+  const gracedPlayers = tournament.gracedPlayers || [];
 
   for (const m of matches) {
     const matchRef = tournamentRef.collection('matches').doc(m.id);
@@ -513,19 +514,30 @@ async function handleTimeouts(tournamentRef, matches) {
     const player2Reported = !!m.winner2Vote;
 
     if (!player1Reported && !player2Reported) {
-      // Both readied up but neither ever reported a result - disqualify
-      // both rather than stalling the bracket on a staff review that might
-      // never come. The match ends with no winner, so round-advancement's
-      // existing winner-filtering (already built to skip removed players)
-      // just routes around this match like it would a bye.
-      batch.update(matchRef, {
-        status: 'completed',
-        winner: null,
-        autoResolvedAt: now,
-        resolvedReason: 'mutual_no_show',
-        completedAt: now,
-      });
-      disqualified.push(m.player1, m.player2);
+      // Both readied up but neither ever reported a result. First time this
+      // happens to either of them in this tournament, give them a one-day
+      // grace: both advance (no winner, but neither is eliminated either -
+      // handleRoundAdvancement/handleDoubleEliminationAdvancement treat a
+      // grace_period match as producing BOTH players as advancers instead
+      // of the usual one). If either has already used their grace, staff
+      // has to sort it out instead of it repeating indefinitely.
+      const alreadyGraced = gracedPlayers.includes(m.player1) || gracedPlayers.includes(m.player2);
+      if (alreadyGraced) {
+        batch.update(matchRef, {
+          status: 'needs_staff_review',
+          timeoutAt: now,
+          resolvedReason: 'no_report_timeout_repeat',
+        });
+      } else {
+        batch.update(matchRef, {
+          status: 'completed',
+          winner: null,
+          autoResolvedAt: now,
+          resolvedReason: 'grace_period',
+          completedAt: now,
+        });
+        newlyGraced.push(m.player1, m.player2);
+      }
       hasWrites = true;
     } else if (player1Reported !== player2Reported) {
       const winner = player1Reported ? m.winner1Vote : m.winner2Vote;
@@ -540,12 +552,18 @@ async function handleTimeouts(tournamentRef, matches) {
     }
   }
 
-  if (disqualified.length > 0) {
-    const uniqueDisqualified = [...new Set(disqualified)];
-    batch.update(tournamentRef, {
-      players: admin.firestore.FieldValue.arrayRemove(...uniqueDisqualified),
-      removedPlayers: admin.firestore.FieldValue.arrayUnion(...uniqueDisqualified),
-    });
+  // Combined into one update - a batch can only hold one write per document.
+  if (disqualified.length > 0 || newlyGraced.length > 0) {
+    const tournamentUpdate = {};
+    if (disqualified.length > 0) {
+      const uniqueDisqualified = [...new Set(disqualified)];
+      tournamentUpdate.players = admin.firestore.FieldValue.arrayRemove(...uniqueDisqualified);
+      tournamentUpdate.removedPlayers = admin.firestore.FieldValue.arrayUnion(...uniqueDisqualified);
+    }
+    if (newlyGraced.length > 0) {
+      tournamentUpdate.gracedPlayers = admin.firestore.FieldValue.arrayUnion(...new Set(newlyGraced));
+    }
+    batch.update(tournamentRef, tournamentUpdate);
   }
 
   if (hasWrites) await batch.commit();
@@ -582,16 +600,24 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
     if (round >= 10) continue;
 
     const roundMatches = matches.filter((m) => m.round === round);
-    const allComplete = roundMatches.every((m) => TERMINAL_STATUSES.includes(m.status));
-    if (!allComplete) continue;
+    // 'disputed'/'needs_staff_review' are terminal in the sense that no
+    // more player action is expected, but they don't have a real winner
+    // yet - advancing (or crowning a champion) while one is still open
+    // would silently ignore it and could end the tournament on a false
+    // champion the moment every OTHER match in the round is done.
+    const allDecided = roundMatches.every((m) => m.status === 'completed');
+    if (!allDecided) continue;
 
     const nextRound = round + 1;
     const alreadyHasNextRound = matches.some((m) => m.round === nextRound);
     if (alreadyHasNextRound) continue;
 
+    // A grace_period match (see handleTimeouts) has no winner but both
+    // players still advance, unlike every other resolution which produces
+    // exactly one.
     const winners = roundMatches
       .filter((m) => m.status === 'completed')
-      .map((m) => m.winner)
+      .flatMap((m) => (m.resolvedReason === 'grace_period' ? [m.player1, m.player2] : [m.winner]))
       .filter((w) => w && !(tournament.removedPlayers || []).includes(w));
 
     if (winners.length === 1) {
@@ -764,12 +790,22 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
   const matchDocRef = (id) => tournamentRef.collection('matches').doc(id);
   const roundMatches = (bracket, round) => matches.filter((m) => m.bracket === bracket && m.round === round);
   const existsRound = (bracket, round) => roundMatches(bracket, round).length > 0;
+  // 'disputed'/'needs_staff_review' are terminal in the sense that no more
+  // player action is expected, but they don't have a real winner yet -
+  // treating a round as ready to advance while one is still open would
+  // silently ignore it (and, worse, could crown a false champion the
+  // moment every OTHER match in the round happens to be decided).
   const roundComplete = (bracket, round) => {
     const rm = roundMatches(bracket, round);
-    return rm.length > 0 && rm.every((m) => TERMINAL_STATUSES.includes(m.status));
+    return rm.length > 0 && rm.every((m) => m.status === 'completed');
   };
+  // A grace_period match (see handleTimeouts) has no winner but both
+  // players still advance, unlike every other resolution which produces
+  // exactly one.
   const winnersOf = (bracket, round) =>
-    roundMatches(bracket, round).filter((m) => m.status === 'completed' && m.winner).map((m) => m.winner);
+    roundMatches(bracket, round)
+      .filter((m) => m.status === 'completed' && (m.winner || m.resolvedReason === 'grace_period'))
+      .flatMap((m) => (m.resolvedReason === 'grace_period' ? [m.player1, m.player2] : [m.winner]));
   const realLosersOf = (bracket, round) =>
     roundMatches(bracket, round)
       .filter((m) => m.status === 'completed' && m.winner && m.player1 !== 'BYE' && m.player2 !== 'BYE')
