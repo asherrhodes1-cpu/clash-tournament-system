@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle, ZoomIn, ZoomOut } from 'lucide-react';
 import { signUp, logIn, logOut, subscribeToAuthState, adminResetPassword } from './api/auth';
 import {
   subscribeToTournaments,
@@ -3024,17 +3024,40 @@ function BracketMatchBox({ match, placeholder }) {
 // pass every round the bracket will have plus how many matches a not-yet-
 // created round should show, and the rest of the bracket is drawn as empty
 // TBD placeholders instead of only ever showing what exists so far.
-function BracketColumns({ matches, rounds, labelForRound, totalRounds, expectedMatchCount }) {
+//
+// `zoom` scales the columns (CSS zoom, so the scroll width follows it), and
+// whenever the focused day or the zoom changes the enclosing
+// [data-bracket-scroll] box scrolls that day's column to the left edge - the
+// bracket follows the tournament instead of leaving the current day
+// off-screen at the far end of a wide row.
+function BracketColumns({ matches, rounds, labelForRound, totalRounds, expectedMatchCount, focusRound, focusNonce, zoom = 1 }) {
   const maxRound = totalRounds ?? (rounds.length ? Math.max(...rounds) : 0);
+  const innerRef = useRef(null);
+
+  // The focused day may not exist in this section (a short losers bracket,
+  // say), so land on the nearest round it does have.
+  const target = focusRound == null || !rounds.length
+    ? null
+    : rounds.reduce((best, r) => (Math.abs(r - focusRound) < Math.abs(best - focusRound) ? r : best), rounds[0]);
+
+  useEffect(() => {
+    const inner = innerRef.current;
+    const scroller = inner?.closest('[data-bracket-scroll]');
+    const col = target != null && inner?.querySelector(`[data-round="${target}"]`);
+    if (!scroller || !col) return;
+    const delta = col.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
+    // 24 = the box's own left padding, so the column lines up with the title.
+    scroller.scrollTo({ left: scroller.scrollLeft + delta - 24, behavior: 'smooth' });
+  }, [target, zoom, focusNonce]);
 
   return (
-    <div className="flex gap-8 min-w-max pb-2">
+    <div ref={innerRef} className="flex gap-8 min-w-max pb-2" style={{ zoom }}>
       {rounds.map(round => {
         const roundMatches = matches.filter(m => m.round === round);
         const placeholders = roundMatches.length === 0 ? (expectedMatchCount?.(round) ?? 0) : 0;
         return (
-          <div key={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
-            <h3 className="text-center font-bold text-gray-400 mb-2">
+          <div key={round} data-round={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
+            <h3 className={`text-center font-bold mb-2 ${round === target ? 'text-amber-300' : 'text-gray-400'}`}>
               {labelForRound ? labelForRound(round, maxRound) : (round === maxRound ? `Day ${round} · Final` : `Day ${round}`)}
             </h3>
             {roundMatches.map(match => <BracketMatchBox key={match.id} match={match} />)}
@@ -3064,7 +3087,48 @@ function singleElimExpectedCount(matches, round) {
 
 const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
 
+const BRACKET_ZOOM_DEFAULT = 1.25;
+const BRACKET_ZOOM_MIN = 0.4;
+const BRACKET_ZOOM_MAX = 2;
+
 function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
+  const [zoom, setZoom] = useState(BRACKET_ZOOM_DEFAULT);
+  const [focusNonce, setFocusNonce] = useState(0);
+  const rootRef = useRef(null);
+
+  // The current day is the earliest one that still has an undecided match,
+  // or the last day once everything is done.
+  const dayOf = (m) => m.day ?? m.round;
+  const undecided = matches.filter((m) => m.status !== 'completed');
+  const currentDay = undecided.length
+    ? Math.min(...undecided.map(dayOf))
+    : Math.max(1, ...matches.map(dayOf));
+
+  const clampZoom = (z) => Math.min(BRACKET_ZOOM_MAX, Math.max(BRACKET_ZOOM_MIN, z));
+  const stepZoom = (delta) => setZoom((z) => clampZoom(Math.round((z + delta) * 100) / 100));
+  const resetToCurrentDay = () => { setZoom(BRACKET_ZOOM_DEFAULT); setFocusNonce((n) => n + 1); };
+  // Shrinks until the widest section fits its box, never zooming in past 100%.
+  const fitWholeBracket = () => {
+    const scrollers = rootRef.current?.querySelectorAll('[data-bracket-scroll]') || [];
+    let fit = 1;
+    scrollers.forEach((el) => {
+      // scrollWidth/clientWidth include the box's 24px side padding on each side.
+      const contentWidth = el.scrollWidth - 48;
+      if (contentWidth > 0) fit = Math.min(fit, zoom * ((el.clientWidth - 48) / contentWidth));
+    });
+    setZoom(clampZoom(Math.floor(fit * 100) / 100));
+  };
+
+  const controls = (
+    <div className="flex items-center gap-2 flex-wrap text-sm">
+      <button onClick={() => stepZoom(-0.25)} className="border border-gray-600 hover:border-white rounded w-8 h-8 flex items-center justify-center transition" aria-label="Zoom out"><ZoomOut className="w-4 h-4" /></button>
+      <span className="text-gray-300 w-12 text-center">{Math.round(zoom * 100)}%</span>
+      <button onClick={() => stepZoom(0.25)} className="border border-gray-600 hover:border-white rounded w-8 h-8 flex items-center justify-center transition" aria-label="Zoom in"><ZoomIn className="w-4 h-4" /></button>
+      <button onClick={fitWholeBracket} className="border border-gray-600 hover:border-white rounded px-3 h-8 transition">Fit whole bracket</button>
+      <button onClick={resetToCurrentDay} className="border border-amber-400 text-amber-300 rounded px-3 h-8 transition">Current day</button>
+    </div>
+  );
+
   if (isDoubleElim) {
     const size = bracketSize || 2;
     const k = Math.round(Math.log2(size));
@@ -3081,32 +3145,40 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
     const gfRounds = [...new Set([1, ...gfMatches.map(m => m.round)])].sort((a, b) => a - b);
 
     return (
-      <div className="space-y-6">
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+      <div ref={rootRef} className="space-y-6">
+        {controls}
+        <div data-bracket-scroll className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
           <h3 className="font-bold mb-4">Winners Bracket</h3>
           <BracketColumns
             matches={wbMatches}
             rounds={range(k)}
             expectedMatchCount={(r) => size / 2 ** r}
             labelForRound={(r) => (r === k ? `Day ${r} · Winners Final` : `Day ${r}`)}
+            focusRound={currentDay}
+            focusNonce={focusNonce}
+            zoom={zoom}
           />
         </div>
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+        <div data-bracket-scroll className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
           <h3 className="font-bold mb-4">Losers Bracket</h3>
           <BracketColumns
             matches={lbMatches}
             rounds={range(totalLbRounds)}
             expectedMatchCount={lbExpected}
             labelForRound={(r) => (r === totalLbRounds ? `Day ${r} · Losers Final` : `Day ${r}`)}
+            focusRound={currentDay}
+            focusNonce={focusNonce}
+            zoom={zoom}
           />
         </div>
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+        <div data-bracket-scroll className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
           <h3 className="font-bold mb-4">Grand Final</h3>
           <BracketColumns
             matches={gfMatches}
             rounds={gfRounds}
             expectedMatchCount={() => 1}
             labelForRound={(r) => (r === 1 ? 'Game 1' : 'Bracket Reset')}
+            zoom={zoom}
           />
         </div>
       </div>
@@ -3115,13 +3187,19 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
 
   const totalRounds = singleElimTotalRounds(matches);
   return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
-      <BracketColumns
-        matches={matches}
-        rounds={totalRounds ? range(totalRounds) : rounds}
-        totalRounds={totalRounds}
-        expectedMatchCount={(r) => singleElimExpectedCount(matches, r)}
-      />
+    <div ref={rootRef} className="space-y-4">
+      {controls}
+      <div data-bracket-scroll className="bg-gray-800 rounded-lg border border-gray-700 p-6 overflow-x-auto">
+        <BracketColumns
+          matches={matches}
+          rounds={totalRounds ? range(totalRounds) : rounds}
+          totalRounds={totalRounds}
+          expectedMatchCount={(r) => singleElimExpectedCount(matches, r)}
+          focusRound={currentDay}
+          focusNonce={focusNonce}
+          zoom={zoom}
+        />
+      </div>
     </div>
   );
 }
