@@ -8,6 +8,7 @@ const admin = require('firebase-admin');
 const { dueReminders, discordTime } = require('./reminders');
 const { nextRoundUnlockAt } = require('./schedule');
 const { newOpponentMessage, chatMessage } = require('./messages');
+const { addGuildRole } = require('./roles');
 const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
 
 admin.initializeApp();
@@ -1110,21 +1111,21 @@ async function redeemLinkCode(rawCode, discordId) {
     const snap = await tx.get(codeRef);
     if (!snap.exists) {
       logger.info('link redeem: code not found', { code });
-      return 'That code isn\'t valid. Get a fresh one from your profile in the app.';
+      return { linked: false, message: 'That code isn\'t valid. Get a fresh one from your profile in the app.' };
     }
     const { uid, expiresAt } = snap.data();
     tx.delete(codeRef);
     if (Date.now() > expiresAt) {
       logger.info('link redeem: code expired', { code, uid });
-      return 'That code has expired. Get a fresh one from your profile in the app.';
+      return { linked: false, message: 'That code has expired. Get a fresh one from your profile in the app.' };
     }
     tx.update(db.collection('users').doc(uid), { discordId: discordId });
     logger.info('link redeem: linked', { uid, discordId });
-    return '✅ Linked! You\'ll now get your match reminders and chat messages here by DM.';
+    return { linked: true, message: '✅ Linked! You\'ll now get your match reminders and chat messages here by DM.' };
   });
 }
 
-exports.discordInteractions = onRequest(async (req, res) => {
+exports.discordInteractions = onRequest({ secrets: [DISCORD_BOT_TOKEN] }, async (req, res) => {
   if (req.method !== 'POST' || !verifyDiscordSignature(req)) {
     res.status(401).send('invalid request signature');
     return;
@@ -1140,7 +1141,19 @@ exports.discordInteractions = onRequest(async (req, res) => {
     const discordId = interaction.member?.user?.id || interaction.user?.id;
     const codeOption = interaction.data.options?.find((o) => o.name === 'code');
     try {
-      res.json(ephemeralReply(await redeemLinkCode(codeOption?.value, discordId)));
+      const { linked, message } = await redeemLinkCode(codeOption?.value, discordId);
+      let reply = message;
+      // Optional: give linked players a role in the server they linked from.
+      // A failure here (missing permission, bad role id) must not undo or hide
+      // the link itself, so it's only logged. Read from the environment, not a
+      // deploy param, so a deploy never stops to ask for it.
+      const roleId = process.env.DISCORD_LINKED_ROLE_ID;
+      if (linked && roleId) {
+        const role = await addGuildRole({ token: DISCORD_BOT_TOKEN.value(), guildId: interaction.guild_id, userId: discordId, roleId });
+        if (role.ok) reply += `\n🏅 You've been given the <@&${roleId}> role.`;
+        else logger.warn('link role failed', { discordId, guildId: interaction.guild_id, ...role });
+      }
+      res.json(ephemeralReply(reply));
     } catch (err) {
       logger.error('link redeem failed', err);
       res.json(ephemeralReply('Something went wrong linking your account. Try again in a moment.'));
