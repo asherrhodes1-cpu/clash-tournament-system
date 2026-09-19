@@ -1143,11 +1143,18 @@ async function redeemLinkCode(rawCode, discordId) {
   const codeRef = db.collection('discordLinkCodes').doc(code || '_');
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(codeRef);
-    if (!snap.exists) return 'That code isn\'t valid. Get a fresh one from your profile in the app.';
+    if (!snap.exists) {
+      logger.info('link redeem: code not found', { code });
+      return 'That code isn\'t valid. Get a fresh one from your profile in the app.';
+    }
     const { uid, expiresAt } = snap.data();
     tx.delete(codeRef);
-    if (Date.now() > expiresAt) return 'That code has expired. Get a fresh one from your profile in the app.';
+    if (Date.now() > expiresAt) {
+      logger.info('link redeem: code expired', { code, uid });
+      return 'That code has expired. Get a fresh one from your profile in the app.';
+    }
     tx.update(db.collection('users').doc(uid), { discordId: discordId });
+    logger.info('link redeem: linked', { uid, discordId });
     return '✅ Linked! You\'ll now get your match reminders and chat messages here by DM.';
   });
 }
