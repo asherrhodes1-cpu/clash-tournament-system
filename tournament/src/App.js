@@ -239,9 +239,25 @@ function TournamentWalkthroughModal({ onClose }) {
 // signup form itself - this is the first moment it's possible. Skipping is
 // allowed but has to be confirmed, since without Discord a player gets no
 // reminders and can miss the window to play their match.
-const DISCORD_INVITE_URL = process.env.REACT_APP_DISCORD_INVITE_URL;
+const DISCORD_INVITE_URL = process.env.REACT_APP_DISCORD_INVITE_URL || 'https://discord.gg/VXktVUdZS3';
 
-function DiscordSetupModal({ user, onClose }) {
+// Discord's own blurple, so it reads as "the Discord button" at a glance and
+// stands out from the site's gold/white buttons.
+function JoinDiscordButton({ className = '', children = 'Join our Discord' }) {
+  return (
+    <a
+      href={DISCORD_INVITE_URL}
+      target="_blank"
+      rel="noreferrer"
+      className={`inline-flex items-center justify-center gap-1.5 bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold rounded transition whitespace-nowrap ${className}`}
+    >
+      <MessageCircle className="w-4 h-4" />
+      {children}
+    </a>
+  );
+}
+
+function DiscordSetupModal({ user, onClose, joining = false, onCancel }) {
   const [linkCode, setLinkCode] = useState(null);
   const [loadingCode, setLoadingCode] = useState(true);
   const [codeError, setCodeError] = useState('');
@@ -278,7 +294,7 @@ function DiscordSetupModal({ user, onClose }) {
               onClick={onClose}
               className="w-full bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold py-2 px-4 rounded transition"
             >
-              Continue
+              {joining ? 'Continue and join' : 'Continue'}
             </button>
           </>
         ) : confirmingSkip ? (
@@ -306,17 +322,16 @@ function DiscordSetupModal({ user, onClose }) {
           <>
             <h2 className="text-2xl font-bold mb-1">💬 Connect Discord</h2>
             <p className="text-gray-300 text-sm mb-4">
-              Get a DM when your match opens and before you'd run out of time, so you never miss an attack.
+              {joining
+                ? 'Before you join, link Discord so the bot can DM you when your matches open and before you\'d run out of time.'
+                : 'Get a DM when your match opens and before you\'d run out of time, so you never miss an attack.'}
             </p>
             <ol className="text-sm text-gray-300 space-y-3 mb-5 list-decimal list-inside">
               <li>
                 Join our Discord server.
-                {DISCORD_INVITE_URL && (
-                  <>
-                    {' '}
-                    <a href={DISCORD_INVITE_URL} target="_blank" rel="noreferrer" className="text-amber-300 underline">Open invite</a>
-                  </>
-                )}
+                <div className="mt-2">
+                  <JoinDiscordButton className="px-4 py-2" />
+                </div>
               </li>
               <li>
                 Run this in any channel:
@@ -336,8 +351,13 @@ function DiscordSetupModal({ user, onClose }) {
               onClick={() => setConfirmingSkip(true)}
               className="w-full border border-gray-600 hover:border-white py-2 px-4 rounded transition"
             >
-              Skip for now
+              {joining ? 'Skip and join anyway' : 'Skip for now'}
             </button>
+            {joining && onCancel && (
+              <button onClick={onCancel} className="w-full mt-2 text-sm text-gray-400 hover:text-white underline">
+                Cancel, don't join
+              </button>
+            )}
           </>
         )}
       </div>
@@ -718,6 +738,7 @@ export default function TournamentApp() {
   const [flagModalOpen, setFlagModalOpen] = useState(false);
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [showDiscordSetup, setShowDiscordSetup] = useState(false);
+  const [pendingJoinId, setPendingJoinId] = useState(null);
   const [flagRelatedMatch, setFlagRelatedMatch] = useState(null);
 
   // The nav menu is a dropdown, so it closes on an outside click or Escape.
@@ -844,7 +865,7 @@ export default function TournamentApp() {
     await updateTournamentSignupDeadline(tournamentId, deadline);
   };
 
-  const handleJoinTournament = async (tournamentId) => {
+  const joinNow = async (tournamentId) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
     try {
@@ -853,6 +874,16 @@ export default function TournamentApp() {
     } catch (err) {
       alert(err.message);
     }
+  };
+
+  // A player without Discord linked gets no match reminders, so joining
+  // starts with the Discord prompt (link it, or skip and join anyway).
+  const handleJoinTournament = async (tournamentId) => {
+    if (!currentUser.discordId) {
+      setPendingJoinId(tournamentId);
+      return;
+    }
+    await joinNow(tournamentId);
   };
 
   const handleDeleteTournament = async (tournamentId) => {
@@ -947,7 +978,7 @@ export default function TournamentApp() {
                 </span>
               </div>
 
-              <div className={`${currentUser.isStaff ? 'hidden xl:flex' : 'hidden lg:flex'} items-center gap-4 text-sm whitespace-nowrap`}>
+              <div className={`${currentUser.isStaff ? 'hidden xl:flex' : 'hidden lg:flex'} items-center gap-3 text-sm whitespace-nowrap`}>
                 <button
                   onClick={() => setCurrentPage('dashboard')}
                   className="hover:text-neutral-300 transition"
@@ -982,10 +1013,11 @@ export default function TournamentApp() {
                     Staff Dashboard
                   </button>
                 )}
-                <div className="text-sm text-gray-400">
-                  <div>
-                    {currentUser.username}
-                    {currentUser.isStaff && <span className="ml-2 text-white font-bold">[STAFF]</span>}
+                <JoinDiscordButton className="px-2.5 py-1.5">Discord</JoinDiscordButton>
+                <div className="text-sm text-gray-400 max-w-[11rem]">
+                  <div className="flex items-baseline gap-2">
+                    <span className="truncate">{currentUser.username}</span>
+                    {currentUser.isStaff && <span className="text-white font-bold shrink-0">[STAFF]</span>}
                   </div>
                   <div className="text-xs text-gray-500">{currentUser.clashTag}</div>
                 </div>
@@ -1006,6 +1038,7 @@ export default function TournamentApp() {
                   </button>
                 {mobileMenuOpen && (
                   <div className="absolute right-0 top-full mt-3 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl p-2 space-y-1 z-50">
+                    <JoinDiscordButton className="w-full px-4 py-2" />
                     <button
                       onClick={() => {
                         setCurrentPage('dashboard');
@@ -1088,6 +1121,7 @@ export default function TournamentApp() {
             tournaments={tournaments}
             userMatches={userMatches}
             onJoinTournament={handleJoinTournament}
+            onLinkDiscord={() => setShowDiscordSetup(true)}
             onStartTournament={handleStartTournament}
             onDeleteTournament={handleDeleteTournament}
             onSelectTournament={(id) => {
@@ -1202,6 +1236,19 @@ export default function TournamentApp() {
 
       {showDiscordSetup && currentUser && (
         <DiscordSetupModal user={currentUser} onClose={() => setShowDiscordSetup(false)} />
+      )}
+
+      {pendingJoinId && currentUser && (
+        <DiscordSetupModal
+          joining
+          user={currentUser}
+          onClose={() => {
+            const id = pendingJoinId;
+            setPendingJoinId(null);
+            joinNow(id);
+          }}
+          onCancel={() => setPendingJoinId(null)}
+        />
       )}
     </div>
   );
@@ -1515,7 +1562,7 @@ function LoginPage({ onAccountCreated }) {
   );
 }
 
-function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onStartTournament, onDeleteTournament, onSelectTournament, onOpenMatch }) {
+function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onStartTournament, onDeleteTournament, onSelectTournament, onOpenMatch, onLinkDiscord }) {
   const userTournaments = tournaments.filter(t => t.createdBy === user.username || t.players.includes(user.username));
   const pendingMatches = userMatches
     .filter(m => m.status === 'waiting_for_opponent' || m.status === 'pending' || m.status === 'scheduled' || m.status === 'active');
@@ -1524,6 +1571,22 @@ function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onSta
 
   return (
     <div className="space-y-8">
+      {!user.discordId && (
+        <div className="bg-gray-800 rounded-lg border-2 border-[#5865F2] p-5 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-lg font-bold">💬 Join our Discord</h2>
+            <p className="text-sm text-gray-300">
+              Get the bot's DMs when your matches open and before you'd run out of time, so you never miss an attack.
+            </p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <JoinDiscordButton className="px-4 py-2" />
+            <button onClick={onLinkDiscord} className="border border-gray-600 hover:border-white px-4 py-2 rounded transition">
+              Link my Discord
+            </button>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard
           icon={<Trophy className="w-6 h-6" />}
@@ -1901,12 +1964,15 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                     ? "Linked. The bot will DM you about your matches and new chat messages."
                     : 'Link your Discord and the bot will DM you about your matches and new chat messages.'}
                 </p>
-                <button
-                  onClick={() => setEditingDiscordId(true)}
-                  className="text-xs text-gray-400 hover:text-white underline mt-1"
-                >
-                  Enter my Discord ID manually instead
-                </button>
+                <div className="mt-2 flex items-center gap-3 flex-wrap">
+                  <JoinDiscordButton className="px-3 py-1 text-sm" />
+                  <button
+                    onClick={() => setEditingDiscordId(true)}
+                    className="text-xs text-gray-400 hover:text-white underline"
+                  >
+                    Enter my Discord ID manually instead
+                  </button>
+                </div>
               </div>
             )}
           </div>
