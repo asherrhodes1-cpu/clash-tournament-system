@@ -2201,7 +2201,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         <h3 className="font-extrabold text-xl tracking-tight">{tournament.name}</h3>
         <div className="text-sm text-gray-300 mt-1">
           <p>Creator: {tournament.createdBy}</p>
-          <p>Players: {tournament.players.length} | Status: <span className="text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
+          <p>Players: {tournament.players.length} · Status: <span className="text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
           {tournament.status === 'completed' && tournament.champion && (
             <p className="flex items-center gap-1.5">
               <img src="/badges/rainbow.png" alt="" className="w-4 h-4 object-contain" /> Champion:{' '}
@@ -3765,7 +3765,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             </p>
           )}
           {match.status === 'disputed' && (
-            <p className="text-white">Disputed • {match.player1} voted: {match.winner1Vote} | {match.player2} voted: {match.winner2Vote}</p>
+            <p className="text-white">Disputed • {match.player1} voted: {match.winner1Vote} · {match.player2} voted: {match.winner2Vote}</p>
           )}
           {match.status === 'waiting_for_opponent' && userIsPlayer && userVote && (
             <>
