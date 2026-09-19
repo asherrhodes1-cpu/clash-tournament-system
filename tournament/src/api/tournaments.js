@@ -278,6 +278,8 @@ export async function startTournament(tournament) {
         startedAt: now,
         bracketSize,
         playerStats,
+        // Marks a tournament that advances slot by slot (functions/doubleElim.js).
+        advancementVersion: 2,
       });
     } else {
       const bracket = generateSeededBracket(tournament.players, playerStats);

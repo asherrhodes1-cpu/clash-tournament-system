@@ -12,6 +12,7 @@ const { fetchWithRetry } = require('./http');
 const { addGuildRole } = require('./roles');
 const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
 const { planSingleElimAdvancement } = require('./advancement');
+const { planDoubleElimAdvancement } = require('./doubleElim');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -547,7 +548,7 @@ async function autoStartTournament(tournamentRef, tournament) {
         id, tournamentId: tournament.id, player1: p1, player2: p2, round: 1, bracket: 'winners', playerStats, now,
       }));
     });
-    batch.update(tournamentRef, { status: 'in_progress', startedAt: now, bracketSize, playerStats });
+    batch.update(tournamentRef, { status: 'in_progress', startedAt: now, bracketSize, playerStats, advancementVersion: 2 });
   } else {
     const bracket = generateSeededBracket(players, playerStats);
     bracket.forEach(([p1, p2], idx) => {
@@ -874,7 +875,30 @@ function computeDoubleEliminationPlacements(matches) {
   return placements;
 }
 
+// Double elimination advances one bracket slot at a time (see doubleElim.js),
+// so a match stuck with staff only holds up what depends on it. That layout
+// differs from the older whole-round one (drop-ins used to be paired with each
+// other), so only tournaments started with advancementVersion 2 use it; any
+// already running keep the older logic until they finish.
 async function handleDoubleEliminationAdvancement(tournamentRef, tournament, matches) {
+  if (tournament.advancementVersion !== 2) {
+    return handleDoubleEliminationAdvancementWholeRound(tournamentRef, tournament, matches);
+  }
+
+  const { create, champion } = planDoubleElimAdvancement({ tournament, matches });
+  const batch = db.batch();
+  create.forEach((doc) => batch.set(tournamentRef.collection('matches').doc(doc.id), doc));
+  if (champion && tournament.status !== 'completed') {
+    batch.update(tournamentRef, {
+      status: 'completed',
+      champion,
+      placements: computeDoubleEliminationPlacements(matches),
+    });
+  }
+  if (create.length > 0 || champion) await batch.commit();
+}
+
+async function handleDoubleEliminationAdvancementWholeRound(tournamentRef, tournament, matches) {
   const bracketSize = tournament.bracketSize || 2;
   const k = Math.round(Math.log2(bracketSize));
   const totalLbRounds = Math.max(2 * (k - 1), 1);

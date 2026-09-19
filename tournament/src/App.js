@@ -3489,7 +3489,10 @@ function ByeNote({ roundMatches }) {
   );
 }
 
-function BracketMatchBox({ match, placeholder }) {
+function BracketMatchBox({ match, placeholder: placeholderProp }) {
+  // An empty seat (both sides a bye - two byes fed the same slot) isn't a
+  // match anyone plays, so it's drawn like a not-yet-known slot.
+  const placeholder = placeholderProp || (match?.player1 === 'BYE' && match?.player2 === 'BYE');
   return (
     <div className={`bg-gray-700 rounded border border-gray-600 p-2 text-sm space-y-1 ${placeholder ? 'opacity-50 border-dashed' : ''}`}>
       {[match?.player1, match?.player2].map((p, idx) => {
