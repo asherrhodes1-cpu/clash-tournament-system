@@ -14,6 +14,8 @@ import {
   deleteTournament,
   removePlayer,
   reinstatePlayer,
+  changeMatchWinner,
+  reopenMatch,
   startTournament,
   playerReady,
   reportMatch,
@@ -898,6 +900,28 @@ export default function TournamentApp() {
     }
   };
 
+  // Staff fixing a result they decided by hand. The api functions refuse
+  // (with a reason) when the wrong winner has already moved too far along.
+  const handleChangeWinner = async (matchId, winner) => {
+    const tournament = tournaments.find(t => t.id === selectedTournamentId);
+    if (!tournament) return;
+    try {
+      await changeMatchWinner(tournament, matches, matchId, winner, currentUser.username);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleReopenMatch = async (matchId) => {
+    const tournament = tournaments.find(t => t.id === selectedTournamentId);
+    if (!tournament) return;
+    try {
+      await reopenMatch(tournament, matches, matchId);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const handleReinstatePlayer = async (tournamentId, username) => {
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
@@ -1181,6 +1205,8 @@ export default function TournamentApp() {
             onResolveDispute={handleResolveDispute}
             onRemovePlayer={handleRemovePlayer}
             onReinstatePlayer={handleReinstatePlayer}
+            onChangeWinner={handleChangeWinner}
+            onReopenMatch={handleReopenMatch}
             onPlayerReady={handlePlayerReady}
             onViewProfile={viewProfile}
             onUpdateBanner={handleUpdateBanner}
@@ -2618,7 +2644,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onReinstatePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat, onUpdateSignupDeadline }) {
+function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onReinstatePlayer, onChangeWinner, onReopenMatch, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat, onUpdateSignupDeadline }) {
   const [viewMode, setViewMode] = useState('list');
   const [selectedDay, setSelectedDay] = useState(null);
   const [bannerUrl, setBannerUrl] = useState(null);
@@ -3084,6 +3110,8 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                       onFlagMatch={() => onFlagMatch(match.id)}
                       onViewProfile={onViewProfile}
                       onResolveDispute={onResolveDispute}
+                      onChangeWinner={onChangeWinner}
+                      onReopenMatch={onReopenMatch}
                     />
                   ))}
               </div>
@@ -3117,6 +3145,8 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                       onFlagMatch={() => onFlagMatch(match.id)}
                       onViewProfile={onViewProfile}
                       onResolveDispute={onResolveDispute}
+                      onChangeWinner={onChangeWinner}
+                      onReopenMatch={onReopenMatch}
                     />
                   ))}
               </div>
@@ -3831,7 +3861,7 @@ function PlayerStatStrip({ tag }) {
   );
 }
 
-function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFlagMatch, onViewProfile, onResolveDispute }) {
+function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFlagMatch, onViewProfile, onResolveDispute, onChangeWinner, onReopenMatch }) {
   const userIsPlayer = match.player1 === user.username || match.player2 === user.username;
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
   const userReady = match.player1 === user.username ? match.player1Ready : match.player2Ready;
@@ -3839,6 +3869,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   const unlockTime = match.unlockAt ?? getRoundUnlockTime(tournament, match.day ?? match.round);
   const roundLocked = unlockTime && Date.now() < unlockTime;
   const [forcingWinner, setForcingWinner] = useState(false);
+  const [changingResult, setChangingResult] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const isPlayer1Winner = match.status === 'completed' && !!match.winner && match.winner === match.player1;
   const isPlayer2Winner = match.status === 'completed' && !!match.winner && match.winner === match.player2;
@@ -4001,6 +4032,43 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           >
             🚩 Flag
           </button>
+        )}
+        {user.isStaff && match.status === 'completed' && match.resolvedReason === 'staff_override' && match.player2 !== 'BYE' && (
+          changingResult ? (
+            <div className="flex gap-2 items-center flex-wrap">
+              <span className="text-xs text-gray-400">Wrong call?</span>
+              <button
+                onClick={() => {
+                  const other = match.winner === match.player1 ? match.player2 : match.player1;
+                  if (window.confirm(`Change the winner from ${match.winner} to ${other}?`)) onChangeWinner(match.id, other);
+                  setChangingResult(false);
+                }}
+                className="text-xs border border-white text-white hover:bg-white hover:text-black px-2 py-1 rounded transition"
+              >
+                Switch winner to {match.winner === match.player1 ? match.player2 : match.player1}
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm('Reopen this match so it can be decided again?')) onReopenMatch(match.id);
+                  setChangingResult(false);
+                }}
+                className="text-xs border border-white text-white hover:bg-white hover:text-black px-2 py-1 rounded transition"
+              >
+                Reopen match
+              </button>
+              <button onClick={() => setChangingResult(false)} className="text-xs text-gray-400 hover:text-white">
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setChangingResult(true)}
+              className="border border-neutral-600 text-neutral-400 hover:border-white hover:text-white px-3 py-2 rounded text-sm transition"
+              title="This result was decided by hand - change it"
+            >
+              ✏️ Change result
+            </button>
+          )
         )}
         {user.isStaff && match.status !== 'completed' && match.player2 !== 'BYE' && (
           forcingWinner ? (
