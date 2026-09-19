@@ -39,6 +39,19 @@ body, body * {
   text-shadow: 0 0.08em 0 rgba(0, 0, 0, 0.5);
 }
 
+/* Muted text (gray/neutral) is thin at small sizes, and against the dark
+   panels the default grays plus a full-strength outline were hard to read.
+   Brighter grays with a thinner outline, keeping the same order from
+   brightest to dimmest so the hierarchy still reads. */
+.text-gray-200 { color: #f3f4f6; }
+.text-gray-300, .text-neutral-300 { color: #eef0f3; }
+.text-gray-400, .text-neutral-400 { color: #dfe3e8; }
+.text-gray-500 { color: #c4c9d1; }
+.text-gray-200, .text-gray-300, .text-gray-400, .text-gray-500,
+.text-neutral-300, .text-neutral-400 {
+  -webkit-text-stroke: 0.06em #0a1230;
+}
+
 /* Where it would look wrong: dark text on light buttons/panels (a dark
    outline around dark letters just blurs them), gradient text (its fill is
    transparent, so the outline would show as solid dark letters), form
