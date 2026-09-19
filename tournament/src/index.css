@@ -53,11 +53,13 @@ body, body * {
 }
 
 /* Where it would look wrong: dark text on light buttons/panels (a dark
-   outline around dark letters just blurs them), gradient text (its fill is
-   transparent, so the outline would show as solid dark letters), form
-   fields, code, and SVG icons. */
+   outline around dark letters just blurs them, including buttons that only
+   turn dark on hover), gradient text (its fill is transparent, so the
+   outline would show as solid dark letters), form fields, code, and SVG
+   icons. */
 .text-black, .text-black *,
 .text-gray-900, .text-gray-900 *,
+.hover\:text-black:hover, .hover\:text-black:hover *,
 .text-transparent, .text-transparent *,
 input, textarea, select, option, code, svg, svg * {
   -webkit-text-stroke: 0;
