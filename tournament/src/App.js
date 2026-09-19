@@ -2291,7 +2291,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
         {canJoin && (
           <button
             onClick={() => onJoin(tournament.id)}
-            className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-4 py-2 rounded text-sm transition"
+            className="bg-gradient-to-b from-green-400 to-green-600 hover:from-green-300 hover:to-green-500 border-2 border-green-900 shadow-[0_3px_0_#14532d] active:translate-y-0.5 active:shadow-none text-white font-bold px-4 py-2 rounded text-sm transition"
           >
             Join
           </button>
