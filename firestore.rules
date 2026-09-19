@@ -16,11 +16,13 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if isSignedIn();
+      // discordId is deliberately not in the list below: it's only ever set by
+      // the /link command (Admin SDK), so a player can't type in someone
+      // else's ID or a made-up one to get past the join requirement.
       allow update: if isSignedIn() && request.auth.uid == uid
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clashTag', 'bio', 'avatarPath', 'discordId', 'country'])
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clashTag', 'bio', 'avatarPath', 'country'])
                     && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 300))
                     && (!('avatarPath' in request.resource.data) || request.resource.data.avatarPath is string)
-                    && (!('discordId' in request.resource.data) || request.resource.data.discordId == '' || request.resource.data.discordId.matches('^[0-9]{5,25}$'))
                     && (!('country' in request.resource.data) || request.resource.data.country == '' || request.resource.data.country is int);
       allow create, delete: if false; // Admin SDK only, via the signUp Cloud Function
     }
@@ -49,7 +51,10 @@ service cloud.firestore {
         let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
         let bhReq = resource.data.get('requiredBuilderHallLevel', null);
         let trophyReq = resource.data.get('minBestTrophies', null);
-        return (bhReq == null || profile.get('builderHallLevel', -1) == bhReq)
+        // Joining also needs a Discord account linked with /link, so every
+        // player can be reached about their matches.
+        return profile.get('discordId', '') != ''
+            && (bhReq == null || profile.get('builderHallLevel', -1) == bhReq)
             && (trophyReq == null || profile.get('bestBuilderBaseTrophies', -1) >= trophyReq);
       }
 

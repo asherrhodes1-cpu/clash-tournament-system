@@ -326,7 +326,7 @@ function DiscordSetupModal({ user, onClose, joining = false, onCancel }) {
             <h2 className="text-2xl font-bold mb-1">💬 Connect Discord</h2>
             <p className="text-gray-300 text-sm mb-4">
               {joining
-                ? 'Before you join, link Discord so the bot can DM you when your matches open and before you\'d run out of time.'
+                ? 'Linking Discord is required to join tournaments, so the bot can DM you when your matches open and before you\'d run out of time.'
                 : 'Get a DM when your match opens and before you\'d run out of time, so you never miss an attack.'}
             </p>
             <ol className="text-sm text-gray-300 space-y-3 mb-5 list-decimal list-inside">
@@ -350,15 +350,19 @@ function DiscordSetupModal({ user, onClose, joining = false, onCancel }) {
                 Get a new code
               </button>
             </p>
-            <button
-              onClick={() => setConfirmingSkip(true)}
-              className="w-full border border-gray-600 hover:border-white py-2 px-4 rounded transition"
-            >
-              {joining ? 'Skip and join anyway' : 'Skip for now'}
-            </button>
-            {joining && onCancel && (
-              <button onClick={onCancel} className="w-full mt-2 text-sm text-gray-400 hover:text-white underline">
+            {joining ? (
+              <button
+                onClick={onCancel}
+                className="w-full border border-gray-600 hover:border-white py-2 px-4 rounded transition"
+              >
                 Cancel, don't join
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmingSkip(true)}
+                className="w-full border border-gray-600 hover:border-white py-2 px-4 rounded transition"
+              >
+                Skip for now
               </button>
             )}
           </>
@@ -1702,8 +1706,6 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
   const [editingBio, setEditingBio] = useState(false);
   const [bioDraft, setBioDraft] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [editingDiscordId, setEditingDiscordId] = useState(false);
-  const [discordIdDraft, setDiscordIdDraft] = useState('');
   const [discordLinkCode, setDiscordLinkCode] = useState(null);
   const [gettingLinkCode, setGettingLinkCode] = useState(false);
   const [editingCountry, setEditingCountry] = useState(false);
@@ -1782,20 +1784,6 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
       alert(err.message);
     } finally {
       setGettingLinkCode(false);
-    }
-  };
-
-  const handleSaveDiscordId = async () => {
-    const trimmed = discordIdDraft.trim();
-    if (trimmed && !/^[0-9]{5,25}$/.test(trimmed)) {
-      alert('That doesn\'t look like a Discord User ID (should be a number, e.g. 123456789012345678).');
-      return;
-    }
-    try {
-      await updateProfile(profile.id, { discordId: trimmed });
-      setEditingDiscordId(false);
-    } catch (err) {
-      alert(err.message);
     }
   };
 
@@ -1947,7 +1935,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
           <div className="mt-4 p-3 bg-gray-700 rounded">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
               <span className="text-sm font-bold">💬 Discord Notifications</span>
-              {!editingDiscordId && !discordLinkCode && (
+              {!discordLinkCode && (
                 <button
                   onClick={handleGetLinkCode}
                   disabled={gettingLinkCode}
@@ -1971,45 +1959,15 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                   Done
                 </button>
               </div>
-            ) : editingDiscordId ? (
-              <div className="space-y-2 mt-2">
-                <input
-                  type="text"
-                  value={discordIdDraft}
-                  onChange={(e) => setDiscordIdDraft(e.target.value)}
-                  placeholder="e.g., 123456789012345678"
-                  className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white"
-                />
-                <p className="text-xs text-gray-400">
-                  In Discord: Settings → Advanced → enable Developer Mode. Then right-click your name anywhere and click "Copy User ID".
-                </p>
-                <div className="flex gap-2">
-                  <button onClick={handleSaveDiscordId} className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-1 rounded text-sm transition">
-                    Save
-                  </button>
-                  <button
-                    onClick={() => { setEditingDiscordId(false); setDiscordIdDraft(profile?.discordId || ''); }}
-                    className="border border-gray-600 hover:border-white px-3 py-1 rounded text-sm transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
             ) : (
               <div>
                 <p className="text-xs text-gray-400">
                   {profile?.discordId
                     ? "Linked. The bot will DM you about your matches and new chat messages."
-                    : 'Link your Discord and the bot will DM you about your matches and new chat messages.'}
+                    : 'Link your Discord to get DMs about your matches and new chat messages. It\'s required to join tournaments.'}
                 </p>
-                <div className="mt-2 flex items-center gap-3 flex-wrap">
+                <div className="mt-2">
                   <JoinDiscordButton className="px-3 py-1 text-sm" />
-                  <button
-                    onClick={() => setEditingDiscordId(true)}
-                    className="text-xs text-gray-400 hover:text-white underline"
-                  >
-                    Enter my Discord ID manually instead
-                  </button>
                 </div>
               </div>
             )}
