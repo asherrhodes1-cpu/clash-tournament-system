@@ -452,3 +452,46 @@ export const COUNTRIES = [
   { id: 32000260, name: 'Zimbabwe' },
   { id: 32000008, name: 'Åland Islands' },
 ];
+
+// Placements are shared - everyone knocked out in the same round gets the same
+// place - but rewards need a strict order (a top 10 has exactly ten people).
+// Players who tied are ordered by who eliminated them: losing to the champion
+// beats losing to the runner-up, which beats losing to a semifinalist, and so
+// on. Eliminators always finish above their victims, so ranking place by
+// place from the top means every eliminator is already ranked when it's
+// needed, and a player can only ever beat one opponent per round, so the
+// order is fully strict. Returns [{ username, place, eliminatedBy }] best
+// first.
+export function rankFinishers(placements, matches) {
+  const tier = { winners: 0, losers: 1, grand_final: 2 };
+  const lastLoss = {};
+  (matches || [])
+    .filter((m) => m.status === 'completed' && m.winner && m.player1 !== 'BYE' && m.player2 !== 'BYE')
+    .forEach((m) => {
+      const loser = m.winner === m.player1 ? m.player2 : m.player1;
+      const t = tier[m.bracket] ?? 0;
+      const cur = lastLoss[loser];
+      // A player's elimination is their latest loss (losers bracket beats
+      // winners bracket, grand final beats both, later rounds beat earlier).
+      if (!cur || t > cur.tier || (t === cur.tier && m.round > cur.round)) {
+        lastLoss[loser] = { tier: t, round: m.round, by: m.winner };
+      }
+    });
+
+  const places = [...new Set(Object.values(placements || {}))].sort((a, b) => a - b);
+  const rankOf = {};
+  const ordered = [];
+  for (const place of places) {
+    const group = Object.keys(placements).filter((p) => placements[p] === place);
+    group.sort((a, b) => {
+      const ra = rankOf[lastLoss[a]?.by] ?? Infinity;
+      const rb = rankOf[lastLoss[b]?.by] ?? Infinity;
+      return ra - rb || a.localeCompare(b);
+    });
+    group.forEach((username) => {
+      rankOf[username] = ordered.length;
+      ordered.push({ username, place, eliminatedBy: lastLoss[username]?.by || null });
+    });
+  }
+  return ordered;
+}

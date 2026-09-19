@@ -1185,3 +1185,95 @@ exports.discordInteractions = onRequest(async (req, res) => {
 
   res.json(ephemeralReply('Unknown command.'));
 });
+
+// ============================================================================
+// Reward links - staff hand each of the top finishers a one-time link (the
+// prize itself). Links are recorded on the tournament so each player can see
+// only their own in the app, and DMed by the bot. A link must never reach a
+// public channel, so when a DM can't be delivered the channel only gets a
+// nudge to check the app, never the link.
+// ============================================================================
+function ordinalSuffix(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  return `${n}${{ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'}`;
+}
+
+exports.dispenseRewards = onCall({ secrets: [DISCORD_BOT_TOKEN] }, async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Only staff can dispense rewards');
+
+  const { tournamentId, rewards } = request.data || {};
+  if (!tournamentId || !Array.isArray(rewards) || rewards.length === 0) {
+    throw new HttpsError('invalid-argument', 'Pick at least one player and give them a reward link');
+  }
+  if (rewards.length > 200) throw new HttpsError('invalid-argument', 'Too many rewards in one go');
+
+  const tournamentRef = db.collection('tournaments').doc(String(tournamentId));
+  const tournamentSnap = await tournamentRef.get();
+  if (!tournamentSnap.exists) throw new HttpsError('not-found', 'Tournament not found');
+  const tournament = tournamentSnap.data();
+  if (tournament.status !== 'completed') throw new HttpsError('failed-precondition', 'Rewards can only be dispensed once the tournament is complete');
+
+  const placements = tournament.placements || {};
+  const rewardsRef = tournamentRef.collection('rewards');
+  const existing = await rewardsRef.get();
+  const alreadyRewarded = new Set(existing.docs.map((d) => d.id));
+  const usedLinks = new Set(existing.docs.map((d) => d.data().link));
+
+  const seenPlayers = new Set();
+  const seenLinks = new Set();
+  const clean = rewards.map((r) => {
+    const username = String(r?.username || '').trim();
+    const link = String(r?.link || '').trim();
+    const key = username.toLowerCase();
+    if (!username || !(username in placements)) throw new HttpsError('invalid-argument', `${username || 'A player'} didn't place in this tournament`);
+    if (!/^https?:\/\/\S+$/i.test(link)) throw new HttpsError('invalid-argument', `That doesn't look like a link: ${link.slice(0, 60)}`);
+    if (seenPlayers.has(key)) throw new HttpsError('invalid-argument', `${username} is listed twice`);
+    if (seenLinks.has(link) || usedLinks.has(link)) throw new HttpsError('invalid-argument', 'A link is used more than once');
+    if (alreadyRewarded.has(key)) throw new HttpsError('failed-precondition', `${username} already has a reward`);
+    seenPlayers.add(key);
+    seenLinks.add(link);
+    return { username, key, link, place: placements[username] };
+  });
+
+  const now = Date.now();
+  const batch = db.batch();
+  clean.forEach((r) => {
+    batch.set(rewardsRef.doc(r.key), {
+      username: r.username,
+      link: r.link,
+      place: r.place,
+      sentAt: now,
+      sentBy: request.auth.token.username || null,
+      delivery: 'pending',
+    });
+  });
+  await batch.commit();
+
+  const results = [];
+  for (const r of clean) {
+    let delivery = 'app_only';
+    try {
+      const discordId = await getDiscordId(r.username);
+      const dmSent = discordId && (await sendDm(
+        discordId,
+        `🎁 Congratulations on finishing ${ordinalSuffix(r.place)} in **${tournament.name}**! Here's your reward link. It only works once, so don't share it:\n${r.link}`
+      ));
+      if (dmSent) {
+        delivery = 'dm_sent';
+      } else {
+        const prefix = discordId ? `<@${discordId}>` : `**${r.username}**`;
+        await postToChannel(
+          DISCORD_MATCH_CHANNEL_ID.value(),
+          `${prefix} 🎁 You have a reward waiting for **${tournament.name}**. Open the app to claim it.`,
+          discordId ? [discordId] : []
+        );
+      }
+    } catch (err) {
+      logger.error('dispenseRewards notify failed', { username: r.username, err });
+    }
+    await rewardsRef.doc(r.key).update({ delivery });
+    results.push({ username: r.username, delivery });
+  }
+  return { results };
+});

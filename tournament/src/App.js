@@ -30,8 +30,9 @@ import {
   getTournamentBannerUrl,
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './api/users';
+import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/rewards';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, ONE_DAY_MS, getPlayersRemaining, COUNTRIES, getLeagueIconUrl } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, ONE_DAY_MS, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -2888,6 +2889,9 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         <TournamentResults tournament={tournament} onViewProfile={onViewProfile} />
       )}
 
+      {tournament.status === 'completed' && <RewardCard tournament={tournament} user={user} />}
+      {tournament.status === 'completed' && user.isStaff && <RewardsPanel tournament={tournament} matches={matches} />}
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-bold">Bracket</h2>
         <div className="flex gap-2">
@@ -3100,6 +3104,186 @@ function buildStandings(tournament) {
   return Object.entries(byPlace)
     .map(([place, players]) => ({ place: parseInt(place, 10), players }))
     .sort((a, b) => a.place - b.place);
+}
+
+// A player's own prize link. Only they and staff can read it (Firestore
+// rules), and it works once, so it's shown only to the person it was given to.
+function RewardCard({ tournament, user }) {
+  const [reward, setReward] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => subscribeToMyReward(tournament.id, user.username, setReward), [tournament.id, user.username]);
+
+  if (!reward) return null;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(reward.link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      alert('Couldn\'t copy - open the link instead.');
+    }
+  };
+
+  return (
+    <div className="bg-gray-800 rounded-lg border-2 border-amber-400/50 p-6">
+      <h2 className="text-xl font-bold mb-1">🎁 Your reward</h2>
+      <p className="text-sm text-gray-300 mb-4">
+        You finished {ordinal(reward.place)}. This link only works once, so don't share it.
+      </p>
+      <div className="flex gap-2 flex-wrap">
+        <a
+          href={reward.link}
+          target="_blank"
+          rel="noreferrer"
+          className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-4 py-2 rounded transition"
+        >
+          Claim reward
+        </a>
+        <button onClick={copyLink} className="border border-gray-600 hover:border-white px-4 py-2 rounded transition">
+          {copied ? 'Copied!' : 'Copy link'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Staff: paste the prize links, pick how many top finishers get one, send.
+// The ranking is strict (see rankFinishers) so "top 10" is exactly ten
+// players; the checkboxes are only there to override it. Links are
+// interchangeable, so they're handed out in the order they're pasted.
+const DELIVERY_LABELS = {
+  dm_sent: 'DM sent',
+  app_only: 'Not DMed - they can claim it in the app',
+  pending: 'Sending...',
+};
+
+function RewardsPanel({ tournament, matches }) {
+  const [rewards, setRewards] = useState({});
+  const [linksText, setLinksText] = useState('');
+  const [count, setCount] = useState(10);
+  const [selected, setSelected] = useState(new Set());
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => subscribeToRewards(tournament.id, setRewards), [tournament.id]);
+
+  const ranking = rankFinishers(tournament.placements, matches);
+  const hasReward = (username) => !!rewards[username.toLowerCase()];
+  const top = ranking.slice(0, Math.max(count, 0));
+
+  // Reset the selection to the top N whenever N (or what's already been
+  // given out) changes; manual ticks apply until then.
+  const rewardedKey = Object.keys(rewards).sort().join(',');
+  useEffect(() => {
+    setSelected(new Set(top.filter((r) => !hasReward(r.username)).map((r) => r.username)));
+  }, [count, rewardedKey, ranking.length]);
+
+  const links = linksText.split('\n').map((l) => l.trim()).filter(Boolean);
+  const badLink = links.find((l) => !/^https?:\/\/\S+$/i.test(l));
+  const duplicateLink = links.find((l, i) => links.indexOf(l) !== i);
+  const chosen = ranking.filter((r) => selected.has(r.username));
+  const ready = chosen.length > 0 && chosen.length === links.length && !badLink && !duplicateLink;
+
+  let problem = '';
+  if (links.length && badLink) problem = `That doesn't look like a link: ${badLink.slice(0, 50)}`;
+  else if (duplicateLink) problem = 'The same link is in the list twice.';
+  else if (chosen.length !== links.length) problem = `${chosen.length} player${chosen.length === 1 ? '' : 's'} selected but ${links.length} link${links.length === 1 ? '' : 's'} pasted - they need to match.`;
+
+  const toggle = (username) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(username)) next.delete(username);
+      else next.add(username);
+      return next;
+    });
+  };
+
+  const send = async () => {
+    if (!window.confirm(`Send ${chosen.length} reward link${chosen.length === 1 ? '' : 's'}? This can't be undone.`)) return;
+    setSending(true);
+    setError('');
+    try {
+      await dispenseRewards(tournament.id, chosen.map((r, i) => ({ username: r.username, link: links[i] })));
+      setLinksText('');
+    } catch (err) {
+      setError(err.message || 'Something went wrong sending the rewards.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const sentCount = Object.keys(rewards).length;
+
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
+      <div>
+        <h2 className="text-xl font-bold">🎁 Dispense rewards</h2>
+        <p className="text-sm text-gray-400">
+          Paste one link per line. The top finishers each get one by DM and in the app.
+          {sentCount > 0 && ` ${sentCount} already sent.`}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="text-sm text-gray-300" htmlFor="reward-count">Top finishers:</label>
+        <input
+          id="reward-count"
+          type="number"
+          min="1"
+          max={ranking.length || 1}
+          value={count}
+          onChange={(e) => setCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+          className="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white"
+        />
+      </div>
+
+      <textarea
+        value={linksText}
+        onChange={(e) => setLinksText(e.target.value)}
+        rows={5}
+        placeholder={'https://link.clashofclans.com/...\nhttps://link.clashofclans.com/...'}
+        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white font-mono"
+      />
+
+      <div className="space-y-1">
+        {top.map((r, i) => {
+          const given = rewards[r.username.toLowerCase()];
+          return (
+            <label key={r.username} className="flex items-center gap-3 bg-gray-700 rounded px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selected.has(r.username)}
+                disabled={!!given}
+                onChange={() => toggle(r.username)}
+              />
+              <span className="w-8 text-gray-400">{i + 1}.</span>
+              <span className="font-bold text-white flex-1">{r.username}</span>
+              <span className="text-xs text-gray-400">
+                {given ? DELIVERY_LABELS[given.delivery] || 'Sent' : `${ordinal(r.place)} place${r.eliminatedBy ? ` · out to ${r.eliminatedBy}` : ''}`}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      <p className="text-xs text-gray-400">
+        Players who were knocked out in the same round are ordered by who beat them: losing to a higher finisher ranks higher.
+      </p>
+
+      {(problem && linksText.trim()) && <p className="text-sm text-amber-300">{problem}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      <button
+        onClick={send}
+        disabled={!ready || sending}
+        className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-4 py-2 rounded transition disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {sending ? 'Sending...' : `Send ${chosen.length || ''} reward${chosen.length === 1 ? '' : 's'}`}
+      </button>
+    </div>
+  );
 }
 
 function TournamentResults({ tournament, onViewProfile }) {

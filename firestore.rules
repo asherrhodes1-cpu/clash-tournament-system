@@ -53,6 +53,14 @@ service cloud.firestore {
             && (trophyReq == null || profile.get('bestBuilderBaseTrophies', -1) >= trophyReq);
       }
 
+      // Each reward is a one-time prize link, so only the player it was
+      // given to (and staff) can read it. Written by the dispenseRewards
+      // Cloud Function only.
+      match /rewards/{usernameLower} {
+        allow read: if isStaff() || (isSignedIn() && usernameLower == myUsername().lower());
+        allow write: if false;
+      }
+
       match /matches/{matchId} {
         allow read: if isSignedIn();
         allow write: if isStaff();
