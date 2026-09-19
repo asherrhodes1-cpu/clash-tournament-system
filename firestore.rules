@@ -61,6 +61,12 @@ service cloud.firestore {
       // Each reward is a one-time prize link, so only the player it was
       // given to (and staff) can read it. Written by the dispenseRewards
       // Cloud Function only.
+      // Running totals of correct predictions, written by the scoring function.
+      match /predictionScores/{usernameLower} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+
       match /rewards/{usernameLower} {
         allow read: if isStaff() || (isSignedIn() && usernameLower == myUsername().lower());
         allow write: if false;
@@ -101,6 +107,29 @@ service cloud.firestore {
             'winner', 'completedAt'
           ]);
 
+        // Anyone signed in can predict who wins a match while it's still
+        // pending - except the two players in it - and change their pick until
+        // it starts. `correct` is only ever written by the scoring Cloud
+        // Function, so a client can't award itself points.
+        match /predictions/{uid} {
+          function openMatch() {
+            let m = get(/databases/$(database)/documents/tournaments/$(tournamentId)/matches/$(matchId)).data;
+            return m.status == 'pending' && m.player2 != 'BYE'
+                && myUsername() != m.player1 && myUsername() != m.player2;
+          }
+          function pickIsAPlayer() {
+            let m = get(/databases/$(database)/documents/tournaments/$(tournamentId)/matches/$(matchId)).data;
+            return request.resource.data.pick == m.player1 || request.resource.data.pick == m.player2;
+          }
+          allow read: if isSignedIn();
+          allow create: if isSignedIn() && request.auth.uid == uid && openMatch() && pickIsAPlayer()
+                        && request.resource.data.keys().hasOnly(['username', 'pick', 'createdAt'])
+                        && request.resource.data.username == myUsername();
+          allow update: if isSignedIn() && request.auth.uid == uid && openMatch() && pickIsAPlayer()
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pick']);
+          allow delete: if false;
+        }
+
         match /messages/{messageId} {
           function isMatchParticipant() {
             let m = get(/databases/$(database)/documents/tournaments/$(tournamentId)/matches/$(matchId)).data;
@@ -121,6 +150,11 @@ service cloud.firestore {
     // Firestore can scope the query to one known tournament - a true collection
     // group query needs this wildcard form to be granted read access at all.
     match /{path=**}/matches/{matchId} {
+      allow read: if isSignedIn();
+    }
+
+    // The leaderboard adds these up across every tournament.
+    match /{path=**}/predictionScores/{usernameLower} {
       allow read: if isSignedIn();
     }
 

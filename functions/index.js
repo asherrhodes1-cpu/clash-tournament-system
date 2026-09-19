@@ -13,6 +13,7 @@ const { addGuildRole } = require('./roles');
 const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
 const { planSingleElimAdvancement } = require('./advancement');
 const { planDoubleElimAdvancement } = require('./doubleElim');
+const { planScoreChanges } = require('./predictions');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -1345,3 +1346,40 @@ exports.dispenseRewards = onCall({ secrets: [DISCORD_BOT_TOKEN] }, async (reques
   }
   return { results };
 });
+
+// ============================================================================
+// Match predictions - scoring. Players vote on who will win a match before it
+// starts (the rules only allow that while it's still pending); once it has a
+// played result, each vote is marked right or wrong and the voter's running
+// totals for that tournament are updated. It re-runs when staff change or
+// reopen a result, applying only the difference (see predictions.js).
+// ============================================================================
+exports.scoreMatchPredictions = onDocumentUpdated(
+  'tournaments/{tournamentId}/matches/{matchId}',
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    if (before.winner === after.winner && before.status === after.status && before.resolvedReason === after.resolvedReason) return;
+
+    const predictionsSnap = await event.data.after.ref.collection('predictions').get();
+    if (predictionsSnap.empty) return;
+
+    const predictions = predictionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const changes = planScoreChanges(after, predictions);
+    const scoresRef = db.collection('tournaments').doc(event.params.tournamentId).collection('predictionScores');
+
+    // Two writes per change; keep each batch well under Firestore's 500 limit.
+    for (let i = 0; i < changes.length; i += 200) {
+      const batch = db.batch();
+      changes.slice(i, i + 200).forEach((c) => {
+        batch.update(predictionsSnap.docs.find((d) => d.id === c.id).ref, { correct: c.correct });
+        batch.set(scoresRef.doc(c.username.toLowerCase()), {
+          username: c.username,
+          correct: admin.firestore.FieldValue.increment(c.deltaCorrect),
+          total: admin.firestore.FieldValue.increment(c.deltaTotal),
+        }, { merge: true });
+      });
+      await batch.commit();
+    }
+  }
+);

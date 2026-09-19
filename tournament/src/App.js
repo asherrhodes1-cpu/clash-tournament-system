@@ -34,8 +34,9 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './api/users';
 import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/rewards';
+import { subscribeToMatchPredictions, submitPrediction, subscribeToPredictionScores } from './api/predictions';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -179,6 +180,77 @@ const GENERAL_RULES = [
   { icon: '📸', text: 'Report the result with at least one proof screenshot and who won. Both players must agree, or staff will step in to resolve a dispute.' },
   { icon: '🚫', text: 'Submitting a false result gets you removed from the tournament and banned from future ones - so keep it honest.' },
 ];
+
+// Who has called the most matches right. Totals come from the scoring
+// function, one row per player per tournament; here they're added up for a
+// chosen tournament or across all of them.
+function LeaderboardPage({ tournaments, user, onViewProfile }) {
+  const [scores, setScores] = useState(null);
+  const [scope, setScope] = useState('all');
+
+  useEffect(() => subscribeToPredictionScores(setScores), []);
+
+  const ranked = rankPredictionScores(scores || [], scope);
+  const scoredTournaments = tournaments.filter((t) => (scores || []).some((r) => r.tournamentId === t.id));
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-4">
+      <div>
+        <h1 className="text-3xl font-bold">🔮 Prediction Leaderboard</h1>
+        <p className="text-sm text-gray-400">
+          Pick who you think will win any match you're not playing in, before it starts. Every correct pick is a point.
+        </p>
+      </div>
+
+      {scoredTournaments.length > 0 && (
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value)}
+          className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+        >
+          <option value="all">All tournaments</option>
+          {scoredTournaments.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      )}
+
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        {scores === null ? (
+          <p className="text-gray-400 text-sm">Loading...</p>
+        ) : ranked.length === 0 ? (
+          <p className="text-gray-400 text-sm">
+            No scored predictions yet. Open a match's Details, pick a winner before it starts, and you'll show up here once it's decided.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 px-4 text-xs text-gray-400 uppercase tracking-wide">
+              <span className="w-8">#</span>
+              <span className="flex-1">Player</span>
+              <span className="w-16 text-right">Correct</span>
+              <span className="w-16 text-right">Votes</span>
+              <span className="w-16 text-right">Accuracy</span>
+            </div>
+            {ranked.map((r, idx) => (
+              <div
+                key={r.username}
+                className={`flex items-center gap-3 rounded px-4 py-2 ${r.username === user.username ? 'bg-amber-200/10 border border-amber-400/50' : 'bg-gray-700'}`}
+              >
+                <span className="w-8 text-gray-300 flex items-center">
+                  {idx < 3 && medalFor(idx + 1) ? <img src={medalFor(idx + 1)} alt="" className="w-5 h-5 object-contain" /> : idx + 1}
+                </span>
+                <button onClick={() => onViewProfile(r.username)} className="flex-1 text-left font-bold hover:underline truncate">
+                  {r.username}
+                </button>
+                <span className="w-16 text-right font-bold text-green-400">{r.correct}</span>
+                <span className="w-16 text-right text-gray-300">{r.total}</span>
+                <span className="w-16 text-right text-gray-300">{Math.round((r.correct / r.total) * 100)}%</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function RulesPage() {
   return (
@@ -1036,12 +1108,19 @@ export default function TournamentApp() {
                 >
                   Rules
                 </button>
+                <button
+                  onClick={() => setCurrentPage('leaderboard')}
+                  className="hover:text-neutral-300 transition"
+                >
+                  Leaderboard
+                </button>
                 {currentUser.isStaff && (
                   <button
                     onClick={() => setCurrentPage('create')}
                     className="hover:text-neutral-300 transition"
+                    title="Create Tournament"
                   >
-                    Create Tournament
+                    Create
                   </button>
                 )}
                 {currentUser.isStaff && (
@@ -1104,6 +1183,15 @@ export default function TournamentApp() {
                       className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
                     >
                       Rules
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCurrentPage('leaderboard');
+                        setMobileMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                    >
+                      Leaderboard
                     </button>
                     {currentUser.isStaff && (
                       <button
@@ -1255,6 +1343,9 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'rules' && currentUser && <RulesPage />}
+        {currentPage === 'leaderboard' && currentUser && (
+          <LeaderboardPage tournaments={tournaments} user={currentUser} onViewProfile={viewProfile} />
+        )}
       </div>
 
       {flagModalOpen && (
@@ -3958,7 +4049,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           🔍 Details
         </button>
         {showDetails && (
-          <MatchDetailModal match={match} tournament={tournament} onClose={() => setShowDetails(false)} onViewProfile={onViewProfile} isStaff={user.isStaff} />
+          <MatchDetailModal match={match} tournament={tournament} onClose={() => setShowDetails(false)} onViewProfile={onViewProfile} isStaff={user.isStaff} user={user} />
         )}
         {userIsPlayer && match.status !== 'completed' && (
           <button
@@ -4161,7 +4252,106 @@ function StaffChatToggle({ match }) {
   );
 }
 
-function MatchDetailModal({ match, tournament, onClose, onViewProfile, isStaff }) {
+// A rough win-chance estimate from the two players' trophies (see winChance
+// in utils.js for how it's worked out and why it's only a guide). Only shown
+// before a match is decided, and only when both players' trophies are known.
+function WinChance({ match }) {
+  const live1 = useLiveClashStats(match.player1Tag);
+  const live2 = useLiveClashStats(match.player2Tag);
+  const chance = winChance(trophiesFor(live1, match.player1Stats), trophiesFor(live2, match.player2Stats));
+  if (chance == null) return null;
+  const p1 = Math.round(chance * 100);
+  const p2 = 100 - p1;
+
+  return (
+    <div className="mt-4 p-3 bg-gray-900 rounded">
+      <div className="flex justify-between text-sm font-bold mb-1">
+        <span className="text-amber-300">{match.player1} {p1}%</span>
+        <span className="text-sky-300">{p2}% {match.player2}</span>
+      </div>
+      <div className="flex h-2 rounded overflow-hidden bg-gray-700">
+        <div className="bg-amber-300" style={{ width: `${p1}%` }} />
+        <div className="bg-sky-300" style={{ width: `${p2}%` }} />
+      </div>
+      <p className="text-xs text-gray-400 mt-2">
+        Win chance estimate from trophies. It's a rough guide, not a guarantee - anyone can win.
+      </p>
+    </div>
+  );
+}
+
+// Anyone except the two players can pick who they think will win, until the
+// match starts. Scoring happens on the server once there's a result.
+function MatchPrediction({ match, user }) {
+  const [predictions, setPredictions] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => subscribeToMatchPredictions(match.tournamentId, match.id, setPredictions), [match.tournamentId, match.id]);
+
+  const isPlayer = user.username === match.player1 || user.username === match.player2;
+  if (isPlayer || match.player1 === 'BYE' || match.player2 === 'BYE' || predictions === null) return null;
+
+  const mine = predictions.find((p) => p.id === user.uid);
+  const open = match.status === 'pending';
+  const votesFor = (name) => predictions.filter((p) => p.pick === name).length;
+  const total = predictions.length;
+  if (!open && total === 0) return null;
+
+  const pick = async (name) => {
+    setSaving(true);
+    try {
+      await submitPrediction(match, user, name);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const percent = (name) => (total ? Math.round((votesFor(name) / total) * 100) : 0);
+  const decided = match.status === 'completed' && match.winner && !['player_removed', 'mutual_no_show', 'grace_period'].includes(match.resolvedReason);
+
+  return (
+    <div className="mt-4 p-3 bg-gray-900 rounded">
+      <p className="text-sm font-bold mb-2">🔮 Who will win?</p>
+      {open ? (
+        <>
+          <div className="flex gap-2">
+            {[match.player1, match.player2].map((name) => (
+              <button
+                key={name}
+                onClick={() => pick(name)}
+                disabled={saving}
+                className={`flex-1 px-3 py-2 rounded text-sm font-bold border transition disabled:opacity-50 ${
+                  mine?.pick === name ? 'border-amber-400 text-amber-300 bg-amber-200/10' : 'border-gray-600 hover:border-white'
+                }`}
+              >
+                {mine?.pick === name ? '✓ ' : ''}{name}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            {mine ? 'You can change your pick until the match starts.' : 'Pick before the match starts. Every correct pick is a point on the leaderboard.'}
+          </p>
+        </>
+      ) : mine ? (
+        <p className="text-sm">
+          You picked <span className="font-bold">{mine.pick}</span>
+          {decided && (mine.pick === match.winner ? <span className="text-green-400 font-bold"> - correct! ✓</span> : <span className="text-gray-400"> - not this time</span>)}
+        </p>
+      ) : (
+        <p className="text-sm text-gray-400">Predictions for this match are closed.</p>
+      )}
+      {(mine || !open) && total > 0 && (
+        <p className="text-xs text-gray-400 mt-2">
+          {total} vote{total === 1 ? '' : 's'}: {match.player1} {percent(match.player1)}% · {match.player2} {percent(match.player2)}%
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MatchDetailModal({ match, tournament, onClose, onViewProfile, isStaff, user }) {
   const [screenshotUrls, setScreenshotUrls] = useState({ player1: [], player2: [] });
 
   useEffect(() => {
@@ -4231,6 +4421,12 @@ function MatchDetailModal({ match, tournament, onClose, onViewProfile, isStaff }
           <div className="flex items-center text-gray-400 font-bold">vs</div>
           {renderPlayer(match.player2, match.player2Tag, match.player2Stats, match.player2Ready, match.player2ReadyTime, match.winner2Vote)}
         </div>
+
+        {match.status !== 'completed' && match.player1 && match.player2 && match.player1 !== 'BYE' && match.player2 !== 'BYE' && (
+          <WinChance match={match} />
+        )}
+
+        <MatchPrediction match={match} user={user} />
 
         {resultExplanation() && (
           <div className="mt-4 p-3 bg-neutral-900 border border-neutral-700 rounded text-sm text-white">

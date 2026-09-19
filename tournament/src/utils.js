@@ -511,3 +511,40 @@ export function matchPosition(m) {
   const n = /(\d+)$/.exec(m.id || '');
   return n ? parseInt(n[1], 10) : 0;
 }
+
+// A rough win-chance estimate for a match, from the two players' trophies with
+// an Elo-style curve: equal trophies is 50/50, and the further ahead one is the
+// more they're favoured. The scale is a judgement call, not something measured
+// from Builder Base results - 1500 makes a 1000-trophy lead about 82/18 - and
+// the estimate is clamped so nobody is ever shown as a sure thing.
+export const WIN_ESTIMATE_SCALE = 1500;
+const WIN_ESTIMATE_LIMIT = 0.08;
+
+export function winChance(trophiesA, trophiesB) {
+  if (trophiesA == null || trophiesB == null) return null;
+  const chance = 1 / (1 + 10 ** ((trophiesB - trophiesA) / WIN_ESTIMATE_SCALE));
+  return Math.min(1 - WIN_ESTIMATE_LIMIT, Math.max(WIN_ESTIMATE_LIMIT, chance));
+}
+
+// Current trophies if we have them (they say more about how someone is playing
+// now), else what was recorded when the tournament started.
+export function trophiesFor(liveStats, snapshotStats) {
+  return liveStats?.builderBaseTrophies ?? snapshotStats?.builderBaseTrophies ?? snapshotStats?.bestBuilderBaseTrophies ?? null;
+}
+
+// Adds up per-tournament prediction totals ([{ tournamentId, username, correct,
+// total }]) into one row per player - for one tournament or all of them - and
+// ranks them: most correct first, then best accuracy, then most votes cast.
+// Players with nothing scored yet are left out.
+export function rankPredictionScores(scores, scope = 'all') {
+  const rows = {};
+  scores.filter((r) => scope === 'all' || r.tournamentId === scope).forEach((r) => {
+    const key = r.username.toLowerCase();
+    rows[key] = rows[key] || { username: r.username, correct: 0, total: 0 };
+    rows[key].correct += r.correct || 0;
+    rows[key].total += r.total || 0;
+  });
+  return Object.values(rows)
+    .filter((r) => r.total > 0)
+    .sort((a, b) => b.correct - a.correct || b.correct / b.total - a.correct / a.total || b.total - a.total);
+}
