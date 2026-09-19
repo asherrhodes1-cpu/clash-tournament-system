@@ -14,7 +14,7 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Clash Regular', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -25,6 +25,31 @@ body {
 
 h1, h2, h3, .font-display {
   font-family: 'Clash Regular', 'Plus Jakarta Sans', sans-serif;
+}
+
+/* In-game text look: the letters keep their fill, with a thick dark outline
+   around them and a soft drop shadow underneath. paint-order draws the
+   outline behind the fill - a plain centered stroke would eat into the
+   letters instead - and the outline is sized in em so every text size gets
+   the same proportions. It has to be set on every element (not inherited)
+   because an inherited em length would freeze at the size of body. */
+body, body * {
+  -webkit-text-stroke: 0.14em #0a1230;
+  paint-order: stroke fill;
+  text-shadow: 0 0.08em 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Where it would look wrong: dark text on light buttons/panels (a dark
+   outline around dark letters just blurs them), gradient text (its fill is
+   transparent, so the outline would show as solid dark letters), form
+   fields, code, and SVG icons. */
+.text-black, .text-black *,
+.text-gray-900, .text-gray-900 *,
+.text-transparent, .text-transparent *,
+input, textarea, select, option, code, svg, svg * {
+  -webkit-text-stroke: 0;
+  paint-order: normal;
+  text-shadow: none;
 }
 
 code {
