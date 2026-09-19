@@ -7,10 +7,11 @@ const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
 const { dueReminders, discordTime } = require('./reminders');
 const { nextRoundUnlockAt } = require('./schedule');
-const { newOpponentMessage, chatMessage, opponentReadyMessage } = require('./messages');
+const { newOpponentMessage, chatMessage, opponentReadyMessage, sentToStaffMessage } = require('./messages');
 const { fetchWithRetry } = require('./http');
 const { addGuildRole } = require('./roles');
 const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
+const { planSingleElimAdvancement } = require('./advancement');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -571,8 +572,6 @@ async function handleTimeouts(tournamentRef, tournament, matches) {
   const batch = db.batch();
   let hasWrites = false;
   const disqualified = [];
-  const newlyGraced = [];
-  const gracedPlayers = tournament.gracedPlayers || [];
 
   for (const m of matches) {
     const matchRef = tournamentRef.collection('matches').doc(m.id);
@@ -606,30 +605,15 @@ async function handleTimeouts(tournamentRef, tournament, matches) {
     const player2Reported = !!m.winner2Vote;
 
     if (!player1Reported && !player2Reported) {
-      // Both readied up but neither ever reported a result. First time this
-      // happens to either of them in this tournament, give them a one-day
-      // grace: both advance (no winner, but neither is eliminated either -
-      // handleRoundAdvancement/handleDoubleEliminationAdvancement treat a
-      // grace_period match as producing BOTH players as advancers instead
-      // of the usual one). If either has already used their grace, staff
-      // has to sort it out instead of it repeating indefinitely.
-      const alreadyGraced = gracedPlayers.includes(m.player1) || gracedPlayers.includes(m.player2);
-      if (alreadyGraced) {
-        batch.update(matchRef, {
-          status: 'needs_staff_review',
-          timeoutAt: now,
-          resolvedReason: 'no_report_timeout_repeat',
-        });
-      } else {
-        batch.update(matchRef, {
-          status: 'completed',
-          winner: null,
-          autoResolvedAt: now,
-          resolvedReason: 'grace_period',
-          completedAt: now,
-        });
-        newlyGraced.push(m.player1, m.player2);
-      }
+      // Both readied up but neither ever reported a result. Nobody advances
+      // automatically and nobody is eliminated: staff decide who goes through
+      // (the match chat and screenshots are on the review list). Only this
+      // match waits - see planSingleElimAdvancement.
+      batch.update(matchRef, {
+        status: 'needs_staff_review',
+        timeoutAt: now,
+        resolvedReason: 'no_report_timeout',
+      });
       hasWrites = true;
     } else if (player1Reported !== player2Reported) {
       const winner = player1Reported ? m.winner1Vote : m.winner2Vote;
@@ -645,17 +629,12 @@ async function handleTimeouts(tournamentRef, tournament, matches) {
   }
 
   // Combined into one update - a batch can only hold one write per document.
-  if (disqualified.length > 0 || newlyGraced.length > 0) {
-    const tournamentUpdate = {};
-    if (disqualified.length > 0) {
-      const uniqueDisqualified = [...new Set(disqualified)];
-      tournamentUpdate.players = admin.firestore.FieldValue.arrayRemove(...uniqueDisqualified);
-      tournamentUpdate.removedPlayers = admin.firestore.FieldValue.arrayUnion(...uniqueDisqualified);
-    }
-    if (newlyGraced.length > 0) {
-      tournamentUpdate.gracedPlayers = admin.firestore.FieldValue.arrayUnion(...new Set(newlyGraced));
-    }
-    batch.update(tournamentRef, tournamentUpdate);
+  if (disqualified.length > 0) {
+    const uniqueDisqualified = [...new Set(disqualified)];
+    batch.update(tournamentRef, {
+      players: admin.firestore.FieldValue.arrayRemove(...uniqueDisqualified),
+      removedPlayers: admin.firestore.FieldValue.arrayUnion(...uniqueDisqualified),
+    });
   }
 
   if (hasWrites) await batch.commit();
@@ -685,7 +664,29 @@ function computePlacements(champion, matches) {
   return placements;
 }
 
+// Advances a single-elimination tournament one bracket slot at a time, so a
+// match stuck with staff only holds up its own branch. Tournaments that
+// already contain a grace_period match (the old both-advance rule, which
+// breaks the one-winner-per-match pairing this relies on) keep the older
+// whole-round behaviour until they finish.
 async function handleRoundAdvancement(tournamentRef, tournament, matches) {
+  if (matches.some((m) => m.resolvedReason === 'grace_period')) {
+    return handleRoundAdvancementWholeRound(tournamentRef, tournament, matches);
+  }
+
+  const { create, champion } = planSingleElimAdvancement({ tournament, matches });
+  if (create.length > 0) {
+    const batch = db.batch();
+    create.forEach((doc) => batch.set(tournamentRef.collection('matches').doc(doc.id), doc));
+    await batch.commit();
+  }
+  if (champion) {
+    const placements = computePlacements(champion, matches);
+    await tournamentRef.update({ status: 'completed', champion, placements });
+  }
+}
+
+async function handleRoundAdvancementWholeRound(tournamentRef, tournament, matches) {
   const roundNumbers = [...new Set(matches.map((m) => m.round))];
 
   for (const round of roundNumbers) {
@@ -1032,6 +1033,11 @@ exports.notifyMatchNeedsReview = onDocumentUpdated(
     if (!needsReviewNow || neededReviewBefore) return;
 
     await notifyDiscord(`⚠️ Match needs staff review: **${after.player1}** vs **${after.player2}**`);
+    // Tell the players too, so they know it's being decided rather than lost.
+    await Promise.all([after.player1, after.player2].map((player) => {
+      const { text, linkLabel } = sentToStaffMessage(after, player);
+      return notifyPlayer(player, text, linkLabel);
+    }));
   }
 );
 

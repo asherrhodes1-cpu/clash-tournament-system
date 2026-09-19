@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { newOpponentMessage, chatMessage, opponentReadyMessage } = require('./messages');
+const { newOpponentMessage, chatMessage, opponentReadyMessage, sentToStaffMessage } = require('./messages');
 const { TIMEOUT_MS } = require('./reminders');
 
 const NOW = 1_000_000_000_000;
@@ -45,4 +45,12 @@ test('the ready-up ping names who is waiting and when the forfeit happens', () =
   assert.ok(m.text.includes(`<t:${Math.floor((readyAt + TIMEOUT_MS) / 1000)}:R>`));
   assert.match(m.text, /forfeit/);
   assert.strictEqual(m.linkLabel, 'Open Rainbow League to ready up');
+});
+
+test('the staff-review DM says why, from each player\'s point of view', () => {
+  const noReport = { player1: 'Ana', player2: 'Bo', status: 'needs_staff_review' };
+  assert.match(sentToStaffMessage(noReport, 'Ana').text, /against \*\*Bo\*\* has been sent to staff: neither of you reported a result in time/);
+  assert.match(sentToStaffMessage(noReport, 'Bo').text, /against \*\*Ana\*\*/);
+  const disputed = { ...noReport, status: 'disputed' };
+  assert.match(sentToStaffMessage(disputed, 'Ana').text, /reported different winners/);
 });

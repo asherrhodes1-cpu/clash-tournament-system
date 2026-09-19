@@ -35,7 +35,7 @@ import {
 import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './api/users';
 import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/rewards';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -3544,13 +3544,24 @@ function BracketColumns({ matches, rounds, labelForRound, totalRounds, expectedM
     <div ref={innerRef} className="flex gap-8 min-w-max pb-2" style={{ zoom }}>
       {rounds.map(round => {
         const roundMatches = matches.filter(m => m.round === round);
-        const placeholders = roundMatches.length === 0 ? (expectedMatchCount?.(round) ?? 0) : 0;
+        const expected = expectedMatchCount?.(round) ?? 0;
+        // A round can be only partly built - a pair's next match is created
+        // once both its matches are decided - so when some exist, show the
+        // rest as empty slots in their bracket positions.
+        const positions = roundMatches.map(matchPosition);
+        const partlyBuilt = roundMatches.length > 0 && roundMatches.length < expected && positions.every((p) => p < expected);
+        const placeholders = roundMatches.length === 0 ? expected : 0;
         return (
           <div key={round} data-round={round} className="flex flex-col justify-around gap-4 min-w-[220px]">
             <h3 className={`text-center font-bold mb-2 ${round === target ? 'text-amber-300' : 'text-gray-400'}`}>
               {labelForRound ? labelForRound(round, maxRound) : (round === maxRound ? `Day ${round} · Final` : `Day ${round}`)}
             </h3>
-            {roundMatches.map(match => <BracketMatchBox key={match.id} match={match} />)}
+            {partlyBuilt
+              ? Array.from({ length: expected }, (_, pos) => {
+                  const match = roundMatches.find((m) => matchPosition(m) === pos);
+                  return match ? <BracketMatchBox key={match.id} match={match} /> : <BracketMatchBox key={`tbd-${pos}`} placeholder />;
+                })
+              : roundMatches.map(match => <BracketMatchBox key={match.id} match={match} />)}
             {Array.from({ length: placeholders }, (_, i) => <BracketMatchBox key={`tbd-${i}`} placeholder />)}
           </div>
         );
@@ -3567,12 +3578,12 @@ function singleElimTotalRounds(matches) {
   return roundOneMatches ? 1 + Math.ceil(Math.log2(roundOneMatches)) : undefined;
 }
 
-// Every match yields one winner, so a round with c matches feeds
-// ceil(c / 2) matches into the next one.
+// Every match yields one winner, so a round with c matches feeds ceil(c / 2)
+// into the next one. Worked out from round 1, which always exists in full, so
+// it stays right while a later round is only partly built.
 function singleElimExpectedCount(matches, round) {
-  const actual = matches.filter((m) => m.round === round).length;
-  if (actual) return actual;
-  return round > 1 ? Math.ceil(singleElimExpectedCount(matches, round - 1) / 2) : 0;
+  const roundOne = matches.filter((m) => m.round === 1).length;
+  return Math.ceil(roundOne / 2 ** (round - 1));
 }
 
 const range = (n) => Array.from({ length: n }, (_, i) => i + 1);

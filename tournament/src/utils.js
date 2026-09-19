@@ -503,3 +503,10 @@ export function noonCentralOnOrAfter(ms) {
 export function dayEndsAt(openedAt) {
   return noonCentralOnOrAfter(openedAt + MIN_DAY_MS);
 }
+
+// Match ids end in their position in the round ("...-10"); see
+// functions/seeding.js for why that's read as a number, not a string.
+export function matchPosition(m) {
+  const n = /(\d+)$/.exec(m.id || '');
+  return n ? parseInt(n[1], 10) : 0;
+}

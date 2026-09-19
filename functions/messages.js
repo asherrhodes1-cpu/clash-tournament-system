@@ -37,4 +37,17 @@ function opponentReadyMessage(readyPlayer, readyTime) {
   };
 }
 
-module.exports = { newOpponentMessage, chatMessage, opponentReadyMessage };
+// Sent to both players when their match goes to staff, so they know what's
+// happening instead of waiting on a result nobody is going to report.
+function sentToStaffMessage(match, player) {
+  const opponent = match.player1 === player ? match.player2 : match.player1;
+  const why = match.status === 'disputed'
+    ? `you and **${opponent}** reported different winners`
+    : `neither of you reported a result in time`;
+  return {
+    text: `🛠️ Your match against **${opponent}** has been sent to staff: ${why}. They'll decide it and you'll be told the outcome.`,
+    linkLabel: 'Open Rainbow League',
+  };
+}
+
+module.exports = { newOpponentMessage, chatMessage, opponentReadyMessage, sentToStaffMessage };
