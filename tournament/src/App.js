@@ -2958,6 +2958,10 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       {tournament.status === 'completed' && <RewardCard tournament={tournament} user={user} />}
       {tournament.status === 'completed' && user.isStaff && <RewardsPanel tournament={tournament} matches={matches} />}
 
+      {tournament.status === 'signups_open' && (
+        <RegisteredPlayersCard tournament={tournament} user={user} onViewProfile={onViewProfile} onRemovePlayer={onRemovePlayer} />
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-bold">Bracket</h2>
         <div className="flex gap-2">
@@ -3104,6 +3108,47 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
             </div>
             );
           })
+      )}
+    </div>
+  );
+}
+
+// Everyone can see who has registered while signups are open (updates live as
+// people join). Staff also get a Remove button here, since this is where they
+// need it - the Players Remaining view is buried under the bracket controls.
+function RegisteredPlayersCard({ tournament, user, onViewProfile, onRemovePlayer }) {
+  const players = tournament.players || [];
+
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+      <h2 className="text-xl font-bold mb-1">Registered players ({players.length})</h2>
+      <p className="text-sm text-gray-400 mb-4">Everyone signed up so far, in the order they joined.</p>
+      {players.length === 0 ? (
+        <p className="text-gray-400 text-sm">No one has registered yet. Be the first!</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {players.map((player, idx) => (
+            <div key={player} className="flex items-center justify-between gap-3 bg-gray-700 rounded px-4 py-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-gray-400 text-sm w-7 shrink-0">{idx + 1}.</span>
+                <button onClick={() => onViewProfile(player)} className="hover:underline text-left font-bold truncate">
+                  {player}
+                </button>
+                {player === user.username && (
+                  <span className="text-xs text-amber-300 border border-amber-400/60 rounded px-1.5 py-0.5 shrink-0">You</span>
+                )}
+              </div>
+              {user.isStaff && (
+                <button
+                  onClick={() => onRemovePlayer(tournament.id, player)}
+                  className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-xs transition shrink-0"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
