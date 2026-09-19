@@ -11,6 +11,8 @@ import {
   where,
   or,
   arrayUnion,
+  arrayRemove,
+  deleteField,
   runTransaction,
   writeBatch,
   getDocs,
@@ -432,4 +434,48 @@ export async function resolveDispute(tournamentId, matchId, winner, resolvedByUs
       completedAt: Date.now(),
     });
   });
+}
+
+// Undoes a staff removal: puts the player back in the tournament and reopens
+// the matches that removal handed to their opponent. The scheduler creates the
+// next round the moment every match in a round is decided, with the opponent
+// already advanced - by then a match can't be quietly reopened without
+// breaking the bracket, so this refuses instead. Matches keep their ready
+// flags and votes through a removal, so the status they had is rebuilt from
+// those.
+export async function reinstatePlayer(tournament, matches, username) {
+  if (tournament.status !== 'in_progress') {
+    throw new Error('Players can only be reinstated while the tournament is in progress.');
+  }
+  const removedMatches = matches.filter(
+    (m) => m.resolvedReason === 'player_removed' && (m.player1 === username || m.player2 === username)
+  );
+  if (removedMatches.length === 0) {
+    throw new Error(`${username} has no match that was decided by removing them, so there's nothing to restore.`);
+  }
+  const alreadyAdvanced = removedMatches.some((m) => matches.some((other) => other.round > m.round));
+  if (alreadyAdvanced) {
+    throw new Error(
+      `The next round has already been created with ${username}'s opponent advanced, so they can't be reinstated automatically.`
+    );
+  }
+
+  const batch = writeBatch(db);
+  removedMatches.forEach((m) => {
+    const bothReady = m.player1Ready && m.player2Ready;
+    const hasVote = m.winner1Vote || m.winner2Vote;
+    const status = bothReady ? (hasVote ? 'waiting_for_opponent' : 'scheduled') : 'pending';
+    batch.update(matchRef(tournament.id, m.id), {
+      status,
+      winner: null,
+      completedAt: null,
+      resolvedBy: deleteField(),
+      resolvedReason: deleteField(),
+    });
+  });
+  batch.update(tournamentRef(tournament.id), {
+    players: arrayUnion(username),
+    removedPlayers: arrayRemove(username),
+  });
+  await batch.commit();
 }

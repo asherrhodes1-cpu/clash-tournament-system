@@ -13,6 +13,7 @@ import {
   joinTournament,
   deleteTournament,
   removePlayer,
+  reinstatePlayer,
   startTournament,
   playerReady,
   reportMatch,
@@ -897,8 +898,18 @@ export default function TournamentApp() {
     }
   };
 
+  const handleReinstatePlayer = async (tournamentId, username) => {
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    if (!tournament) return;
+    try {
+      await reinstatePlayer(tournament, matches, username);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const handleRemovePlayer = async (tournamentId, username) => {
-    if (!window.confirm(`Remove ${username} from this tournament? This cannot be undone.`)) {
+    if (!window.confirm(`Remove ${username} from this tournament? Their opponent will be given the win. You can reinstate them afterwards, but only until the next round is created.`)) {
       return;
     }
     const tournament = tournaments.find(t => t.id === tournamentId);
@@ -1169,6 +1180,7 @@ export default function TournamentApp() {
             }}
             onResolveDispute={handleResolveDispute}
             onRemovePlayer={handleRemovePlayer}
+            onReinstatePlayer={handleReinstatePlayer}
             onPlayerReady={handlePlayerReady}
             onViewProfile={viewProfile}
             onUpdateBanner={handleUpdateBanner}
@@ -2606,7 +2618,7 @@ function CreateTournamentPage({ onCreateTournament, onCancel }) {
   );
 }
 
-function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat, onUpdateSignupDeadline }) {
+function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerReady, onFlagMatch, onResolveDispute, onRemovePlayer, onReinstatePlayer, onViewProfile, onUpdateBanner, onUpdateBannerPosition, onUpdateFormat, onUpdateSignupDeadline }) {
   const [viewMode, setViewMode] = useState('list');
   const [selectedDay, setSelectedDay] = useState(null);
   const [bannerUrl, setBannerUrl] = useState(null);
@@ -2958,6 +2970,10 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
       {tournament.status === 'completed' && <RewardCard tournament={tournament} user={user} />}
       {tournament.status === 'completed' && user.isStaff && <RewardsPanel tournament={tournament} matches={matches} />}
 
+      {user.isStaff && tournament.status === 'in_progress' && (
+        <RemovedPlayersCard tournament={tournament} onReinstatePlayer={onReinstatePlayer} onViewProfile={onViewProfile} />
+      )}
+
       {tournament.status === 'signups_open' && (
         <RegisteredPlayersCard tournament={tournament} user={user} onViewProfile={onViewProfile} onRemovePlayer={onRemovePlayer} />
       )}
@@ -3116,6 +3132,38 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
 // Everyone can see who has registered while signups are open (updates live as
 // people join). Staff also get a Remove button here, since this is where they
 // need it - the Players Remaining view is buried under the bracket controls.
+// Staff: players taken out of a running tournament, with a way to undo it.
+// Reinstating reopens the matches removal handed to their opponent, which is
+// only safe until the next round exists (reinstatePlayer refuses after that).
+function RemovedPlayersCard({ tournament, onReinstatePlayer, onViewProfile }) {
+  const removed = tournament.removedPlayers || [];
+  if (removed.length === 0) return null;
+
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+      <h2 className="text-xl font-bold mb-1">Removed players ({removed.length})</h2>
+      <p className="text-sm text-gray-400 mb-4">
+        Reinstating puts a player back and reopens the match their opponent was given. It only works until the next round is created.
+      </p>
+      <div className="space-y-2">
+        {removed.map((player) => (
+          <div key={player} className="flex items-center justify-between gap-3 bg-gray-700 rounded px-4 py-2">
+            <button onClick={() => onViewProfile(player)} className="hover:underline text-left font-bold truncate">
+              {player}
+            </button>
+            <button
+              onClick={() => onReinstatePlayer(tournament.id, player)}
+              className="bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold px-3 py-1 rounded text-xs transition shrink-0"
+            >
+              Reinstate
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RegisteredPlayersCard({ tournament, user, onViewProfile, onRemovePlayer }) {
   const players = tournament.players || [];
 
