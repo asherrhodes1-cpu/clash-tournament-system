@@ -7,6 +7,7 @@ const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
 const { dueReminders, discordTime } = require('./reminders');
 const { nextRoundUnlockAt } = require('./schedule');
+const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -424,62 +425,11 @@ async function sendMatchReminders(tournamentRef, matches) {
 // without staff needing to click anything. Bracket size and match count fall
 // out automatically from however many players actually signed up.
 //
-// The seeding helpers below mirror generateSeededBracket/seedDoubleElimination-
-// Bracket in tournament/src/utils.js - duplicated because Cloud Functions
-// (CommonJS) can't share an ES module with the CRA client without ejecting
-// the build. Keep the two in sync if either changes.
+// Seeding lives in ./seeding.js, which mirrors generateSeededBracket/
+// seedDoubleEliminationBracket in tournament/src/utils.js - duplicated because
+// Cloud Functions (CommonJS) can't share an ES module with the CRA client
+// without ejecting the build. Keep the two in sync if either changes.
 // ============================================================================
-function nextPowerOfTwo(n) {
-  let p = 1;
-  while (p < n) p *= 2;
-  return p;
-}
-
-function standardSeedOrder(size) {
-  if (size === 1) return [1];
-  const prev = standardSeedOrder(size / 2);
-  const out = [];
-  prev.forEach((s) => {
-    out.push(s);
-    out.push(size + 1 - s);
-  });
-  return out;
-}
-
-function generateSeededBracket(players, playerStats) {
-  const sorted = [...players].sort((a, b) => {
-    const aStats = playerStats[a] || { bestBuilderBaseTrophies: 0 };
-    const bStats = playerStats[b] || { bestBuilderBaseTrophies: 0 };
-    return bStats.bestBuilderBaseTrophies - aStats.bestBuilderBaseTrophies;
-  });
-  const top = [];
-  const bottom = [];
-  sorted.forEach((player, index) => {
-    if (index % 2 === 0) top.push(player);
-    else bottom.unshift(player);
-  });
-  const seeded = [...top, ...bottom];
-  const pairs = [];
-  for (let i = 0; i < seeded.length; i += 2) {
-    pairs.push(i + 1 < seeded.length ? [seeded[i], seeded[i + 1]] : [seeded[i], 'BYE']);
-  }
-  return pairs;
-}
-
-function seedDoubleEliminationBracket(players, playerStats) {
-  const bracketSize = nextPowerOfTwo(players.length);
-  const sorted = [...players].sort((a, b) => {
-    const aStats = playerStats[a] || { bestBuilderBaseTrophies: 0 };
-    const bStats = playerStats[b] || { bestBuilderBaseTrophies: 0 };
-    return bStats.bestBuilderBaseTrophies - aStats.bestBuilderBaseTrophies;
-  });
-  const seedOrder = standardSeedOrder(bracketSize);
-  const slots = seedOrder.map((seed) => sorted[seed - 1] || 'BYE');
-  const pairs = [];
-  for (let i = 0; i < slots.length; i += 2) pairs.push([slots[i], slots[i + 1]]);
-  return { pairs, bracketSize };
-}
-
 // Looks up each player's last-verified Clash tag/trophies from their profile
 // (not a fresh API call) - good enough for seeding purposes and keeps a
 // scheduled job from depending on the external Clash relay to start a
@@ -693,7 +643,8 @@ async function handleRoundAdvancement(tournamentRef, tournament, matches) {
   for (const round of roundNumbers) {
     if (round >= 10) continue;
 
-    const roundMatches = matches.filter((m) => m.round === round);
+    // Bracket position, not document-id order - see matchPosition.
+    const roundMatches = matches.filter((m) => m.round === round).sort((a, b) => matchPosition(a) - matchPosition(b));
     // 'disputed'/'needs_staff_review' are terminal in the sense that no
     // more player action is expected, but they don't have a real winner
     // yet - advancing (or crowning a champion) while one is still open
@@ -883,7 +834,10 @@ async function handleDoubleEliminationAdvancement(tournamentRef, tournament, mat
   let hasWrites = false;
 
   const matchDocRef = (id) => tournamentRef.collection('matches').doc(id);
-  const roundMatches = (bracket, round) => matches.filter((m) => m.bracket === bracket && m.round === round);
+  // Bracket position, not document-id order - see matchPosition.
+  const roundMatches = (bracket, round) => matches
+    .filter((m) => m.bracket === bracket && m.round === round)
+    .sort((a, b) => matchPosition(a) - matchPosition(b));
   const existsRound = (bracket, round) => roundMatches(bracket, round).length > 0;
   // 'disputed'/'needs_staff_review' are terminal in the sense that no more
   // player action is expected, but they don't have a real winner yet -

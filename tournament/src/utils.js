@@ -1,36 +1,11 @@
 // Pure helpers with no storage dependency, shared between App.js and the api/ modules.
 
+// Single elimination uses the same standard bracket layout as double
+// elimination (see seedDoubleEliminationBracket): padded to a power of two,
+// best seeds get the byes, and the top seeds can only meet late. Mirrors
+// functions/seeding.js, which the scheduler's auto-start uses.
 export function generateSeededBracket(players, playerStats) {
-  const sorted = [...players].sort((a, b) => {
-    const aStats = playerStats[a] || { bestBuilderBaseTrophies: 0 };
-    const bStats = playerStats[b] || { bestBuilderBaseTrophies: 0 };
-    return bStats.bestBuilderBaseTrophies - aStats.bestBuilderBaseTrophies;
-  });
-
-  const seeded = [];
-  const top = [];
-  const bottom = [];
-
-  sorted.forEach((player, index) => {
-    if (index % 2 === 0) {
-      top.push(player);
-    } else {
-      bottom.unshift(player);
-    }
-  });
-
-  seeded.push(...top, ...bottom);
-
-  const pairs = [];
-  for (let i = 0; i < seeded.length; i += 2) {
-    if (i + 1 < seeded.length) {
-      pairs.push([seeded[i], seeded[i + 1]]);
-    } else {
-      pairs.push([seeded[i], 'BYE']);
-    }
-  }
-
-  return pairs;
+  return seedDoubleEliminationBracket(players, playerStats).pairs;
 }
 
 function nextPowerOfTwo(n) {
@@ -53,11 +28,11 @@ function standardSeedOrder(size) {
   return out;
 }
 
-// Seeds round 1 of the winners bracket for a double-elimination tournament.
-// Unlike generateSeededBracket (which just byes off one odd leftover), this
-// pads all the way up to a power of two so the bracket has a fixed, known
-// number of winners-bracket rounds - the losers-bracket routing depends on
-// that being fixed and known in advance.
+// Seeds round 1 of a bracket. Pads all the way up to a power of two so the
+// bracket has a fixed, known number of rounds (double elimination's
+// losers-bracket routing depends on that), and places the seeds so the top
+// two can only meet in the final, the top four not before the semifinals,
+// and so on.
 export function seedDoubleEliminationBracket(players, playerStats) {
   const bracketSize = nextPowerOfTwo(players.length);
   const sorted = [...players].sort((a, b) => {
