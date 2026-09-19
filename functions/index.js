@@ -7,6 +7,7 @@ const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
 const { dueReminders, discordTime } = require('./reminders');
 const { nextRoundUnlockAt } = require('./schedule');
+const { newOpponentMessage, chatMessage } = require('./messages');
 const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
 
 admin.initializeApp();
@@ -54,17 +55,17 @@ async function discordApi(path, body) {
 // Every message the bot sends ends with a link back to the site, since each
 // one is a prompt to go do something there (ready up, reply, claim a reward).
 // The <> around the URL stops Discord adding a big preview card to each one.
-function postToChannel(channelId, content, mentionIds = []) {
+function postToChannel(channelId, content, mentionIds = [], linkLabel = 'Open Rainbow League') {
   return discordApi(`/channels/${channelId}/messages`, {
-    content: `${content}\n👉 [Open Rainbow League](<${SITE_URL.value()}>)`,
+    content: `${content}\n👉 [${linkLabel}](<${SITE_URL.value()}>)`,
     allowed_mentions: { parse: [], users: mentionIds },
   });
 }
 
-async function sendDm(discordId, content) {
+async function sendDm(discordId, content, linkLabel) {
   const dm = await discordApi('/users/@me/channels', { recipient_id: discordId });
   if (!dm?.id) return false;
-  return !!(await postToChannel(dm.id, content));
+  return !!(await postToChannel(dm.id, content, [], linkLabel));
 }
 
 // Official tournament-wide announcements: new tournaments, disputes needing
@@ -84,12 +85,12 @@ async function getDiscordId(username) {
 // Per-player pings: DM the player when they've linked Discord, and fall back
 // to an @mention in the match channel when they haven't or their DMs are
 // closed, so a missed DM never means a missed attack.
-async function notifyPlayer(username, content) {
+async function notifyPlayer(username, content, linkLabel) {
   if (!username || username === 'BYE') return;
   const discordId = await getDiscordId(username);
-  if (discordId && (await sendDm(discordId, content))) return;
+  if (discordId && (await sendDm(discordId, content, linkLabel))) return;
   const prefix = discordId ? `<@${discordId}>` : `**${username}**`;
-  await postToChannel(DISCORD_MATCH_CHANNEL_ID.value(), `${prefix} ${content}`, discordId ? [discordId] : []);
+  await postToChannel(DISCORD_MATCH_CHANNEL_ID.value(), `${prefix} ${content}`, discordId ? [discordId] : [], linkLabel);
 }
 
 function usernameToEmail(username) {
@@ -416,7 +417,7 @@ async function sendMatchReminders(tournamentRef, matches) {
     for (const reminder of dueReminders(m, now)) {
       try {
         await tournamentRef.collection('matches').doc(m.id).update({ [`remindersSent.${reminder.key}`]: true });
-        await Promise.all(reminder.recipients.map((name) => notifyPlayer(name, reminder.text)));
+        await Promise.all(reminder.recipients.map((name) => notifyPlayer(name, reminder.text, reminder.linkLabel)));
       } catch (err) {
         logger.error('sendMatchReminders failed', { matchId: m.id, key: reminder.key, err });
       }
@@ -1008,17 +1009,15 @@ exports.notifyMatchReady = onDocumentCreated(
     const m = event.data.data();
     if (!m.player1 || !m.player2 || m.player1 === 'BYE' || m.player2 === 'BYE') return;
 
-    // Later rounds are created a day before they open, so "ready up" would
-    // be premature - say when it opens instead (the unlock reminder then
-    // pings again at that moment).
-    const when = m.unlockAt && m.unlockAt > Date.now()
-      ? `It opens ${discordTime(m.unlockAt)}.`
-      : 'Head to the app to ready up!';
-    const text = `⚔️ New match: **${m.player1}** vs **${m.player2}**. ${when}`;
     const alreadyOpen = !m.unlockAt || m.unlockAt <= Date.now();
     // This message already told them it's live; skip the separate unlock ping.
     if (alreadyOpen) await event.data.ref.update({ 'remindersSent.unlock': true });
-    await Promise.all([notifyPlayer(m.player1, text), notifyPlayer(m.player2, text)]);
+    // Each player gets a message about *their* opponent (see messages.js);
+    // later rounds are created a day before they open, so it says when.
+    await Promise.all([m.player1, m.player2].map((player) => {
+      const { text, linkLabel } = newOpponentMessage(m, player);
+      return notifyPlayer(player, text, linkLabel);
+    }));
   }
 );
 
@@ -1035,8 +1034,8 @@ exports.notifyNewChatMessage = onDocumentCreated(
     const recipient = match.player1 === msg.sender ? match.player2 : match.player1;
     if (!recipient || recipient === 'BYE') return;
 
-    const preview = msg.text.length > 200 ? `${msg.text.slice(0, 200)}...` : msg.text;
-    await notifyPlayer(recipient, `💬 New message from **${msg.sender}**: ${preview}`);
+    const { text, linkLabel } = chatMessage(match, msg.sender, msg.text);
+    await notifyPlayer(recipient, text, linkLabel);
   }
 );
 

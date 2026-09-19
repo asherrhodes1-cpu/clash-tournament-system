@@ -22,8 +22,9 @@ function discordTime(ms, style = 'R') {
   return `<t:${Math.floor(ms / 1000)}:${style}>`;
 }
 
-// Returns [{ key, recipients: [username], text }] - `key` is what gets marked
-// in `remindersSent`, `text` is sent as-is to each recipient.
+// Returns [{ key, recipients: [username], text, linkLabel }] - `key` is what
+// gets marked in `remindersSent`, `text` is sent as-is to each recipient and
+// `linkLabel` is the prompt on the link back to the site.
 function dueReminders(m, now) {
   if (!m.player1 || !m.player2 || m.player1 === 'BYE' || m.player2 === 'BYE') return [];
   const sent = m.remindersSent || {};
@@ -42,6 +43,7 @@ function dueReminders(m, now) {
     if (m.unlockAt != null && !sent.unlock && now - m.unlockAt < UNLOCK_WINDOW_MS && notReady.length) {
       due.push({
         key: 'unlock',
+        linkLabel: 'Open Rainbow League to ready up',
         recipients: notReady.map((p) => p.name),
         text: `🔓 Your match is live: **${m.player1}** vs **${m.player2}**. Ready up in the app and get your attack in!`,
       });
@@ -54,6 +56,7 @@ function dueReminders(m, now) {
     ) {
       due.push({
         key: 'nudge',
+        linkLabel: 'Open Rainbow League to ready up',
         recipients: notReady.map((p) => p.name),
         text: `⏳ Half your day is gone and neither of you has readied up for **${m.player1}** vs **${m.player2}**. Don't miss your attack!`,
       });
@@ -67,6 +70,7 @@ function dueReminders(m, now) {
       if (deadline && !sent.deadline_ready && now >= deadline - DEADLINE_WARNING_MS && now < deadline) {
         due.push({
           key: 'deadline_ready',
+          linkLabel: 'Open Rainbow League to ready up',
           recipients: [notReady[0].name],
           text: `⏰ **${readyPlayer.name}** is ready and waiting. Ready up in the app before ${discordTime(deadline)} or you forfeit the match.`,
         });
@@ -83,6 +87,7 @@ function dueReminders(m, now) {
     if (!sent.deadline_report && unreported.length && now >= deadline - DEADLINE_WARNING_MS && now < deadline) {
       due.push({
         key: 'deadline_report',
+        linkLabel: 'Open Rainbow League to report your result',
         recipients: unreported.map((p) => p.name),
         text: `⏰ Report your result for **${m.player1}** vs **${m.player2}** before ${discordTime(deadline)}, or the match gets settled without you.`,
       });
