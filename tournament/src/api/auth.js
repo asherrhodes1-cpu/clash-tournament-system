@@ -39,7 +39,7 @@ export function adminResetPassword({ username, newPassword }) {
 
 // Subscribes to auth state and calls onChange with either null (signed out) or
 // { uid, username, clashTag, isStaff, builderHallLevel, bestBuilderBaseTrophies,
-// clashVerified } matching the shape the rest of the app expects. Stays live
+// clashVerified, discordId } matching the shape the rest of the app expects. Stays live
 // on the user's own Firestore doc so re-verifying a Clash account updates
 // immediately without needing to log back in.
 export function subscribeToAuthState(onChange) {
@@ -70,6 +70,7 @@ export function subscribeToAuthState(onChange) {
         clashVerified: !!data.clashVerified,
         builderHallLevel: data.builderHallLevel ?? null,
         bestBuilderBaseTrophies: data.bestBuilderBaseTrophies ?? null,
+        discordId: data.discordId || '',
       });
     });
   });

@@ -233,6 +233,117 @@ function TournamentWalkthroughModal({ onClose }) {
   );
 }
 
+// Shown right after an account is created. Linking needs the player to be
+// logged in (the code is tied to their account), so it can't be part of the
+// signup form itself - this is the first moment it's possible. Skipping is
+// allowed but has to be confirmed, since without Discord a player gets no
+// reminders and can miss the window to play their match.
+const DISCORD_INVITE_URL = process.env.REACT_APP_DISCORD_INVITE_URL;
+
+function DiscordSetupModal({ user, onClose }) {
+  const [linkCode, setLinkCode] = useState(null);
+  const [loadingCode, setLoadingCode] = useState(true);
+  const [codeError, setCodeError] = useState('');
+  const [confirmingSkip, setConfirmingSkip] = useState(false);
+
+  const fetchCode = async () => {
+    setLoadingCode(true);
+    setCodeError('');
+    try {
+      setLinkCode(await createDiscordLinkCode());
+    } catch (err) {
+      setCodeError(err.message || 'Couldn\'t get a link code. Try again.');
+    } finally {
+      setLoadingCode(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCode();
+  }, []);
+
+  const linked = !!user.discordId;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        {linked ? (
+          <>
+            <h2 className="text-2xl font-bold mb-2">✅ Discord linked</h2>
+            <p className="text-gray-300 text-sm mb-5">
+              The bot will DM you when your match opens and before a deadline, so you don't miss your attack.
+            </p>
+            <button
+              onClick={onClose}
+              className="w-full bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold py-2 px-4 rounded transition"
+            >
+              Continue
+            </button>
+          </>
+        ) : confirmingSkip ? (
+          <>
+            <h2 className="text-2xl font-bold mb-2">Are you sure?</h2>
+            <div className="p-3 mb-5 rounded border border-amber-400/60 bg-amber-200/10 text-amber-200 text-sm">
+              Without Discord you won't get match reminders. If you miss your match, you may be eliminated.
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmingSkip(false)}
+                className="flex-1 bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold py-2 px-4 rounded transition"
+              >
+                Go back
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 border border-gray-600 hover:border-white py-2 px-4 rounded transition"
+              >
+                Skip anyway
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="text-2xl font-bold mb-1">💬 Connect Discord</h2>
+            <p className="text-gray-300 text-sm mb-4">
+              Get a DM when your match opens and before you'd run out of time, so you never miss an attack.
+            </p>
+            <ol className="text-sm text-gray-300 space-y-3 mb-5 list-decimal list-inside">
+              <li>
+                Join our Discord server.
+                {DISCORD_INVITE_URL && (
+                  <>
+                    {' '}
+                    <a href={DISCORD_INVITE_URL} target="_blank" rel="noreferrer" className="text-amber-300 underline">Open invite</a>
+                  </>
+                )}
+              </li>
+              <li>
+                Run this in any channel:
+                <div className="mt-2 font-mono text-lg font-bold text-white bg-gray-900 rounded px-3 py-2 select-all">
+                  {loadingCode ? 'Getting your code...' : linkCode ? `/link code:${linkCode.code}` : '—'}
+                </div>
+              </li>
+            </ol>
+            {codeError && <p className="text-sm text-red-400 mb-3">{codeError}</p>}
+            <p className="text-xs text-gray-400 mb-4">
+              This window updates by itself once it's linked. The code works once and expires in 10 minutes.{' '}
+              <button onClick={fetchCode} disabled={loadingCode} className="underline hover:text-white disabled:opacity-50">
+                Get a new code
+              </button>
+            </p>
+            <button
+              onClick={() => setConfirmingSkip(true)}
+              className="w-full border border-gray-600 hover:border-white py-2 px-4 rounded transition"
+            >
+              Skip for now
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ============================================================================
 // STAFF DASHBOARD COMPONENT
 // ============================================================================
@@ -604,6 +715,7 @@ export default function TournamentApp() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
   const [showWalkthrough, setShowWalkthrough] = useState(false);
+  const [showDiscordSetup, setShowDiscordSetup] = useState(false);
   const [flagRelatedMatch, setFlagRelatedMatch] = useState(null);
 
   useEffect(() => {
@@ -945,7 +1057,7 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'login' && (
-          <LoginPage />
+          <LoginPage onAccountCreated={() => setShowDiscordSetup(true)} />
         )}
 
         {currentPage === 'dashboard' && currentUser && (
@@ -1065,6 +1177,10 @@ export default function TournamentApp() {
       {showWalkthrough && (
         <TournamentWalkthroughModal onClose={() => setShowWalkthrough(false)} />
       )}
+
+      {showDiscordSetup && currentUser && (
+        <DiscordSetupModal user={currentUser} onClose={() => setShowDiscordSetup(false)} />
+      )}
     </div>
   );
 }
@@ -1091,7 +1207,7 @@ function LandingPage({ onEnter }) {
   );
 }
 
-function LoginPage() {
+function LoginPage({ onAccountCreated }) {
   const [isCreating, setIsCreating] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -1160,6 +1276,7 @@ function LoginPage() {
         apiToken: apiToken.trim(),
         inviteCode: inviteCode.trim(),
       });
+      onAccountCreated?.();
     } catch (err) {
       setError(err.message || 'Failed to create account');
     } finally {
