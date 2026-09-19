@@ -1737,7 +1737,6 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
   }, [profile?.bio]);
 
   useEffect(() => {
-    setDiscordIdDraft(profile?.discordId || '');
     setDiscordLinkCode(null);
   }, [profile?.discordId]);
 
