@@ -470,3 +470,36 @@ export function rankFinishers(placements, matches) {
   }
   return ordered;
 }
+
+// Days end at noon Central time. Mirrors functions/schedule.js (duplicated
+// because Cloud Functions can't share an ES module with the CRA client) -
+// keep the two in sync.
+const MIN_DAY_MS = 12 * 60 * 60 * 1000;
+const DAY_ENDS_TIME_ZONE = 'America/Chicago'; // follows daylight saving
+const DAY_ENDS_HOUR = 12;
+
+function zoneOffsetMs(utcMs) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: DAY_ENDS_TIME_ZONE, hourCycle: 'h23',
+      year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric',
+    }).formatToParts(new Date(utcMs)).map((p) => [p.type, Number(p.value)])
+  );
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(utcMs / 1000) * 1000;
+}
+
+export function noonCentralOnOrAfter(ms) {
+  const localDate = new Date(ms + zoneOffsetMs(ms));
+  for (let dayOffset = 0; dayOffset <= 2; dayOffset++) {
+    const wallClockNoon = Date.UTC(localDate.getUTCFullYear(), localDate.getUTCMonth(), localDate.getUTCDate() + dayOffset, DAY_ENDS_HOUR);
+    let candidate = wallClockNoon - zoneOffsetMs(wallClockNoon);
+    candidate = wallClockNoon - zoneOffsetMs(candidate);
+    if (candidate >= ms) return candidate;
+  }
+  throw new Error('unreachable: no noon within three days');
+}
+
+// When the day that opened at `openedAt` ends, and the next one opens.
+export function dayEndsAt(openedAt) {
+  return noonCentralOnOrAfter(openedAt + MIN_DAY_MS);
+}
