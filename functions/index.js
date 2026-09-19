@@ -311,17 +311,9 @@ exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET]
   const data = await response.json();
   // Only Builder Base fields count here - legendStatistics.bestSeason is the
   // home-village Legend League season, which isn't what this stat is for.
-  // Supercell's response hasn't been seen to include a Builder Base season
-  // at all, so log everything builder-related it does send per lookup to find
-  // where (or whether) it exposes one.
-  const legend = data.legendStatistics || {};
-  const bestSeason = legend.bestBuilderBaseSeason || legend.bestVersusSeason || null;
-  logger.info('fetchClashPlayer: builder base fields', {
-    tag: data.tag,
-    builderTopLevel: Object.fromEntries(Object.entries(data).filter(([k]) => /builder|versus/i.test(k) && typeof data[k] !== 'object')),
-    builderObjectKeys: Object.keys(data).filter((k) => /builder|versus/i.test(k) && typeof data[k] === 'object'),
-    legendStatistics: legend,
-  });
+  // Supercell only sends a Builder Base best season for some players, so a
+  // missing one just means there's nothing to show.
+  const bestSeason = data.legendStatistics?.bestBuilderBaseSeason || data.legendStatistics?.bestVersusSeason || null;
   return {
     found: true,
     name: data.name,

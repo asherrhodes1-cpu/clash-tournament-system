@@ -3206,14 +3206,12 @@ function useLiveClashStats(tag) {
   return stats;
 }
 
-// A season with a rank shows the rank; one Supercell only reports trophies
-// for shows those; and no best season at all means the player has never
-// been ranked - say so rather than leaving the line out.
+// Only called for players Supercell reports a Builder Base best season for
+// (see the callers): the rank when it has one, else that season's trophies.
 function formatBestSeason(stats) {
   const season = stats.bestSeasonId ? ` (${stats.bestSeasonId})` : '';
   if (stats.bestSeasonRank != null) return `#${stats.bestSeasonRank}${season}`;
-  if (stats.bestSeasonTrophies != null) return `${stats.bestSeasonTrophies} trophies${season}`;
-  return 'Unranked';
+  return `${stats.bestSeasonTrophies} trophies${season}`;
 }
 
 // Global live rank isn't something Supercell's API exposes (only a
