@@ -19,6 +19,7 @@ const DISCORD_BOT_TOKEN = defineSecret('DISCORD_BOT_TOKEN');
 const DISCORD_ANNOUNCE_CHANNEL_ID = defineString('DISCORD_ANNOUNCE_CHANNEL_ID');
 const DISCORD_MATCH_CHANNEL_ID = defineString('DISCORD_MATCH_CHANNEL_ID');
 const DISCORD_PUBLIC_KEY = defineString('DISCORD_PUBLIC_KEY');
+const SITE_URL = defineString('SITE_URL', { default: 'https://mercifulaj.com' });
 const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
@@ -50,9 +51,12 @@ async function discordApi(path, body) {
 
 // allowed_mentions is pinned to explicit user ids so a player's chat text
 // can never smuggle in an @everyone/@here or role ping.
+// Every message the bot sends ends with a link back to the site, since each
+// one is a prompt to go do something there (ready up, reply, claim a reward).
+// The <> around the URL stops Discord adding a big preview card to each one.
 function postToChannel(channelId, content, mentionIds = []) {
   return discordApi(`/channels/${channelId}/messages`, {
-    content,
+    content: `${content}\n👉 [Open Rainbow League](<${SITE_URL.value()}>)`,
     allowed_mentions: { parse: [], users: mentionIds },
   });
 }
