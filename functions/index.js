@@ -7,7 +7,8 @@ const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
 const { dueReminders, discordTime } = require('./reminders');
 const { nextRoundUnlockAt } = require('./schedule');
-const { newOpponentMessage, chatMessage } = require('./messages');
+const { newOpponentMessage, chatMessage, opponentReadyMessage } = require('./messages');
+const { fetchWithRetry } = require('./http');
 const { addGuildRole } = require('./roles');
 const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
 
@@ -40,7 +41,7 @@ const DISCORD_API = 'https://discord.com/api/v10';
 // that can fall back (DM -> channel) don't need their own try/catch.
 async function discordApi(path, body) {
   try {
-    const res = await fetch(`${DISCORD_API}${path}`, {
+    const res = await fetchWithRetry(`${DISCORD_API}${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bot ${DISCORD_BOT_TOKEN.value()}`,
@@ -94,10 +95,43 @@ async function getDiscordId(username) {
 // Per-player pings: DM the player when they've linked Discord, and fall back
 // to an @mention in the match channel when they haven't or their DMs are
 // closed, so a missed DM never means a missed attack.
+// Optional: a channel webhook for players who haven't linked Discord. It's a
+// separate route with its own rate limit from the bot's channel posts, and it
+// keeps working even if the bot loses access to the channel. Read from the
+// environment (functions/.env), not a deploy param, so deploys never stop to
+// ask for it. Anything that isn't a Discord webhook address is ignored.
+function matchWebhookUrl() {
+  const url = (process.env.DISCORD_MATCH_WEBHOOK_URL || '').trim();
+  return /^https:\/\/(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(url) ? url : null;
+}
+
+async function postToMatchWebhook(url, content, linkLabel = 'Open Rainbow League') {
+  try {
+    const res = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `${content}\n👉 [${linkLabel}](<${siteUrl()}>)`,
+        allowed_mentions: { parse: [] },
+      }),
+    });
+    if (!res.ok) logger.error('match webhook failed', { status: res.status, body: await res.text() });
+    return res.ok;
+  } catch (err) {
+    logger.error('match webhook failed', err);
+    return false;
+  }
+}
+
 async function notifyPlayer(username, content, linkLabel) {
   if (!username || username === 'BYE') return;
   const discordId = await getDiscordId(username);
   if (discordId && (await sendDm(discordId, content, linkLabel))) return;
+
+  // Not linked (or DMs closed): a public notice in the match channel. Someone
+  // who isn't linked can't be pinged, so it names them in bold instead.
+  const webhook = !discordId && matchWebhookUrl();
+  if (webhook && (await postToMatchWebhook(webhook, `**${username}** ${content}`, linkLabel))) return;
   const prefix = discordId ? `<@${discordId}>` : `**${username}**`;
   await postToChannel(DISCORD_MATCH_CHANNEL_ID.value(), `${prefix} ${content}`, discordId ? [discordId] : [], linkLabel);
 }
@@ -1027,6 +1061,32 @@ exports.notifyMatchReady = onDocumentCreated(
       const { text, linkLabel } = newOpponentMessage(m, player);
       return notifyPlayer(player, text, linkLabel);
     }));
+  }
+);
+
+// When one player readies up first, tell the other so they don't sit on it:
+// they have until the forfeit deadline. Fires only on the not-ready -> ready
+// change while the other side still isn't (once both are ready, the match is
+// on and there's nobody left to nudge).
+exports.notifyOpponentReady = onDocumentUpdated(
+  { document: 'tournaments/{tournamentId}/matches/{matchId}', secrets: [DISCORD_BOT_TOKEN] },
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    if (after.status !== 'pending' || !after.player1 || !after.player2 || after.player2 === 'BYE') return;
+
+    let readyPlayer = null;
+    let waitingPlayer = null;
+    let readyTime = null;
+    if (!before.player1Ready && after.player1Ready && !after.player2Ready) {
+      [readyPlayer, waitingPlayer, readyTime] = [after.player1, after.player2, after.player1ReadyTime];
+    } else if (!before.player2Ready && after.player2Ready && !after.player1Ready) {
+      [readyPlayer, waitingPlayer, readyTime] = [after.player2, after.player1, after.player2ReadyTime];
+    }
+    if (!readyPlayer) return;
+
+    const { text, linkLabel } = opponentReadyMessage(readyPlayer, readyTime || Date.now());
+    await notifyPlayer(waitingPlayer, text, linkLabel);
   }
 );
 

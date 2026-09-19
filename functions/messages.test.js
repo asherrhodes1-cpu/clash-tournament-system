@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { newOpponentMessage, chatMessage } = require('./messages');
+const { newOpponentMessage, chatMessage, opponentReadyMessage } = require('./messages');
+const { TIMEOUT_MS } = require('./reminders');
 
 const NOW = 1_000_000_000_000;
 const match = { player1: 'Ana', player2: 'Bo', round: 2, unlockAt: NOW - 1000 };
@@ -35,4 +36,13 @@ test('a relayed chat message is just who said what, with no repeated explanation
 test('long messages are trimmed', () => {
   assert.match(chatMessage('Bo', 'x'.repeat(300)).text, /x{200}\.\.\.$/);
   assert.strictEqual(chatMessage('Bo', 'short').text, '💬 **Bo:** short');
+});
+
+test('the ready-up ping names who is waiting and when the forfeit happens', () => {
+  const readyAt = 1_000_000_000_000;
+  const m = opponentReadyMessage('Bo', readyAt);
+  assert.match(m.text, /\*\*Bo\*\* is ready and waiting for you/);
+  assert.ok(m.text.includes(`<t:${Math.floor((readyAt + TIMEOUT_MS) / 1000)}:R>`));
+  assert.match(m.text, /forfeit/);
+  assert.strictEqual(m.linkLabel, 'Open Rainbow League to ready up');
 });

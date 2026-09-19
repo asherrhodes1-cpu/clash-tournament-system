@@ -2,7 +2,7 @@
 // player has to be told once, when they get a new opponent, that that
 // opponent's chat messages will arrive here and that replies must go through
 // the site. After that, a relayed message is just the message.
-const { discordTime } = require('./reminders');
+const { discordTime, TIMEOUT_MS } = require('./reminders');
 
 const dayOf = (match) => match.day ?? match.round;
 
@@ -28,4 +28,13 @@ function chatMessage(sender, text) {
   };
 }
 
-module.exports = { newOpponentMessage, chatMessage };
+// Sent to a player when their opponent readies up first. The other side has
+// TIMEOUT_MS from that moment before they forfeit (see handleTimeouts).
+function opponentReadyMessage(readyPlayer, readyTime) {
+  return {
+    text: `⚔️ **${readyPlayer}** is ready and waiting for you. Ready up before ${discordTime(readyTime + TIMEOUT_MS)} or you'll forfeit the match.`,
+    linkLabel: 'Open Rainbow League to ready up',
+  };
+}
+
+module.exports = { newOpponentMessage, chatMessage, opponentReadyMessage };
