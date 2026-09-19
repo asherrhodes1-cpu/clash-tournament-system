@@ -1896,7 +1896,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
                         <span className="font-bold text-white">{liveStats.clanName}</span>
                       </p>
                     )}
-                    <p>🌍 Best Season: <span className="font-bold text-white">{formatBestSeason(liveStats)}</span></p>
+                    <p>🌍 Best Legend Season: <span className="font-bold text-white">{formatBestSeason(liveStats)}</span></p>
                     {liveStats.versusBattleWins != null && <p>Builder Base Wins: <span className="font-bold text-white">{liveStats.versusBattleWins}</span></p>}
                     {profile?.country && (
                       <p>
@@ -3237,7 +3237,7 @@ function PlayerStatStrip({ tag }) {
           <span>{stats.clanName}</span>
         </div>
       )}
-      <div>🌍 Best Season: {formatBestSeason(stats)}</div>
+      <div>🌍 Best Legend Season: {formatBestSeason(stats)}</div>
     </div>
   );
 }

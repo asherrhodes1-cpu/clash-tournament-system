@@ -309,12 +309,14 @@ exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET]
   }
 
   const data = await response.json();
-  // Supercell has used different keys for the Builder Base best season over
-  // time (bestVersusSeason is the older name), so accept either. When no
-  // rank comes back, log exactly what did - that's the only way to tell a
+  // Supercell's player response has no Builder Base best-season field - the
+  // only best season under legendStatistics is `bestSeason` (its Legend League
+  // season, with the player's global rank when they finished ranked). The
+  // Builder Base keys are kept first in case Supercell ever adds them. When
+  // no rank comes back, log exactly what did - that's the only way to tell a
   // player who genuinely never ranked from one whose data we're misreading.
   const legend = data.legendStatistics || {};
-  const bestSeason = legend.bestBuilderBaseSeason || legend.bestVersusSeason || null;
+  const bestSeason = legend.bestBuilderBaseSeason || legend.bestVersusSeason || legend.bestSeason || null;
   if (bestSeason?.rank == null) {
     logger.info('fetchClashPlayer: no best-season rank', {
       tag: data.tag,
