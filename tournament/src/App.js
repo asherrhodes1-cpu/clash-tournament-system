@@ -713,10 +713,28 @@ export default function TournamentApp() {
   const [selectedProfileUsername, setSelectedProfileUsername] = useState(null);
   const [profileNavStack, setProfileNavStack] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef(null);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [showDiscordSetup, setShowDiscordSetup] = useState(false);
   const [flagRelatedMatch, setFlagRelatedMatch] = useState(null);
+
+  // The nav menu is a dropdown, so it closes on an outside click or Escape.
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onPointerDown = (e) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) setMobileMenuOpen(false);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAuthState((user) => {
@@ -978,77 +996,78 @@ export default function TournamentApp() {
                 </button>
               </div>
 
-              <button
-                className={currentUser.isStaff ? 'xl:hidden' : 'lg:hidden'}
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              >
-                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              </button>
-            </div>
-
-            {mobileMenuOpen && (
-              <div className={`${currentUser.isStaff ? 'xl:hidden' : 'lg:hidden'} pb-4 space-y-3`}>
-                <button
-                  onClick={() => {
-                    setCurrentPage('dashboard');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
-                >
-                  Dashboard
-                </button>
-                <button
-                  onClick={() => {
-                    viewProfile(currentUser.username);
-                    setMobileMenuOpen(false);
-                  }}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
-                >
-                  Profile
-                </button>
-                <button
-                  onClick={() => {
-                    setCurrentPage('rules');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
-                >
-                  Rules
-                </button>
-                {currentUser.isStaff && (
+              <div ref={mobileMenuRef} className={`relative ${currentUser.isStaff ? 'xl:hidden' : 'lg:hidden'}`}>
                   <button
-                    onClick={() => {
-                      setCurrentPage('create');
-                      setMobileMenuOpen(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                    aria-label="Menu"
+                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                   >
-                    Create Tournament
+                    {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
                   </button>
+                {mobileMenuOpen && (
+                  <div className="absolute right-0 top-full mt-3 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl p-2 space-y-1 z-50">
+                    <button
+                      onClick={() => {
+                        setCurrentPage('dashboard');
+                        setMobileMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                    >
+                      Dashboard
+                    </button>
+                    <button
+                      onClick={() => {
+                        viewProfile(currentUser.username);
+                        setMobileMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                    >
+                      Profile
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCurrentPage('rules');
+                        setMobileMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                    >
+                      Rules
+                    </button>
+                    {currentUser.isStaff && (
+                      <button
+                        onClick={() => {
+                          setCurrentPage('create');
+                          setMobileMenuOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                      >
+                        Create Tournament
+                      </button>
+                    )}
+                    {currentUser.isStaff && (
+                      <button
+                        onClick={() => {
+                          setCurrentPage('staff_dashboard');
+                          setMobileMenuOpen(false);
+                        }}
+                        className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
+                      >
+                        Staff Dashboard
+                      </button>
+                    )}
+                    <div className="px-4 py-2 text-sm text-gray-400 border-t border-gray-700 pt-3">
+                      {currentUser.username}
+                      {currentUser.isStaff && <span className="ml-2 text-white font-bold">[STAFF]</span>}
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
+                    >
+                      Logout
+                    </button>
+                  </div>
                 )}
-                {currentUser.isStaff && (
-                  <button
-                    onClick={() => {
-                      setCurrentPage('staff_dashboard');
-                      setMobileMenuOpen(false);
-                    }}
-                    className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
-                  >
-                    Staff Dashboard
-                  </button>
-                )}
-                <div className="px-4 py-2 text-sm text-gray-400 border-t border-gray-700 pt-3">
-                  {currentUser.username}
-                  {currentUser.isStaff && <span className="ml-2 text-white font-bold">[STAFF]</span>}
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
-                >
-                  Logout
-                </button>
               </div>
-            )}
+            </div>
           </div>
         </nav>
       )}
