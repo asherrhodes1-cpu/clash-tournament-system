@@ -3908,7 +3908,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           🔍 Details
         </button>
         {showDetails && (
-          <MatchDetailModal match={match} tournament={tournament} onClose={() => setShowDetails(false)} onViewProfile={onViewProfile} />
+          <MatchDetailModal match={match} tournament={tournament} onClose={() => setShowDetails(false)} onViewProfile={onViewProfile} isStaff={user.isStaff} />
         )}
         {userIsPlayer && match.status !== 'completed' && (
           <button
@@ -4022,7 +4022,59 @@ function MatchDetailPlayerCard({ name, tag, stats, ready, readyTime, vote, isWin
 // (unlike MatchPage, which is the participant-only coordinate/report flow),
 // so people can check on any match's status, timing, and proof without
 // needing to be one of the two players in it.
-function MatchDetailModal({ match, tournament, onClose, onViewProfile }) {
+// Staff-only, read-only view of a match's chat, to help judge disputes and who
+// should advance (players' chat is otherwise private to the two of them, and
+// Firestore rules only let those two and staff read it). Only subscribes
+// once opened, so a long list of matches doesn't open a listener per match.
+function MatchChatHistory({ match }) {
+  const [messages, setMessages] = useState(null);
+
+  useEffect(() => subscribeToMatchMessages(match.tournamentId, match.id, setMessages), [match.tournamentId, match.id]);
+
+  return <ChatHistoryList match={match} messages={messages} />;
+}
+
+function ChatHistoryList({ match, messages }) {
+  return (
+    <div className="mt-2 bg-gray-900 rounded p-3 max-h-64 overflow-y-auto space-y-3">
+      {messages === null ? (
+        <p className="text-sm text-gray-400">Loading chat...</p>
+      ) : messages.length === 0 ? (
+        <p className="text-sm text-gray-400">No messages were sent in this match.</p>
+      ) : (
+        messages.map((msg, idx) => (
+          <div key={idx} className="text-sm">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className={`font-bold ${msg.sender === match.player1 ? 'text-amber-300' : msg.sender === match.player2 ? 'text-sky-300' : 'text-white'}`}>
+                {msg.sender}
+              </span>
+              <span className="text-xs text-gray-500">{new Date(msg.timestamp).toLocaleString()}</span>
+            </div>
+            <div className="text-gray-200 whitespace-pre-wrap break-words">{msg.text}</div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function StaffChatToggle({ match }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setOpen(!open)}
+        className="text-xs bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-white px-3 py-1 rounded transition"
+      >
+        {open ? 'Hide chat history' : '💬 View chat history'}
+      </button>
+      {open && <MatchChatHistory match={match} />}
+    </div>
+  );
+}
+
+function MatchDetailModal({ match, tournament, onClose, onViewProfile, isStaff }) {
   const [screenshotUrls, setScreenshotUrls] = useState({ player1: [], player2: [] });
 
   useEffect(() => {
@@ -4130,6 +4182,13 @@ function MatchDetailModal({ match, tournament, onClose, onViewProfile }) {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {isStaff && match.player1 && match.player2 && match.player2 !== 'BYE' && (
+          <div className="mt-4 pt-4 border-t border-gray-700">
+            <p className="text-sm font-medium">Staff: match chat</p>
+            <StaffChatToggle match={match} />
           </div>
         )}
 
@@ -4468,6 +4527,7 @@ function DisputeReview({ matches, onResolveDispute }) {
                     ))}
                   </div>
                 )}
+                <StaffChatToggle match={dispute} />
               </div>
               <div className="flex gap-2 ml-4">
                 <button
@@ -4503,6 +4563,7 @@ function DisputeReview({ matches, onResolveDispute }) {
                 <p className="text-xs text-gray-300 mb-3">
                   Timed out: {new Date(match.timeoutAt).toLocaleString()}
                 </p>
+                <StaffChatToggle match={match} />
               </div>
               <div className="flex gap-2 flex-wrap">
                 <button
