@@ -3126,6 +3126,12 @@ function BracketView({ matches, rounds, isDoubleElim, bracketSize }) {
   );
 }
 
+// The game's clock icon, sized to sit in a line of text like the emoji it
+// replaces.
+function ClockIcon() {
+  return <img src="/icons/clock.png" alt="" className="inline-block w-[1.3em] h-[1.3em] align-[-0.3em] mr-1" />;
+}
+
 function RoundUnlockCountdown({ unlockTime }) {
   const [now, setNow] = useState(Date.now());
 
@@ -3316,7 +3322,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         <div className="text-sm text-gray-300 mt-2">
           {match.status === 'pending' && (
             <p className="text-white">
-              {match.player1Ready && match.player2Ready ? '⏱️ Both players ready! Match will start soon.' : 'Waiting for both players to confirm ready...'}
+              {match.player1Ready && match.player2Ready ? <><ClockIcon />Both players ready! Match will start soon.</> : 'Waiting for both players to confirm ready...'}
             </p>
           )}
           {match.status === 'scheduled' && (
@@ -3353,7 +3359,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           )}
           {(match.status === 'active' || match.status === 'scheduled' || match.status === 'waiting_for_opponent') && match.scheduledStartTime && (
             <div className={`text-xs mt-2 ${timeDisplay?.color || 'text-gray-400'}`}>
-              ⏱️ Time remaining: {timeDisplay?.text}
+              <ClockIcon />Time remaining: {timeDisplay?.text}
               {match.resolvedReason === 'no_report_timeout' && ' (Needs staff review - no reports submitted)'}
               {match.resolvedReason === 'opponent_timeout' && ' (Auto-resolved - opponent unresponsive)'}
             </div>
@@ -3743,7 +3749,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
 
         {timeDisplay && (
           <div className={`mb-4 p-3 rounded text-sm ${timeDisplay.color}`}>
-            ⏱️ {timeDisplay.text}
+            <ClockIcon />{timeDisplay.text}
             <p className="text-xs mt-1 text-gray-400">Time to report your result</p>
           </div>
         )}
@@ -3956,7 +3962,7 @@ function DisputeReview({ matches, onResolveDispute }) {
                   {match.player1} <span className="text-gray-300">vs</span> {match.player2}
                 </p>
                 <p className="text-sm text-neutral-300 mb-2">
-                  🕐 No results reported within 16 hours
+                  <ClockIcon />No results reported within 16 hours
                   {match.resolvedReason === 'no_report_timeout_repeat' && (
                     <span className="text-white font-bold"> — repeat offense, already used their grace period</span>
                   )}
