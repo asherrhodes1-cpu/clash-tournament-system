@@ -2986,6 +2986,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
               </div>
               <div className="space-y-3">
                 {sectionMatches
+                  .filter(match => !isByeMatch(match))
                   .map(match => (
                     <MatchCard
                       key={match.id}
@@ -3000,6 +3001,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                     />
                   ))}
               </div>
+              <ByeNote roundMatches={sectionMatches} />
             </div>
             );
           })
@@ -3017,6 +3019,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
               </div>
               <div className="space-y-3">
                 {roundMatches
+                  .filter(match => !isByeMatch(match))
                   .map(match => (
                     <MatchCard
                       key={match.id}
@@ -3031,6 +3034,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                     />
                   ))}
               </div>
+              <ByeNote roundMatches={roundMatches} />
             </div>
             );
           })
@@ -3318,6 +3322,24 @@ function TournamentResults({ tournament, onViewProfile }) {
         ))}
       </div>
     </div>
+  );
+}
+
+// A bye isn't a match anyone plays - the player just advances - so the round
+// list hides those matches and names the players instead. With bracket
+// padding (see seedDoubleEliminationBracket) a big field has many of them in
+// round 1, which would otherwise bury the handful of real matches.
+const isByeMatch = (m) => m.player1 === 'BYE' || m.player2 === 'BYE';
+const byePlayersOf = (roundMatches) =>
+  roundMatches.filter(isByeMatch).map((m) => (m.player1 === 'BYE' ? m.player2 : m.player1));
+
+function ByeNote({ roundMatches }) {
+  const names = byePlayersOf(roundMatches);
+  if (!names.length) return null;
+  return (
+    <p className="text-sm text-gray-400 mt-3">
+      Bye, advancing automatically ({names.length}): {names.join(', ')}
+    </p>
   );
 }
 
