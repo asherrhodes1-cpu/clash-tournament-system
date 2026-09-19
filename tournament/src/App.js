@@ -3838,7 +3838,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
               {isPlayer1Winner && '🏆 '}{match.player1}
             </button>
             <div className={`text-xs ${isPlayer1Winner ? 'text-amber-300/70' : 'text-gray-400'}`}>{match.player1Tag}</div>
-            {match.player1Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
+            {match.player1Ready && match.status === 'pending' && <div className="text-xs text-green-400 font-bold">✓ Ready</div>}
             <PlayerStatStrip tag={match.player1Tag} />
           </div>
           <span className="text-gray-400">vs</span>
@@ -3847,14 +3847,14 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
               {isPlayer2Winner && '🏆 '}{match.player2}
             </button>
             <div className={`text-xs ${isPlayer2Winner ? 'text-amber-300/70' : 'text-gray-400'}`}>{match.player2Tag}</div>
-            {match.player2Ready && match.status === 'pending' && <div className="text-xs text-white">✓ Ready</div>}
+            {match.player2Ready && match.status === 'pending' && <div className="text-xs text-green-400 font-bold">✓ Ready</div>}
             <PlayerStatStrip tag={match.player2Tag} />
           </div>
           {getStatusIcon(match.status)}
         </div>
         <div className="text-sm text-gray-300 mt-2">
           {match.status === 'pending' && (
-            <p className="text-white">
+            <p className={match.player1Ready && match.player2Ready ? 'text-green-400 font-bold' : 'text-white'}>
               {match.player1Ready && match.player2Ready ? <><ClockIcon />Both players ready! Match will start soon.</> : 'Waiting for both players to confirm ready...'}
             </p>
           )}
@@ -3932,7 +3932,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           </button>
         )}
         {userIsPlayer && match.status === 'pending' && userReady && (
-          <div className="text-sm text-white">✓ You're Ready</div>
+          <div className="text-sm text-green-400 font-bold">✓ You're Ready</div>
         )}
         {userIsPlayer && !userVote && ['active', 'scheduled', 'waiting_for_opponent'].includes(match.status) && (
           <button
@@ -4009,7 +4009,7 @@ function MatchDetailPlayerCard({ name, tag, stats, ready, readyTime, vote, isWin
       )}
       <PlayerStatStrip tag={tag} />
       {isPending && (
-        <div className={`text-xs mt-2 ${ready ? 'text-white' : 'text-gray-400'}`}>
+        <div className={`text-xs mt-2 ${ready ? 'text-green-400 font-bold' : 'text-gray-400'}`}>
           {ready ? `✓ Ready${readyTime ? ` at ${new Date(readyTime).toLocaleString()}` : ''}` : 'Not ready yet'}
         </div>
       )}
