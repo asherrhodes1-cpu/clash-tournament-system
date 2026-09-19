@@ -309,21 +309,19 @@ exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET]
   }
 
   const data = await response.json();
-  // Supercell's player response has no Builder Base best-season field - the
-  // only best season under legendStatistics is `bestSeason` (its Legend League
-  // season, with the player's global rank when they finished ranked). The
-  // Builder Base keys are kept first in case Supercell ever adds them. When
-  // no rank comes back, log exactly what did - that's the only way to tell a
-  // player who genuinely never ranked from one whose data we're misreading.
+  // Only Builder Base fields count here - legendStatistics.bestSeason is the
+  // home-village Legend League season, which isn't what this stat is for.
+  // Supercell's response hasn't been seen to include a Builder Base season
+  // at all, so log everything builder-related it does send per lookup to find
+  // where (or whether) it exposes one.
   const legend = data.legendStatistics || {};
-  const bestSeason = legend.bestBuilderBaseSeason || legend.bestVersusSeason || legend.bestSeason || null;
-  if (bestSeason?.rank == null) {
-    logger.info('fetchClashPlayer: no best-season rank', {
-      tag: data.tag,
-      legendKeys: Object.keys(legend),
-      bestSeason,
-    });
-  }
+  const bestSeason = legend.bestBuilderBaseSeason || legend.bestVersusSeason || null;
+  logger.info('fetchClashPlayer: builder base fields', {
+    tag: data.tag,
+    builderTopLevel: Object.fromEntries(Object.entries(data).filter(([k]) => /builder|versus/i.test(k) && typeof data[k] !== 'object')),
+    builderObjectKeys: Object.keys(data).filter((k) => /builder|versus/i.test(k) && typeof data[k] === 'object'),
+    legendStatistics: legend,
+  });
   return {
     found: true,
     name: data.name,
