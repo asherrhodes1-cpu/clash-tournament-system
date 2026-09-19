@@ -20,7 +20,15 @@ const DISCORD_BOT_TOKEN = defineSecret('DISCORD_BOT_TOKEN');
 const DISCORD_ANNOUNCE_CHANNEL_ID = defineString('DISCORD_ANNOUNCE_CHANNEL_ID');
 const DISCORD_MATCH_CHANNEL_ID = defineString('DISCORD_MATCH_CHANNEL_ID');
 const DISCORD_PUBLIC_KEY = defineString('DISCORD_PUBLIC_KEY');
-const SITE_URL = defineString('SITE_URL', { default: 'https://mercifulaj.com' });
+// Read straight from the environment (functions load .env files into it), not
+// as a deploy param: a param makes every deploy stop and ask for a value, and
+// a wrong answer at that prompt once put a shell command in the bot's links.
+// Anything that isn't a plain http(s) address falls back to the real site.
+const DEFAULT_SITE_URL = 'https://mercifulaj.com';
+function siteUrl() {
+  const configured = (process.env.SITE_URL || '').trim();
+  return /^https?:\/\/[^\s<>()]+$/i.test(configured) ? configured : DEFAULT_SITE_URL;
+}
 const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
 const TIMEOUT_MS = 16 * 60 * 60 * 1000;
@@ -57,7 +65,7 @@ async function discordApi(path, body) {
 // The <> around the URL stops Discord adding a big preview card to each one.
 function postToChannel(channelId, content, mentionIds = [], linkLabel = 'Open Rainbow League') {
   return discordApi(`/channels/${channelId}/messages`, {
-    content: `${content}\n👉 [${linkLabel}](<${SITE_URL.value()}>)`,
+    content: `${content}\n👉 [${linkLabel}](<${siteUrl()}>)`,
     allowed_mentions: { parse: [], users: mentionIds },
   });
 }
