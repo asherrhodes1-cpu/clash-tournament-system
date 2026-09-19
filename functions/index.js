@@ -1042,7 +1042,7 @@ exports.notifyNewChatMessage = onDocumentCreated(
     const recipient = match.player1 === msg.sender ? match.player2 : match.player1;
     if (!recipient || recipient === 'BYE') return;
 
-    const { text, linkLabel } = chatMessage(match, msg.sender, msg.text);
+    const { text, linkLabel } = chatMessage(msg.sender, msg.text);
     await notifyPlayer(recipient, text, linkLabel);
   }
 );

@@ -6,12 +6,14 @@ const NOW = 1_000_000_000_000;
 const match = { player1: 'Ana', player2: 'Bo', round: 2, unlockAt: NOW - 1000 };
 
 test('the new-opponent DM names the opponent from each player\'s point of view', () => {
-  assert.match(newOpponentMessage(match, 'Ana', NOW).text, /New opponent:\*\* you're up against \*\*Bo\*\* in Day 2/);
-  assert.match(newOpponentMessage(match, 'Bo', NOW).text, /you're up against \*\*Ana\*\*/);
+  assert.match(newOpponentMessage(match, 'Ana', NOW).text, /New opponent:\*\* \*\*Bo\*\* \(Day 2\)/);
+  assert.match(newOpponentMessage(match, 'Bo', NOW).text, /\*\*Ana\*\* \(Day 2\)/);
 });
 
-test('it says chat messages will arrive as DMs from the bot', () => {
-  assert.match(newOpponentMessage(match, 'Ana', NOW).text, /Anything \*\*Bo\*\* writes in your match chat will be sent to you here as a DM/);
+test('the new-opponent DM is where players are told replies must go through the site', () => {
+  const { text } = newOpponentMessage(match, 'Ana', NOW);
+  assert.match(text, /chat messages will show up here/);
+  assert.match(text, /Replying here won't reach them, so reply in your match chat on the site\./);
 });
 
 test('open matches prompt to ready up, future ones say when they open', () => {
@@ -23,19 +25,14 @@ test('open matches prompt to ready up, future ones say when they open', () => {
   assert.strictEqual(later.linkLabel, 'Open Rainbow League');
 });
 
-test('a chat relay names the sender and day, and says to reply on the site', () => {
-  const m = chatMessage(match, 'Bo', 'gg, ready when you are');
-  assert.match(m.text, /\*\*Bo\*\* \(your Day 2 opponent\) wrote:\n> gg, ready when you are/);
-  assert.match(m.text, /Replying here won't reach them\. Reply in your match chat on the site\./);
+test('a relayed chat message is just who said what, with no repeated explanation', () => {
+  const m = chatMessage('Bo', 'gg, ready when you are');
+  assert.strictEqual(m.text, '💬 **Bo:** gg, ready when you are');
+  assert.doesNotMatch(m.text, /Replying|won't reach/);
   assert.strictEqual(m.linkLabel, 'Open Rainbow League to reply');
 });
 
-test('long and multi-line messages are trimmed and quoted line by line', () => {
-  const m = chatMessage(match, 'Bo', 'line one\nline two');
-  assert.match(m.text, /> line one\n> line two/);
-  assert.match(chatMessage(match, 'Bo', 'x'.repeat(300)).text, /x{200}\.\.\./);
-});
-
-test('day prefers the explicit day field over round', () => {
-  assert.match(chatMessage({ ...match, day: 5 }, 'Bo', 'hi').text, /Day 5 opponent/);
+test('long messages are trimmed', () => {
+  assert.match(chatMessage('Bo', 'x'.repeat(300)).text, /x{200}\.\.\.$/);
+  assert.strictEqual(chatMessage('Bo', 'short').text, '💬 **Bo:** short');
 });
