@@ -24,12 +24,12 @@ export async function submitPrediction(match, user, pick) {
   else await setDoc(ref, { username: user.username, pick, createdAt: Date.now() });
 }
 
-// Running totals per player per tournament, kept up to date by the scoring
-// function: [{ tournamentId, username, correct, total }].
-export function subscribeToPredictionScores(onChange) {
+// One tournament's running totals per player, kept up to date by the scoring
+// function: [{ username, correct, total }].
+export function subscribeToTournamentPredictionScores(tournamentId, onChange) {
   return onSnapshot(
-    collectionGroup(db, 'predictionScores'),
-    (snap) => onChange(snap.docs.map((d) => ({ tournamentId: d.ref.parent.parent.id, ...d.data() }))),
+    collection(db, 'tournaments', String(tournamentId), 'predictionScores'),
+    (snap) => onChange(snap.docs.map((d) => d.data())),
     () => onChange([])
   );
 }

@@ -77,7 +77,7 @@ test('finished, disputed and BYE matches never get reminders', () => {
 
 test('every reminder carries a specific prompt for the link back to the site', () => {
   const ready = dueReminders(base, base.unlockAt + 60_000)[0];
-  assert.strictEqual(ready.linkLabel, 'Open Rainbow League to ready up');
+  assert.strictEqual(ready.linkLabel, 'Open Builder League to ready up');
   const m = { ...base, status: 'waiting_for_opponent', player1Ready: true, player2Ready: true, scheduledStartTime: 5_000_000_000_000, winner1Vote: 'A' };
-  assert.strictEqual(dueReminders(m, m.scheduledStartTime + TIMEOUT_MS - 3 * H)[0].linkLabel, 'Open Rainbow League to report your result');
+  assert.strictEqual(dueReminders(m, m.scheduledStartTime + TIMEOUT_MS - 3 * H)[0].linkLabel, 'Open Builder League to report your result');
 });

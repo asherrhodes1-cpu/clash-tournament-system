@@ -19,17 +19,17 @@ test('the new-opponent DM is where players are told replies must go through the 
 test('open matches prompt to ready up, future ones say when they open', () => {
   const open = newOpponentMessage(match, 'Ana', NOW);
   assert.match(open.text, /ready up/);
-  assert.strictEqual(open.linkLabel, 'Open Rainbow League to ready up');
+  assert.strictEqual(open.linkLabel, 'Open Builder League to ready up');
   const later = newOpponentMessage({ ...match, unlockAt: NOW + 86_400_000 }, 'Ana', NOW);
   assert.match(later.text, /opens <t:\d+:R>/);
-  assert.strictEqual(later.linkLabel, 'Open Rainbow League');
+  assert.strictEqual(later.linkLabel, 'Open Builder League');
 });
 
 test('a relayed chat message is just who said what, with no repeated explanation', () => {
   const m = chatMessage('Bo', 'gg, ready when you are');
   assert.strictEqual(m.text, '💬 **Bo:** gg, ready when you are');
   assert.doesNotMatch(m.text, /Replying|won't reach/);
-  assert.strictEqual(m.linkLabel, 'Open Rainbow League to reply');
+  assert.strictEqual(m.linkLabel, 'Open Builder League to reply');
 });
 
 test('long messages are trimmed', () => {
@@ -45,7 +45,7 @@ test('the ready-up ping names who is waiting and when the day ends', () => {
   assert.match(m.text, /\*\*Bo\*\* is ready and waiting for you/);
   assert.ok(m.text.includes(`<t:${Math.floor((unlockAt + 24 * 3600_000) / 1000)}:R>`));
   assert.match(m.text, /forfeit/);
-  assert.strictEqual(m.linkLabel, 'Open Rainbow League to ready up');
+  assert.strictEqual(m.linkLabel, 'Open Builder League to ready up');
 });
 
 test('the staff-review DM says why, from each player\'s point of view', () => {

@@ -15,7 +15,7 @@ function newOpponentMessage(match, player, now = Date.now()) {
     text:
       `🆕 **New opponent:** **${opponent}** (Day ${dayOf(match)}). ${when}\n` +
       `💬 Their match chat messages will show up here. Replying here won't reach them, so reply in your match chat on the site.`,
-    linkLabel: opensLater ? 'Open Rainbow League' : 'Open Rainbow League to ready up',
+    linkLabel: opensLater ? 'Open Builder League' : 'Open Builder League to ready up',
   };
 }
 
@@ -24,7 +24,7 @@ function chatMessage(sender, text) {
   const preview = text.length > 200 ? `${text.slice(0, 200)}...` : text;
   return {
     text: `💬 **${sender}:** ${preview}`,
-    linkLabel: 'Open Rainbow League to reply',
+    linkLabel: 'Open Builder League to reply',
   };
 }
 
@@ -33,7 +33,7 @@ function chatMessage(sender, text) {
 function opponentReadyMessage(match, readyPlayer, readyTime) {
   return {
     text: `⚔️ **${readyPlayer}** is ready and waiting for you. Ready up before ${discordTime(readyUpDeadline(match, readyTime))} or you'll forfeit the match.`,
-    linkLabel: 'Open Rainbow League to ready up',
+    linkLabel: 'Open Builder League to ready up',
   };
 }
 
@@ -46,7 +46,7 @@ function sentToStaffMessage(match, player) {
     : `neither of you reported a result in time`;
   return {
     text: `🛠️ Your match against **${opponent}** has been sent to staff: ${why}. They'll decide it and you'll be told the outcome.`,
-    linkLabel: 'Open Rainbow League',
+    linkLabel: 'Open Builder League',
   };
 }
 

@@ -34,7 +34,7 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './api/users';
 import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/rewards';
-import { subscribeToMatchPredictions, submitPrediction, subscribeToPredictionScores } from './api/predictions';
+import { subscribeToMatchPredictions, submitPrediction, subscribeToTournamentPredictionScores } from './api/predictions';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
 import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
 
@@ -185,8 +185,7 @@ const GENERAL_RULES = [
 // Who has called the most matches right. Totals come from the scoring
 // function, one row per player per tournament; here they're added up for a
 // chosen tournament or across all of them.
-// The ranked list itself, shared by the site-wide leaderboard page and the
-// per-tournament Predictions tab.
+// The ranked list for a tournament's Predictions tab.
 function PredictionRankTable({ ranked, user, onViewProfile }) {
   return (
     <div className="space-y-2">
@@ -222,9 +221,9 @@ function PredictionRankTable({ ranked, user, onViewProfile }) {
 function TournamentPredictions({ tournament, user, onViewProfile }) {
   const [scores, setScores] = useState(null);
 
-  useEffect(() => subscribeToPredictionScores(setScores), []);
+  useEffect(() => subscribeToTournamentPredictionScores(tournament.id, setScores), [tournament.id]);
 
-  const ranked = rankPredictionScores(scores || [], tournament.id);
+  const ranked = rankPredictionScores(scores || []);
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
@@ -241,50 +240,6 @@ function TournamentPredictions({ tournament, user, onViewProfile }) {
       ) : (
         <PredictionRankTable ranked={ranked} user={user} onViewProfile={onViewProfile} />
       )}
-    </div>
-  );
-}
-
-function LeaderboardPage({ tournaments, user, onViewProfile }) {
-  const [scores, setScores] = useState(null);
-  const [scope, setScope] = useState('all');
-
-  useEffect(() => subscribeToPredictionScores(setScores), []);
-
-  const ranked = rankPredictionScores(scores || [], scope);
-  const scoredTournaments = tournaments.filter((t) => (scores || []).some((r) => r.tournamentId === t.id));
-
-  return (
-    <div className="max-w-3xl mx-auto space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold">Prediction Leaderboard</h1>
-        <p className="text-sm text-gray-400">
-          Pick who you think will win any match you're not playing in, before it starts. Every correct pick is a point.
-        </p>
-      </div>
-
-      {scoredTournaments.length > 0 && (
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value)}
-          className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-        >
-          <option value="all">All tournaments</option>
-          {scoredTournaments.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      )}
-
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        {scores === null ? (
-          <p className="text-gray-400 text-sm">Loading...</p>
-        ) : ranked.length === 0 ? (
-          <p className="text-gray-400 text-sm">
-            No scored predictions yet. Use the Vote button on a match, pick a winner before it starts, and you'll show up here once it's decided.
-          </p>
-        ) : (
-          <PredictionRankTable ranked={ranked} user={user} onViewProfile={onViewProfile} />
-        )}
-      </div>
     </div>
   );
 }
@@ -1120,9 +1075,9 @@ export default function TournamentApp() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16 gap-4">
               <div className="flex items-center gap-2 shrink-0">
-                <img src="/badges/rainbow.png" alt="Rainbow League" className="w-9 h-9 object-contain" />
+                <img src="/badges/builder-league.png" alt="Builder League" className="w-9 h-9 object-contain" />
                 <span className="font-display font-bold text-lg tracking-tight whitespace-nowrap hidden sm:inline">
-                  RAINBOW <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">LEAGUE</span>
+                  BUILDER <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">LEAGUE</span>
                 </span>
               </div>
 
@@ -1145,19 +1100,12 @@ export default function TournamentApp() {
                 >
                   Rules
                 </button>
-                <button
-                  onClick={() => setCurrentPage('leaderboard')}
-                  className="hover:text-neutral-300 transition"
-                >
-                  Leaderboard
-                </button>
                 {currentUser.isStaff && (
                   <button
                     onClick={() => setCurrentPage('create')}
                     className="hover:text-neutral-300 transition"
-                    title="Create Tournament"
                   >
-                    Create
+                    Create Tournament
                   </button>
                 )}
                 {currentUser.isStaff && (
@@ -1220,15 +1168,6 @@ export default function TournamentApp() {
                       className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
                     >
                       Rules
-                    </button>
-                    <button
-                      onClick={() => {
-                        setCurrentPage('leaderboard');
-                        setMobileMenuOpen(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
-                    >
-                      Leaderboard
                     </button>
                     {currentUser.isStaff && (
                       <button
@@ -1380,9 +1319,6 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'rules' && currentUser && <RulesPage />}
-        {currentPage === 'leaderboard' && currentUser && (
-          <LeaderboardPage tournaments={tournaments} user={currentUser} onViewProfile={viewProfile} />
-        )}
       </div>
 
       {flagModalOpen && (
@@ -1820,7 +1756,7 @@ function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onSta
 }
 
 function medalFor(place) {
-  if (place === 1) return '/badges/rainbow.png';
+  if (place === 1) return '/badges/builder-league.png';
   if (place === 2) return '/badges/diamond.png';
   if (place === 3) return '/badges/ruby.png';
   if (place <= 10) return '/badges/emerald.png';
@@ -2311,7 +2247,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
           <div>
             <p className="text-sm text-gray-400">Championships</p>
             <p className="text-2xl font-bold flex items-center gap-2">
-              <img src="/badges/rainbow.png" alt="" className="w-7 h-7 object-contain" /> {championships}
+              <img src="/badges/builder-league.png" alt="" className="w-7 h-7 object-contain" /> {championships}
             </p>
           </div>
           <div>
@@ -2393,7 +2329,7 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
           <p>Players: {tournament.players.length} · Status: <span className="text-white">{tournament.status === 'loading_stats' ? 'Loading...' : formatStatus(tournament.status)}</span></p>
           {tournament.status === 'completed' && tournament.champion && (
             <p className="flex items-center gap-1.5">
-              <img src="/badges/rainbow.png" alt="" className="w-4 h-4 object-contain" /> Champion:{' '}
+              <img src="/badges/builder-league.png" alt="" className="w-4 h-4 object-contain" /> Champion:{' '}
               <span className="text-amber-300 font-bold">{tournament.champion}</span>
             </p>
           )}
@@ -3056,7 +2992,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
                 onClick={() => onViewProfile(tournament.champion)}
                 className="text-lg font-bold text-amber-300 hover:underline flex items-center gap-1.5"
               >
-                <img src="/badges/rainbow.png" alt="" className="w-5 h-5 object-contain" /> {tournament.champion}
+                <img src="/badges/builder-league.png" alt="" className="w-5 h-5 object-contain" /> {tournament.champion}
               </button>
             </div>
           )}
@@ -3346,7 +3282,7 @@ function PlayersRemainingView({ tournament, matches, onViewProfile }) {
           {sorted.map((player) => (
             <div key={player} className="flex items-center justify-between bg-gray-700 rounded px-4 py-2">
               <button onClick={() => onViewProfile(player)} className="hover:underline text-left font-bold flex items-center gap-1.5">
-                {player === tournament.champion && <img src="/badges/rainbow.png" alt="" className="w-4 h-4 object-contain" />}
+                {player === tournament.champion && <img src="/badges/builder-league.png" alt="" className="w-4 h-4 object-contain" />}
                 {player}
               </button>
               {stats[player] && (
@@ -3581,7 +3517,7 @@ function TournamentResults({ tournament, onViewProfile }) {
     <div className="bg-gray-800 rounded-lg border-2 border-amber-400/50 p-6">
       <div className="text-center mb-6">
         <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">Tournament Complete</p>
-        <img src="/badges/rainbow.png" alt="" className="w-14 h-14 object-contain mx-auto mb-2" />
+        <img src="/badges/builder-league.png" alt="" className="w-14 h-14 object-contain mx-auto mb-2" />
         <h2 className="text-2xl font-bold">
           <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">{tournament.champion}</span> wins {tournament.name}!
         </h2>

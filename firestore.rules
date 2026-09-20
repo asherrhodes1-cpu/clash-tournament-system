@@ -153,11 +153,6 @@ service cloud.firestore {
       allow read: if isSignedIn();
     }
 
-    // The leaderboard adds these up across every tournament.
-    match /{path=**}/predictionScores/{usernameLower} {
-      allow read: if isSignedIn();
-    }
-
     match /flags/{flagId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.createdBy == myUsername()

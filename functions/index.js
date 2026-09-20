@@ -69,7 +69,7 @@ async function discordApi(path, body) {
 // Every message the bot sends ends with a link back to the site, since each
 // one is a prompt to go do something there (ready up, reply, claim a reward).
 // The <> around the URL stops Discord adding a big preview card to each one.
-function postToChannel(channelId, content, mentionIds = [], linkLabel = 'Open Rainbow League') {
+function postToChannel(channelId, content, mentionIds = [], linkLabel = 'Open Builder League') {
   return discordApi(`/channels/${channelId}/messages`, {
     content: `${content}\n👉 [${linkLabel}](<${siteUrl()}>)`,
     allowed_mentions: { parse: [], users: mentionIds },
@@ -109,7 +109,7 @@ function matchWebhookUrl() {
   return /^https:\/\/(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(url) ? url : null;
 }
 
-async function postToMatchWebhook(url, content, linkLabel = 'Open Rainbow League') {
+async function postToMatchWebhook(url, content, linkLabel = 'Open Builder League') {
   try {
     const res = await fetchWithRetry(url, {
       method: 'POST',
