@@ -219,7 +219,7 @@ function LeaderboardPage({ tournaments, user, onViewProfile }) {
           <p className="text-gray-400 text-sm">Loading...</p>
         ) : ranked.length === 0 ? (
           <p className="text-gray-400 text-sm">
-            No scored predictions yet. Open a match's Details, pick a winner before it starts, and you'll show up here once it's decided.
+            No scored predictions yet. Use the Vote button on a match, pick a winner before it starts, and you'll show up here once it's decided.
           </p>
         ) : (
           <div className="space-y-2">
@@ -3934,6 +3934,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   const [forcingWinner, setForcingWinner] = useState(false);
   const [changingResult, setChangingResult] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showVote, setShowVote] = useState(false);
   const isPlayer1Winner = match.status === 'completed' && !!match.winner && match.winner === match.player1;
   const isPlayer2Winner = match.status === 'completed' && !!match.winner && match.winner === match.player2;
 
@@ -4052,6 +4053,16 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         {showDetails && (
           <MatchDetailModal match={match} tournament={tournament} onClose={() => setShowDetails(false)} onViewProfile={onViewProfile} isStaff={user.isStaff} user={user} />
         )}
+        {!userIsPlayer && match.status === 'pending' && match.player1 && match.player2 && match.player1 !== 'BYE' && match.player2 !== 'BYE' && (
+          <button
+            onClick={() => setShowVote(true)}
+            className="border border-gray-600 text-gray-300 hover:border-white hover:text-white px-3 py-2 rounded text-sm transition"
+            title="Predict who will win this match"
+          >
+            🔮 Vote
+          </button>
+        )}
+        {showVote && <MatchVoteModal match={match} user={user} onClose={() => setShowVote(false)} />}
         {userIsPlayer && match.status !== 'completed' && (
           <button
             onClick={onSelectMatch}
@@ -4314,7 +4325,6 @@ function MatchPrediction({ match, user }) {
 
   return (
     <div className="mt-4 p-3 bg-gray-900 rounded">
-      <p className="text-sm font-bold mb-2">🔮 Who will win?</p>
       {open ? (
         <>
           <div className="flex gap-2">
@@ -4348,6 +4358,27 @@ function MatchPrediction({ match, user }) {
           {total} vote{total === 1 ? '' : 's'}: {match.player1} {percent(match.player1)}% · {match.player2} {percent(match.player2)}%
         </p>
       )}
+    </div>
+  );
+}
+
+// A small window to cast a vote straight from the match list, without opening
+// the full match overview. It's the same voting box the overview has.
+function MatchVoteModal({ match, user, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-bold">{match.player1} <span className="text-gray-400">vs</span> {match.player2}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <MatchPrediction match={match} user={user} />
+        <button onClick={onClose} className="w-full mt-4 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded transition">
+          Done
+        </button>
+      </div>
     </div>
   );
 }
