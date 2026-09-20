@@ -487,31 +487,67 @@ function statusBeforeResolution(m) {
   return bothReady ? (hasVote ? 'waiting_for_opponent' : 'scheduled') : 'pending';
 }
 
+// Results that can be undone here: ones staff decided by hand, and automatic
+// no-show forfeits (someone was eliminated for not readying up).
+const REVERSIBLE_REASONS = ['staff_override', 'opponent_no_show'];
+
 function checkCanRevisitResult(tournament, m) {
   if (tournament.status !== 'in_progress') {
     throw new Error('Results can only be changed while the tournament is in progress.');
   }
-  if (!m || m.status !== 'completed' || m.resolvedReason !== 'staff_override') {
-    throw new Error('Only a result that staff decided by hand can be changed here.');
+  if (!m || m.status !== 'completed' || !REVERSIBLE_REASONS.includes(m.resolvedReason)) {
+    throw new Error('Only a result that staff decided by hand, or an automatic no-show forfeit, can be changed here.');
   }
 }
 
-// Reopens a match staff decided by hand, as if it hadn't been decided. Only
-// safe while nothing has been built on the result - the moment a later round
-// exists, the wrong player is already in it.
+// Whether the match a winner was placed into has begun (a player readied up or
+// voted, or it's past pending) - by then it can't be quietly rewritten. A bye
+// is completed on creation without having "started".
+function nextMatchStarted(next) {
+  const isBye = next.player1 === 'BYE' || next.player2 === 'BYE';
+  return !!(next.player1Ready || next.player2Ready || next.winner1Vote || next.winner2Vote ||
+    (next.status !== 'pending' && !(isBye && next.status === 'completed')));
+}
+
+// Reopens a decided match as if it hadn't been decided. Safe while nothing has
+// been built on the result. In single elimination the winner may already have
+// been placed into their next-round match: if that hasn't started, it's
+// removed - the scheduler makes it again once both matches feeding it are
+// decided - so the branch can play out properly. Anything further along, or
+// double elimination (where the loser has moved on too), is refused instead of
+// half-fixed.
 export async function reopenMatch(tournament, matches, matchId) {
   const m = matches.find((x) => x.id === matchId);
   checkCanRevisitResult(tournament, m);
-  if (matches.some((x) => x.round > m.round)) {
-    throw new Error('The next round has already been created, so this match can\'t simply be reopened. Switch the winner instead.');
+
+  const later = matches.filter((x) => x.round > m.round);
+  const batch = writeBatch(db);
+  if (later.length > 0) {
+    if (tournament.format === 'double_elimination') {
+      throw new Error('The next round has already been created, and in double elimination the loser has moved on too, so this needs fixing by hand.');
+    }
+    if (matches.some((x) => x.resolvedReason === 'grace_period')) {
+      throw new Error('This tournament advances a whole round at a time, so the next round has to be fixed by hand.');
+    }
+    if (later.some((x) => x.round > m.round + 1)) {
+      throw new Error('Later rounds have already been created with this winner in them, so this needs fixing by hand.');
+    }
+    const holding = later.filter((x) => x.player1 === m.winner || x.player2 === m.winner);
+    if (holding.some(nextMatchStarted)) {
+      throw new Error(`${m.winner} has already started their next match, so this needs fixing by hand.`);
+    }
+    holding.forEach((x) => batch.delete(matchRef(tournament.id, x.id)));
   }
-  await updateDoc(matchRef(tournament.id, matchId), {
+
+  batch.update(matchRef(tournament.id, matchId), {
     status: statusBeforeResolution(m),
     winner: null,
     completedAt: null,
     resolvedBy: deleteField(),
     resolvedReason: deleteField(),
+    autoResolvedAt: deleteField(),
   });
+  await batch.commit();
 }
 
 // Corrects a hand-decided winner to the other player. If the wrong winner has
@@ -546,9 +582,7 @@ export async function changeMatchWinner(tournament, matches, matchId, newWinner,
     const next = later.find((x) => x.player1 === wrongWinner || x.player2 === wrongWinner);
     if (!next) throw new Error('Couldn\'t find where the winner was placed in the next round, so this needs fixing by hand.');
     const isBye = next.player1 === 'BYE' || next.player2 === 'BYE';
-    const started = next.player1Ready || next.player2Ready || next.winner1Vote || next.winner2Vote ||
-      (next.status !== 'pending' && !(isBye && next.status === 'completed'));
-    if (started) throw new Error(`${wrongWinner} has already started their next match, so this needs fixing by hand.`);
+    if (nextMatchStarted(next)) throw new Error(`${wrongWinner} has already started their next match, so this needs fixing by hand.`);
 
     const slot = next.player1 === wrongWinner ? 'player1' : 'player2';
     const stats = tournament.playerStats?.[newWinner] || null;

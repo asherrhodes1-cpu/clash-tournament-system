@@ -4,7 +4,11 @@ const mockWrites = [];
 const mockCommit = jest.fn(async () => {});
 
 jest.mock('firebase/firestore', () => ({
-  writeBatch: () => ({ update: (ref, data) => mockWrites.push({ ref, data }), commit: mockCommit }),
+  writeBatch: () => ({
+    update: (ref, data) => mockWrites.push({ ref, data }),
+    delete: (ref) => mockWrites.push({ ref, deleted: true }),
+    commit: mockCommit,
+  }),
   updateDoc: async (ref, data) => { mockWrites.push({ ref, data }); },
   doc: (...parts) => parts.slice(1).join('/'),
   arrayUnion: (v) => ({ union: v }),
@@ -85,11 +89,55 @@ describe('changeMatchWinner', () => {
 describe('reopenMatch', () => {
   test('reopens the match with the status it had, clearing the decision', async () => {
     await reopenMatch(tournament, [decided], 't1-0');
-    expect(mockWrites[0].data).toEqual({ status: 'scheduled', winner: null, completedAt: null, resolvedBy: 'DELETE', resolvedReason: 'DELETE' });
+    expect(mockWrites[0].data).toEqual({
+      status: 'scheduled', winner: null, completedAt: null,
+      resolvedBy: 'DELETE', resolvedReason: 'DELETE', autoResolvedAt: 'DELETE',
+    });
   });
 
-  test('refuses once the next round exists', async () => {
-    await expect(reopenMatch(tournament, [decided, nextMatch], 't1-0')).rejects.toThrow(/next round has already been created/);
+  // Sven never readied up and was forfeited automatically; Clap had readied.
+  const forfeited = {
+    id: 't1-0', round: 1, player1: 'Sven', player2: 'Clap', status: 'completed', winner: 'Clap',
+    resolvedReason: 'opponent_no_show', autoResolvedAt: 9, completedAt: 9, player1Ready: false, player2Ready: true,
+  };
+
+  test('reopens an automatic no-show forfeit, back to pending with the opponent still ready', async () => {
+    await reopenMatch(tournament, [forfeited], 't1-0');
+    expect(mockWrites[0].data).toMatchObject({ status: 'pending', winner: null, resolvedReason: 'DELETE', autoResolvedAt: 'DELETE' });
+  });
+
+  test('other automatic results are not reversible here', async () => {
+    await expect(reopenMatch(tournament, [{ ...forfeited, resolvedReason: 'opponent_timeout' }], 't1-0')).rejects.toThrow(/by hand, or an automatic no-show/);
+  });
+
+  const clapNext = { id: 't1-r2-0', round: 2, player1: 'Clap', player2: 'Cy', status: 'pending', player1Ready: false, player2Ready: false };
+
+  test('removes the winner\'s not-yet-started next match (the scheduler makes it again), then reopens', async () => {
+    await reopenMatch(tournament, [forfeited, clapNext], 't1-0');
+    expect(mockWrites.find((w) => w.ref.includes('r2'))).toEqual({ ref: expect.stringContaining('t1-r2-0'), deleted: true });
+    expect(mockWrites.find((w) => w.data)?.data.status).toBe('pending');
+    expect(mockCommit).toHaveBeenCalledTimes(1);
+  });
+
+  test('also removes a bye the winner was given', async () => {
+    const byeNext = { ...clapNext, player2: 'BYE', status: 'completed', winner: 'Clap' };
+    await reopenMatch(tournament, [forfeited, byeNext], 't1-0');
+    expect(mockWrites.some((w) => w.deleted)).toBe(true);
+  });
+
+  test('refuses if the winner has already started their next match, writing nothing', async () => {
+    await expect(reopenMatch(tournament, [forfeited, { ...clapNext, player1Ready: true }], 't1-0')).rejects.toThrow(/already started/);
+    await expect(reopenMatch(tournament, [forfeited, { ...clapNext, status: 'scheduled' }], 't1-0')).rejects.toThrow(/already started/);
+    expect(mockCommit).not.toHaveBeenCalled();
     expect(mockWrites).toHaveLength(0);
+  });
+
+  test('refuses once later rounds exist, in double elimination, or in a whole-round tournament', async () => {
+    const round3 = { id: 't1-r3-0', round: 3, player1: 'Clap', player2: 'Di', status: 'pending' };
+    await expect(reopenMatch(tournament, [forfeited, clapNext, round3], 't1-0')).rejects.toThrow(/Later rounds/);
+    await expect(reopenMatch({ ...tournament, format: 'double_elimination' }, [forfeited, clapNext], 't1-0')).rejects.toThrow(/double elimination/);
+    const grace = { id: 'x', round: 1, status: 'completed', resolvedReason: 'grace_period', player1: 'P', player2: 'Q' };
+    await expect(reopenMatch(tournament, [forfeited, clapNext, grace], 't1-0')).rejects.toThrow(/whole round at a time/);
+    expect(mockCommit).not.toHaveBeenCalled();
   });
 });

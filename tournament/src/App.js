@@ -4096,7 +4096,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             🚩 Flag
           </button>
         )}
-        {user.isStaff && match.status === 'completed' && match.resolvedReason === 'staff_override' && match.player2 !== 'BYE' && (
+        {user.isStaff && match.status === 'completed' && ['staff_override', 'opponent_no_show'].includes(match.resolvedReason) && match.player2 !== 'BYE' && (
           changingResult ? (
             <div className="flex gap-2 items-center flex-wrap">
               <span className="text-xs text-gray-400">Wrong call?</span>
@@ -4127,7 +4127,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             <button
               onClick={() => setChangingResult(true)}
               className="border border-neutral-600 text-neutral-400 hover:border-white hover:text-white px-3 py-2 rounded text-sm transition"
-              title="This result was decided by hand - change it"
+              title="This result was decided by staff or by an automatic no-show forfeit - change it"
             >
               ✏️ Change result
             </button>
