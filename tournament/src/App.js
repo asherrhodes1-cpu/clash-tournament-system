@@ -367,7 +367,7 @@ function DiscordSetupModal({ user, onClose, joining = false, onCancel }) {
         ) : confirmingSkip ? (
           <>
             <h2 className="text-2xl font-bold mb-2">Are you sure?</h2>
-            <div className="p-3 mb-5 rounded border border-amber-400/60 bg-amber-200/10 text-amber-200 text-sm">
+            <div className="p-3 mb-5 rounded border border-orange-400/60 bg-orange-200/10 text-orange-200 text-sm">
               Without Discord you won't get match reminders. If you miss your match, you may be eliminated.
             </div>
             <div className="flex gap-2">
@@ -3497,7 +3497,7 @@ function RewardsPanel({ tournament, matches }) {
         Players who were knocked out in the same round are ordered by who beat them: losing to a higher finisher ranks higher.
       </p>
 
-      {(problem && linksText.trim()) && <p className="text-sm text-amber-300">{problem}</p>}
+      {(problem && linksText.trim()) && <p className="text-sm text-orange-300">{problem}</p>}
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <button
@@ -4218,7 +4218,7 @@ function ChatHistoryList({ match, messages }) {
         messages.map((msg, idx) => (
           <div key={idx} className="text-sm">
             <div className="flex items-baseline gap-2 flex-wrap">
-              <span className={`font-bold ${msg.sender === match.player1 ? 'text-amber-300' : msg.sender === match.player2 ? 'text-sky-300' : 'text-white'}`}>
+              <span className={`font-bold ${msg.sender === match.player1 ? 'text-amber-300' : msg.sender === match.player2 ? 'text-sky-300' : 'text-gray-400'}`}>
                 {msg.sender}
               </span>
               <span className="text-xs text-gray-500">{new Date(msg.timestamp).toLocaleString()}</span>
