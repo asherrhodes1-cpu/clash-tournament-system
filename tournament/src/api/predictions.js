@@ -1,5 +1,6 @@
 import { collection, collectionGroup, doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../firebase';
 
 function predictionsRef(tournamentId, matchId) {
   return collection(db, 'tournaments', String(tournamentId), 'matches', matchId, 'predictions');
@@ -32,4 +33,13 @@ export function subscribeToTournamentPredictionScores(tournamentId, onChange) {
     (snap) => onChange(snap.docs.map((d) => d.data())),
     () => onChange([])
   );
+}
+
+const setPredictionsStartDayCallable = httpsCallable(functions, 'setPredictionsStartDay');
+
+// Staff: only count predictions from this day on, recalculating the
+// tournament's leaderboard. Votes are never deleted, so this can be changed back.
+export async function setPredictionsStartDay(tournamentId, fromDay) {
+  const result = await setPredictionsStartDayCallable({ tournamentId, fromDay });
+  return result.data;
 }

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { scoreOutcome, planScoreChanges } = require('./predictions');
+const { scoreOutcome, planScoreChanges, tallyScores } = require('./predictions');
 
 const decided = { status: 'completed', winner: 'Ana', player1: 'Ana', player2: 'Bo' };
 
@@ -57,4 +57,42 @@ test('reopening a match takes its votes back out of the totals', () => {
   assert.deepStrictEqual(planScoreChanges(reopened, [{ id: 'u1', username: 'Cy', pick: 'Ana', correct: true }]), [
     { id: 'u1', username: 'Cy', correct: null, deltaTotal: -1, deltaCorrect: -1 },
   ]);
+});
+
+test('votes on days before the starting day count for nobody', () => {
+  const day3 = { ...decided, round: 3 };
+  const day4 = { ...decided, round: 4 };
+  assert.strictEqual(scoreOutcome(day3, 'Ana', 4), null);
+  assert.strictEqual(scoreOutcome(day4, 'Ana', 4), true);
+  assert.strictEqual(scoreOutcome(day3, 'Ana'), true); // no starting day: everything counts
+});
+
+test('a match that stores a day uses it over its round', () => {
+  assert.strictEqual(scoreOutcome({ ...decided, round: 2, day: 5 }, 'Ana', 4), true);
+  assert.strictEqual(scoreOutcome({ ...decided, round: 6, day: 3 }, 'Ana', 4), null);
+});
+
+test('moving the starting day takes earlier votes back out and leaves later ones alone', () => {
+  const day3 = { ...decided, round: 3 };
+  const changes = planScoreChanges(day3, [{ id: 'u1', username: 'Cy', pick: 'Ana', correct: true }], 4);
+  assert.deepStrictEqual(changes, [{ id: 'u1', username: 'Cy', correct: null, deltaTotal: -1, deltaCorrect: -1 }]);
+  // ...and moving it back re-adds them.
+  assert.deepStrictEqual(planScoreChanges(day3, [{ id: 'u1', username: 'Cy', pick: 'Ana', correct: null }], 1), [
+    { id: 'u1', username: 'Cy', correct: true, deltaTotal: 1, deltaCorrect: 1 },
+  ]);
+});
+
+test('tallying from scratch only counts matches from the starting day on', () => {
+  const entries = [
+    { match: { ...decided, id: 'm3', round: 3 }, predictions: [{ id: 'u1', username: 'Cy', pick: 'Ana' }, { id: 'u2', username: 'Di', pick: 'Bo' }] },
+    { match: { ...decided, id: 'm4', round: 4 }, predictions: [{ id: 'u1', username: 'Cy', pick: 'Bo' }, { id: 'u2', username: 'Di', pick: 'Ana' }] },
+    { match: { id: 'm5', round: 5, status: 'pending', winner: null, player1: 'Ana', player2: 'Bo' }, predictions: [{ id: 'u1', username: 'Cy', pick: 'Ana' }] },
+  ];
+  const { totals, marks } = tallyScores(entries, 4);
+  // Only day 4 counts: Cy picked Bo (wrong), Di picked Ana (right). Day 3 and the undecided day 5 match don't.
+  assert.deepStrictEqual(totals, { cy: { username: 'Cy', correct: 0, total: 1 }, di: { username: 'Di', correct: 1, total: 1 } });
+  assert.deepStrictEqual(marks.filter((x) => x.matchId === 'm3').map((x) => x.correct), [null, null]);
+  assert.deepStrictEqual(marks.filter((x) => x.matchId === 'm4').map((x) => x.correct), [false, true]);
+  // Starting from day 1 brings day 3 back.
+  assert.deepStrictEqual(tallyScores(entries, 1).totals.cy, { username: 'Cy', correct: 1, total: 2 });
 });

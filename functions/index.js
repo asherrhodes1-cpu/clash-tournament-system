@@ -13,7 +13,7 @@ const { addGuildRole } = require('./roles');
 const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
 const { planSingleElimAdvancement } = require('./advancement');
 const { planDoubleElimAdvancement } = require('./doubleElim');
-const { planScoreChanges } = require('./predictions');
+const { planScoreChanges, tallyScores } = require('./predictions');
 const { readyUpDeadline } = require('./reminders');
 
 admin.initializeApp();
@@ -1367,7 +1367,10 @@ exports.scoreMatchPredictions = onDocumentUpdated(
     if (predictionsSnap.empty) return;
 
     const predictions = predictionsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const changes = planScoreChanges(after, predictions);
+    // Staff can set the day the leaderboard starts counting from (see
+    // setPredictionsStartDay); earlier matches score for nobody.
+    const tournamentSnap = await db.collection('tournaments').doc(event.params.tournamentId).get();
+    const changes = planScoreChanges(after, predictions, tournamentSnap.data()?.predictionsFromDay || 1);
     const scoresRef = db.collection('tournaments').doc(event.params.tournamentId).collection('predictionScores');
 
     // Two writes per change; keep each batch well under Firestore's 500 limit.
@@ -1385,3 +1388,46 @@ exports.scoreMatchPredictions = onDocumentUpdated(
     }
   }
 );
+
+// Staff: only count predictions from a given day on, and recalculate this
+// tournament's leaderboard to match. Nothing is deleted - every vote stays, and
+// setting the day back to 1 counts them all again - so it's safe to change.
+exports.setPredictionsStartDay = onCall(async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Only staff can reset the prediction leaderboard');
+
+  const { tournamentId, fromDay } = request.data || {};
+  const day = Number(fromDay);
+  if (!tournamentId || !Number.isInteger(day) || day < 1 || day > 60) {
+    throw new HttpsError('invalid-argument', 'Give a day between 1 and 60');
+  }
+
+  const tournamentRef = db.collection('tournaments').doc(String(tournamentId));
+  if (!(await tournamentRef.get()).exists) throw new HttpsError('not-found', 'Tournament not found');
+
+  const matchesSnap = await tournamentRef.collection('matches').get();
+  const entries = [];
+  const predictionRefs = {};
+  for (const matchDoc of matchesSnap.docs) {
+    const predictionsSnap = await matchDoc.ref.collection('predictions').get();
+    if (predictionsSnap.empty) continue;
+    entries.push({ match: matchDoc.data(), predictions: predictionsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) });
+    predictionsSnap.docs.forEach((d) => { predictionRefs[`${matchDoc.id}/${d.id}`] = d.ref; });
+  }
+  const { totals, marks } = tallyScores(entries, day);
+
+  // Firestore batches hold 500 writes, so do it in chunks. Order: replace the
+  // totals first, then mark each vote, then record the setting.
+  const scoresRef = tournamentRef.collection('predictionScores');
+  const ops = [];
+  (await scoresRef.get()).docs.forEach((d) => ops.push((batch) => batch.delete(d.ref)));
+  Object.entries(totals).forEach(([key, row]) => ops.push((batch) => batch.set(scoresRef.doc(key), row)));
+  marks.forEach((mark) => ops.push((batch) => batch.update(predictionRefs[`${mark.matchId}/${mark.id}`], { correct: mark.correct })));
+  ops.push((batch) => batch.update(tournamentRef, { predictionsFromDay: day }));
+
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = db.batch();
+    ops.slice(i, i + 400).forEach((op) => op(batch));
+    await batch.commit();
+  }
+  return { fromDay: day, players: Object.keys(totals).length, votesCounted: Object.values(totals).reduce((n, r) => n + r.total, 0) };
+});

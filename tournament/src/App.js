@@ -34,7 +34,7 @@ import {
 } from './api/storage';
 import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './api/users';
 import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/rewards';
-import { subscribeToMatchPredictions, submitPrediction, subscribeToTournamentPredictionScores } from './api/predictions';
+import { subscribeToMatchPredictions, submitPrediction, subscribeToTournamentPredictionScores, setPredictionsStartDay } from './api/predictions';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
 import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
 
@@ -220,10 +220,33 @@ function PredictionRankTable({ ranked, user, onViewProfile }) {
 // Only listens to the totals once the tab is opened.
 function TournamentPredictions({ tournament, user, onViewProfile }) {
   const [scores, setScores] = useState(null);
+  const startDay = tournament.predictionsFromDay || 1;
+  const [dayDraft, setDayDraft] = useState(String(startDay));
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => subscribeToTournamentPredictionScores(tournament.id, setScores), [tournament.id]);
 
   const ranked = rankPredictionScores(scores || []);
+
+  const resetFromDay = async () => {
+    const day = parseInt(dayDraft, 10);
+    if (!Number.isInteger(day) || day < 1) {
+      alert('Enter a day number, like 4.');
+      return;
+    }
+    const message = day === 1
+      ? 'Count every prediction again, from Day 1?'
+      : `Only count predictions on Day ${day} and later? Earlier days stop counting and the leaderboard is recalculated. Votes aren't deleted, so you can change this back.`;
+    if (!window.confirm(message)) return;
+    setResetting(true);
+    try {
+      await setPredictionsStartDay(tournament.id, day);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setResetting(false);
+    }
+  };
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
@@ -233,6 +256,29 @@ function TournamentPredictions({ tournament, user, onViewProfile }) {
           Pick who you think will win any match you're not playing in, before it starts, using the Vote button. Every correct pick is a point.
         </p>
       </div>
+      {startDay > 1 && (
+        <p className="text-sm text-gray-300">Only predictions from Day {startDay} on count toward this leaderboard.</p>
+      )}
+      {user.isStaff && (
+        <div className="flex items-center gap-2 flex-wrap text-sm">
+          <label htmlFor="predictions-from-day" className="text-gray-300">Count predictions from Day</label>
+          <input
+            id="predictions-from-day"
+            type="number"
+            min="1"
+            value={dayDraft}
+            onChange={(e) => setDayDraft(e.target.value)}
+            className="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white"
+          />
+          <button
+            onClick={resetFromDay}
+            disabled={resetting || String(startDay) === dayDraft}
+            className="border border-gray-600 hover:border-white px-3 py-1 rounded transition disabled:opacity-40"
+          >
+            {resetting ? 'Recalculating...' : 'Reset leaderboard'}
+          </button>
+        </div>
+      )}
       {scores === null ? (
         <p className="text-gray-400 text-sm">Loading...</p>
       ) : ranked.length === 0 ? (
