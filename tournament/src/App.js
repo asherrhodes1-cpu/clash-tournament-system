@@ -185,6 +185,66 @@ const GENERAL_RULES = [
 // Who has called the most matches right. Totals come from the scoring
 // function, one row per player per tournament; here they're added up for a
 // chosen tournament or across all of them.
+// The ranked list itself, shared by the site-wide leaderboard page and the
+// per-tournament Predictions tab.
+function PredictionRankTable({ ranked, user, onViewProfile }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3 px-4 text-xs text-gray-400 uppercase tracking-wide">
+        <span className="w-8">#</span>
+        <span className="flex-1">Player</span>
+        <span className="w-16 text-right">Correct</span>
+        <span className="w-16 text-right">Votes</span>
+        <span className="w-16 text-right">Accuracy</span>
+      </div>
+      {ranked.map((r, idx) => (
+        <div
+          key={r.username}
+          className={`flex items-center gap-3 rounded px-4 py-2 ${r.username === user.username ? 'bg-amber-200/10 border border-amber-400/50' : 'bg-gray-700'}`}
+        >
+          <span className="w-8 text-gray-300 flex items-center">
+            {idx < 3 && medalFor(idx + 1) ? <img src={medalFor(idx + 1)} alt="" className="w-5 h-5 object-contain" /> : idx + 1}
+          </span>
+          <button onClick={() => onViewProfile(r.username)} className="flex-1 text-left font-bold hover:underline truncate">
+            {r.username}
+          </button>
+          <span className="w-16 text-right font-bold text-green-400">{r.correct}</span>
+          <span className="w-16 text-right text-gray-300">{r.total}</span>
+          <span className="w-16 text-right text-gray-300">{Math.round((r.correct / r.total) * 100)}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// One tournament's prediction leaderboard, as a tab on the tournament page.
+// Only listens to the totals once the tab is opened.
+function TournamentPredictions({ tournament, user, onViewProfile }) {
+  const [scores, setScores] = useState(null);
+
+  useEffect(() => subscribeToPredictionScores(setScores), []);
+
+  const ranked = rankPredictionScores(scores || [], tournament.id);
+
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
+      <div>
+        <h2 className="text-xl font-bold">🔮 Prediction Leaderboard</h2>
+        <p className="text-sm text-gray-400">
+          Pick who you think will win any match you're not playing in, before it starts, using the Vote button. Every correct pick is a point.
+        </p>
+      </div>
+      {scores === null ? (
+        <p className="text-gray-400 text-sm">Loading...</p>
+      ) : ranked.length === 0 ? (
+        <p className="text-gray-400 text-sm">No scored predictions in this tournament yet. They appear here once the matches people voted on are decided.</p>
+      ) : (
+        <PredictionRankTable ranked={ranked} user={user} onViewProfile={onViewProfile} />
+      )}
+    </div>
+  );
+}
+
 function LeaderboardPage({ tournaments, user, onViewProfile }) {
   const [scores, setScores] = useState(null);
   const [scope, setScope] = useState('all');
@@ -222,31 +282,7 @@ function LeaderboardPage({ tournaments, user, onViewProfile }) {
             No scored predictions yet. Use the Vote button on a match, pick a winner before it starts, and you'll show up here once it's decided.
           </p>
         ) : (
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 px-4 text-xs text-gray-400 uppercase tracking-wide">
-              <span className="w-8">#</span>
-              <span className="flex-1">Player</span>
-              <span className="w-16 text-right">Correct</span>
-              <span className="w-16 text-right">Votes</span>
-              <span className="w-16 text-right">Accuracy</span>
-            </div>
-            {ranked.map((r, idx) => (
-              <div
-                key={r.username}
-                className={`flex items-center gap-3 rounded px-4 py-2 ${r.username === user.username ? 'bg-amber-200/10 border border-amber-400/50' : 'bg-gray-700'}`}
-              >
-                <span className="w-8 text-gray-300 flex items-center">
-                  {idx < 3 && medalFor(idx + 1) ? <img src={medalFor(idx + 1)} alt="" className="w-5 h-5 object-contain" /> : idx + 1}
-                </span>
-                <button onClick={() => onViewProfile(r.username)} className="flex-1 text-left font-bold hover:underline truncate">
-                  {r.username}
-                </button>
-                <span className="w-16 text-right font-bold text-green-400">{r.correct}</span>
-                <span className="w-16 text-right text-gray-300">{r.total}</span>
-                <span className="w-16 text-right text-gray-300">{Math.round((r.correct / r.total) * 100)}%</span>
-              </div>
-            ))}
-          </div>
+          <PredictionRankTable ranked={ranked} user={user} onViewProfile={onViewProfile} />
         )}
       </div>
     </div>
@@ -3080,6 +3116,14 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
           >
             Players Remaining
           </button>
+          <button
+            onClick={() => setViewMode('predictions')}
+            className={`px-3 py-1 rounded text-sm border transition ${
+              viewMode === 'predictions' ? 'border-amber-400 text-amber-300' : 'border-gray-600 text-gray-300 hover:border-white'
+            }`}
+          >
+            Predictions
+          </button>
         </div>
       </div>
 
@@ -3099,7 +3143,9 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         </div>
       )}
 
-      {viewMode === 'remaining' ? (
+      {viewMode === 'predictions' ? (
+        <TournamentPredictions tournament={tournament} user={user} onViewProfile={onViewProfile} />
+      ) : viewMode === 'remaining' ? (
         <>
           {user.isStaff && (
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
