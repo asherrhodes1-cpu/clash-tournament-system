@@ -1075,9 +1075,10 @@ export default function TournamentApp() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16 gap-4">
               <div className="flex items-center gap-2 shrink-0">
+                <span className="font-display font-bold text-lg tracking-tight whitespace-nowrap hidden sm:inline title-outline">BUILDER</span>
                 <img src="/badges/builder-league.png" alt="Builder League" className="w-9 h-9 object-contain" />
                 <span className="font-display font-bold text-lg tracking-tight whitespace-nowrap hidden sm:inline">
-                  BUILDER <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">LEAGUE</span>
+                  <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent title-outline-gradient">LEAGUE</span>
                 </span>
               </div>
 

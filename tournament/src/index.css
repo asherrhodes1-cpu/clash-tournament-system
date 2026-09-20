@@ -71,3 +71,22 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* The nav title: a solid black outline around both words. BUILDER is plain
+   text, so it takes a stroke drawn behind the fill. LEAGUE is a gradient
+   clipped to its letters (transparent fill), which a stroke can't outline, so
+   it gets four hard black drop shadows around the letter shapes instead. Sized
+   in em so the outline scales with the text. */
+.title-outline {
+  -webkit-text-stroke: 0.2em #000;
+  paint-order: stroke fill;
+  text-shadow: 0 0.06em 0 #000;
+}
+.title-outline-gradient {
+  display: inline-block;
+  filter:
+    drop-shadow(0.07em 0 0 #000)
+    drop-shadow(-0.07em 0 0 #000)
+    drop-shadow(0 0.07em 0 #000)
+    drop-shadow(0 -0.07em 0 #000);
+}
