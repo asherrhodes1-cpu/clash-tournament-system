@@ -229,7 +229,7 @@ function TournamentPredictions({ tournament, user, onViewProfile }) {
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
       <div>
-        <h2 className="text-xl font-bold">🔮 Prediction Leaderboard</h2>
+        <h2 className="text-xl font-bold">Prediction Leaderboard</h2>
         <p className="text-sm text-gray-400">
           Pick who you think will win any match you're not playing in, before it starts, using the Vote button. Every correct pick is a point.
         </p>
@@ -257,7 +257,7 @@ function LeaderboardPage({ tournaments, user, onViewProfile }) {
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       <div>
-        <h1 className="text-3xl font-bold">🔮 Prediction Leaderboard</h1>
+        <h1 className="text-3xl font-bold">Prediction Leaderboard</h1>
         <p className="text-sm text-gray-400">
           Pick who you think will win any match you're not playing in, before it starts. Every correct pick is a point.
         </p>
@@ -4105,7 +4105,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             className="border border-gray-600 text-gray-300 hover:border-white hover:text-white px-3 py-2 rounded text-sm transition"
             title="Predict who will win this match"
           >
-            🔮 Vote
+            Vote
           </button>
         )}
         {showVote && <MatchVoteModal match={match} user={user} onClose={() => setShowVote(false)} />}
