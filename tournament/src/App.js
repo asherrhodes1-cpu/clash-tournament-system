@@ -176,6 +176,7 @@ const MATCH_FORMAT_RULES = [
 
 const GENERAL_RULES = [
   { icon: '🗓️', text: 'Each bracket round unlocks on a fixed "Day" that ends at 12:00 PM Central Time - even if your match finishes early, the next bracket round won\'t start until its Day arrives. This keeps everyone on the same pace.' },
+  { icon: '✅', text: 'Ready up before your Day ends. If your opponent has readied up and you haven\'t by the end of the Day (12:00 PM Central), you forfeit the match.' },
   { icon: '💬', text: 'Once your match is live, use "Coordinate Match" to chat with your opponent and agree on timing.' },
   { icon: '📸', text: 'Report the result with at least one proof screenshot and who won. Both players must agree, or staff will step in to resolve a dispute.' },
   { icon: '🚫', text: 'Submitting a false result gets you removed from the tournament and banned from future ones - so keep it honest.' },

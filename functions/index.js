@@ -14,6 +14,7 @@ const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = r
 const { planSingleElimAdvancement } = require('./advancement');
 const { planDoubleElimAdvancement } = require('./doubleElim');
 const { planScoreChanges } = require('./predictions');
+const { readyUpDeadline } = require('./reminders');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -578,12 +579,13 @@ async function handleTimeouts(tournamentRef, tournament, matches) {
   for (const m of matches) {
     const matchRef = tournamentRef.collection('matches').doc(m.id);
 
-    // One player readied up, the other never did - after the same timeout
-    // used everywhere else, the ready player wins by forfeit rather than
-    // waiting forever on an opponent who may not show up at all.
+    // One player readied up, the other never did - once the day is over (and
+    // they've had a fair window since their opponent readied, see
+    // readyUpDeadline) the ready player wins by forfeit rather than waiting
+    // forever on an opponent who may not show up at all.
     if (m.status === 'pending' && m.player1Ready !== m.player2Ready) {
       const readyTime = m.player1Ready ? m.player1ReadyTime : m.player2ReadyTime;
-      if (readyTime && now - readyTime > TIMEOUT_MS) {
+      if (readyTime && now > readyUpDeadline(m, readyTime)) {
         const winner = m.player1Ready ? m.player1 : m.player2;
         batch.update(matchRef, {
           status: 'completed',
@@ -1116,7 +1118,7 @@ exports.notifyOpponentReady = onDocumentUpdated(
     }
     if (!readyPlayer) return;
 
-    const { text, linkLabel } = opponentReadyMessage(readyPlayer, readyTime || Date.now());
+    const { text, linkLabel } = opponentReadyMessage(after, readyPlayer, readyTime || Date.now());
     await notifyPlayer(waitingPlayer, text, linkLabel);
   }
 );

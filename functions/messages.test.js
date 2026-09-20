@@ -1,7 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { newOpponentMessage, chatMessage, opponentReadyMessage, sentToStaffMessage } = require('./messages');
-const { TIMEOUT_MS } = require('./reminders');
 
 const NOW = 1_000_000_000_000;
 const match = { player1: 'Ana', player2: 'Bo', round: 2, unlockAt: NOW - 1000 };
@@ -38,11 +37,13 @@ test('long messages are trimmed', () => {
   assert.strictEqual(chatMessage('Bo', 'short').text, '💬 **Bo:** short');
 });
 
-test('the ready-up ping names who is waiting and when the forfeit happens', () => {
-  const readyAt = 1_000_000_000_000;
-  const m = opponentReadyMessage('Bo', readyAt);
+test('the ready-up ping names who is waiting and when the day ends', () => {
+  // A day that opened at 12:00 PM Central ends 24h later.
+  const unlockAt = Date.parse('2026-09-19T17:00:00Z');
+  const readyAt = unlockAt + 2 * 3600_000;
+  const m = opponentReadyMessage({ unlockAt }, 'Bo', readyAt);
   assert.match(m.text, /\*\*Bo\*\* is ready and waiting for you/);
-  assert.ok(m.text.includes(`<t:${Math.floor((readyAt + TIMEOUT_MS) / 1000)}:R>`));
+  assert.ok(m.text.includes(`<t:${Math.floor((unlockAt + 24 * 3600_000) / 1000)}:R>`));
   assert.match(m.text, /forfeit/);
   assert.strictEqual(m.linkLabel, 'Open Rainbow League to ready up');
 });
