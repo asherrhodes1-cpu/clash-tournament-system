@@ -8,7 +8,7 @@ const admin = require('firebase-admin');
 const { dueReminders, discordTime } = require('./reminders');
 const { nextRoundUnlockAt } = require('./schedule');
 const { newOpponentMessage, chatMessage, opponentReadyMessage, sentToStaffMessage } = require('./messages');
-const { fetchWithRetry } = require('./http');
+const { fetchWithRetry, fetchTransientRetry } = require('./http');
 const { addGuildRole } = require('./roles');
 const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = require('./seeding');
 const { planSingleElimAdvancement } = require('./advancement');
@@ -152,7 +152,7 @@ function usernameToEmail(username) {
 // ============================================================================
 async function callClashApi(path, options = {}) {
   try {
-    return await fetch(`${CLASH_RELAY_URL}${path}`, {
+    return await fetchTransientRetry(`${CLASH_RELAY_URL}${path}`, {
       ...options,
       headers: {
         Authorization: `Bearer ${CLASH_API_KEY.value()}`,
@@ -177,6 +177,12 @@ async function verifyAndFetchClashPlayer(cleanTag, apiToken) {
     body: JSON.stringify({ token: apiToken }),
   });
   if (!verifyResp.ok) {
+    // A rate limit or an outage on their side says nothing about the tag, so
+    // don't tell the player to go and double check it.
+    if (verifyResp.status === 429 || verifyResp.status >= 500) {
+      logger.error('verifyAndFetchClashPlayer: token check failed', { tag: cleanTag, status: verifyResp.status });
+      throw new HttpsError('unavailable', 'Clash of Clans is temporarily unavailable. Please try again in a minute.');
+    }
     throw new HttpsError('invalid-argument', 'Could not verify that Clash of Clans tag - double check it and try again.');
   }
   const verifyData = await verifyResp.json();
@@ -186,7 +192,14 @@ async function verifyAndFetchClashPlayer(cleanTag, apiToken) {
 
   const playerResp = await callClashApi(`/v1/players/%23${cleanTag}`);
   if (!playerResp.ok) {
-    throw new HttpsError('internal', 'Verified, but failed to fetch player stats. Please try again.');
+    // Keep what Clash of Clans actually said - without it a failure here can't
+    // be told apart (rate limit, maintenance, a bad tag...) after the fact.
+    logger.error('verifyAndFetchClashPlayer: player lookup failed', {
+      tag: cleanTag,
+      status: playerResp.status,
+      body: (await playerResp.text().catch(() => '')).slice(0, 300),
+    });
+    throw new HttpsError('unavailable', 'Your account was verified, but Clash of Clans didn\'t return your player stats. This is usually temporary - please try again in a minute.');
   }
   const data = await playerResp.json();
   return {

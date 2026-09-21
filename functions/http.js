@@ -18,4 +18,30 @@ async function fetchWithRetry(url, options, { fetchImpl = fetch, maxRetries = 4,
   }
 }
 
-module.exports = { fetchWithRetry };
+// For the Clash of Clans relay: gives each attempt a time limit (so a hung
+// relay fails fast instead of running out the platform's whole request
+// timeout) and retries a few times, with growing pauses, on a network error or
+// a status that usually means "try again" (rate limited, bad gateway, service
+// unavailable, gateway timeout). Returns the last response if it never comes
+// good, and only throws if every attempt failed at the network level.
+const TRANSIENT_STATUSES = [429, 500, 502, 503, 504];
+
+async function fetchTransientRetry(url, options, {
+  fetchImpl = fetch, attempts = 3, timeoutMs = 15000, baseDelayMs = 500, sleepImpl = sleep, statuses = TRANSIENT_STATUSES,
+} = {}) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const last = attempt === attempts - 1;
+    try {
+      const res = await fetchImpl(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+      if (!statuses.includes(res.status) || last) return res;
+    } catch (err) {
+      lastError = err;
+      if (last) throw err;
+    }
+    await sleepImpl(baseDelayMs * 2 ** attempt);
+  }
+  throw lastError;
+}
+
+module.exports = { fetchWithRetry, fetchTransientRetry, TRANSIENT_STATUSES };
