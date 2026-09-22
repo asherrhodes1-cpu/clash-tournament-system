@@ -370,7 +370,14 @@ exports.fetchClashPlayer = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET]
   const response = await callClashApi(`/v1/players/%23${cleanTag}`);
 
   if (!response.ok) {
-    logger.warn('fetchClashPlayer: relay/API returned', response.status);
+    // Body included (truncated) so a systemic failure - an expired key, or the
+    // relay's IP no longer on Supercell's allowlist - can be told apart from a
+    // one-off bad tag after the fact, instead of just a bare status code.
+    logger.warn('fetchClashPlayer: relay/API returned', {
+      tag: cleanTag,
+      status: response.status,
+      body: (await response.text().catch(() => '')).slice(0, 300),
+    });
     return { found: false };
   }
 
@@ -420,7 +427,11 @@ exports.fetchLocalRanking = onCall({ secrets: [CLASH_API_KEY, CLASH_RELAY_SECRET
   const response = await callClashApi(`/v1/locations/${locationId}/rankings/players-builder-base?limit=200`);
 
   if (!response.ok) {
-    logger.warn('fetchLocalRanking: relay/API returned', response.status);
+    logger.warn('fetchLocalRanking: relay/API returned', {
+      locationId,
+      status: response.status,
+      body: (await response.text().catch(() => '')).slice(0, 300),
+    });
     return { found: false };
   }
 
