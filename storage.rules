@@ -1,15 +1,20 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // Public read: these are shown on the tournament page, which anyone can
+    // now browse without an account. Uploading still needs one.
     match /matchScreenshots/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow write: if request.auth != null;
     }
+    // Profile pictures stay account-gated - profile viewing itself still
+    // requires being signed in.
     match /profilePictures/{uid}/{allPaths=**} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
     }
     match /tournamentBanners/{tournamentId}/{allPaths=**} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if request.auth != null && request.auth.token.isStaff == true;
     }
   }

@@ -33,7 +33,9 @@ service cloud.firestore {
     }
 
     match /tournaments/{tournamentId} {
-      allow read: if isSignedIn();
+      // Public: anyone can browse tournaments, brackets and results without an
+      // account - only joining and any other write needs one (see below).
+      allow read: if true;
       allow create, delete: if isStaff();
       // Format and signup deadline both only make sense to change before
       // the bracket exists, so staff can only touch them while signups are
@@ -63,7 +65,7 @@ service cloud.firestore {
       // Cloud Function only.
       // Running totals of correct predictions, written by the scoring function.
       match /predictionScores/{usernameLower} {
-        allow read: if isSignedIn();
+        allow read: if true;
         allow write: if false;
       }
 
@@ -73,7 +75,8 @@ service cloud.firestore {
       }
 
       match /matches/{matchId} {
-        allow read: if isSignedIn();
+        // Public read, same reasoning as the tournament doc above.
+        allow read: if true;
         allow write: if isStaff();
 
         function playerAlreadyVoted() {
@@ -150,7 +153,7 @@ service cloud.firestore {
     // Firestore can scope the query to one known tournament - a true collection
     // group query needs this wildcard form to be granted read access at all.
     match /{path=**}/matches/{matchId} {
-      allow read: if isSignedIn();
+      allow read: if true;
     }
 
     match /flags/{flagId} {

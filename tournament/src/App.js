@@ -835,6 +835,14 @@ function StaffDashboard({ flags, onUpdateFlagStatus, onAddResponse }) {
   );
 }
 
+// Stands in for currentUser when nobody is signed in, so read-only pages and
+// components don't have to special-case "no account" everywhere - a guest
+// just never matches a real username/uid, so player-only and staff-only UI
+// naturally stays hidden. isGuest is checked explicitly wherever an action
+// (voting, rewards, joining) needs a real signed-in account, not just "isn't
+// a player in this match".
+const GUEST_USER = { uid: null, username: null, isStaff: false, discordId: '', clashTag: '', clashVerified: false, isGuest: true };
+
 // ============================================================================
 // MAIN APP COMPONENT
 // ============================================================================
@@ -883,22 +891,20 @@ export default function TournamentApp() {
     return unsubscribe;
   }, []);
 
+  // Pages that only make sense with a real account - bounce back to
+  // browsing instead of rendering broken (e.g. after a logout while on one).
+  const ACCOUNT_ONLY_PAGES = ['create', 'match', 'profile', 'staff_dashboard'];
+
   useEffect(() => {
     if (currentUser && (currentPage === 'landing' || currentPage === 'login')) {
       setCurrentPage('dashboard');
     }
-    if (!currentUser && !authInitializing && currentPage !== 'landing' && currentPage !== 'login') {
-      setCurrentPage('landing');
+    if (!currentUser && !authInitializing && ACCOUNT_ONLY_PAGES.includes(currentPage)) {
+      setCurrentPage('dashboard');
     }
   }, [currentUser, authInitializing, currentPage]);
 
-  useEffect(() => {
-    if (!currentUser) {
-      setTournaments([]);
-      return;
-    }
-    return subscribeToTournaments(setTournaments);
-  }, [currentUser?.username]);
+  useEffect(() => subscribeToTournaments(setTournaments), []);
 
   useEffect(() => {
     if (!currentUser) {
@@ -917,12 +923,12 @@ export default function TournamentApp() {
   }, [currentUser?.username]);
 
   useEffect(() => {
-    if (!selectedTournamentId || !currentUser) {
+    if (!selectedTournamentId) {
       setMatches([]);
       return;
     }
     return subscribeToMatches(selectedTournamentId, setMatches);
-  }, [selectedTournamentId, currentUser?.username]);
+  }, [selectedTournamentId]);
 
   const handleLogout = async () => {
     await logOut();
@@ -933,6 +939,10 @@ export default function TournamentApp() {
   // "Back" can restore it exactly, even through a chain of profile-to-profile
   // clicks - each click pushes one more snapshot onto the stack.
   const viewProfile = (username) => {
+    if (!currentUser) {
+      setCurrentPage('login');
+      return;
+    }
     setProfileNavStack((prev) => [
       ...prev,
       { page: currentPage, tournamentId: selectedTournamentId, matchId: selectedMatchId, profileUsername: selectedProfileUsername },
@@ -996,6 +1006,10 @@ export default function TournamentApp() {
   // A player without Discord linked gets no match reminders, so joining
   // starts with the Discord prompt (link it, or skip and join anyway).
   const handleJoinTournament = async (tournamentId) => {
+    if (!currentUser) {
+      setCurrentPage('login');
+      return;
+    }
     if (!currentUser.discordId) {
       setPendingJoinId(tournamentId);
       return;
@@ -1114,10 +1128,13 @@ export default function TournamentApp() {
     );
   }
 
+  // Real account when signed in, otherwise a harmless stand-in (see
+  // GUEST_USER) so read-only pages don't need to special-case "no account".
+  const user = currentUser || GUEST_USER;
+
   return (
     <div className="min-h-screen bg-black text-white">
-      {currentUser && (
-        <nav className="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
+      <nav className="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16 gap-4">
               <div className="flex items-center gap-2 shrink-0">
@@ -1128,26 +1145,28 @@ export default function TournamentApp() {
                 </span>
               </div>
 
-              <div className={`${currentUser.isStaff ? 'hidden xl:flex' : 'hidden lg:flex'} items-center gap-3 text-sm whitespace-nowrap`}>
+              <div className={`${user.isStaff ? 'hidden xl:flex' : 'hidden lg:flex'} items-center gap-3 text-sm whitespace-nowrap`}>
                 <button
                   onClick={() => setCurrentPage('dashboard')}
                   className="hover:text-neutral-300 transition"
                 >
                   Dashboard
                 </button>
-                <button
-                  onClick={() => viewProfile(currentUser.username)}
-                  className="hover:text-neutral-300 transition"
-                >
-                  Profile
-                </button>
+                {currentUser && (
+                  <button
+                    onClick={() => viewProfile(currentUser.username)}
+                    className="hover:text-neutral-300 transition"
+                  >
+                    Profile
+                  </button>
+                )}
                 <button
                   onClick={() => setCurrentPage('rules')}
                   className="hover:text-neutral-300 transition"
                 >
                   Rules
                 </button>
-                {currentUser.isStaff && (
+                {user.isStaff && (
                   <button
                     onClick={() => setCurrentPage('create')}
                     className="hover:text-neutral-300 transition"
@@ -1155,7 +1174,7 @@ export default function TournamentApp() {
                     Create Tournament
                   </button>
                 )}
-                {currentUser.isStaff && (
+                {user.isStaff && (
                   <button
                     onClick={() => setCurrentPage('staff_dashboard')}
                     className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-sm transition"
@@ -1164,22 +1183,33 @@ export default function TournamentApp() {
                   </button>
                 )}
                 <JoinDiscordButton className="px-2.5 py-1.5">Discord</JoinDiscordButton>
-                <div className="text-sm text-gray-400 max-w-[11rem]">
-                  <div className="flex items-baseline gap-2">
-                    <span className="truncate">{currentUser.username}</span>
-                    {currentUser.isStaff && <span className="text-white font-bold shrink-0">[STAFF]</span>}
-                  </div>
-                  <div className="text-xs text-gray-500">{currentUser.clashTag}</div>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="border-2 border-white text-white hover:bg-white hover:text-black px-3 py-1.5 rounded transition"
-                >
-                  Logout
-                </button>
+                {currentUser ? (
+                  <>
+                    <div className="text-sm text-gray-400 max-w-[11rem]">
+                      <div className="flex items-baseline gap-2">
+                        <span className="truncate">{user.username}</span>
+                        {user.isStaff && <span className="text-white font-bold shrink-0">[STAFF]</span>}
+                      </div>
+                      <div className="text-xs text-gray-500">{user.clashTag}</div>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="border-2 border-white text-white hover:bg-white hover:text-black px-3 py-1.5 rounded transition"
+                    >
+                      Logout
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setCurrentPage('login')}
+                    className="border-2 border-white text-white hover:bg-white hover:text-black px-3 py-1.5 rounded transition"
+                  >
+                    Log In
+                  </button>
+                )}
               </div>
 
-              <div ref={mobileMenuRef} className={`relative ${currentUser.isStaff ? 'xl:hidden' : 'lg:hidden'}`}>
+              <div ref={mobileMenuRef} className={`relative ${user.isStaff ? 'xl:hidden' : 'lg:hidden'}`}>
                   <button
                     aria-label="Menu"
                     onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -1198,15 +1228,17 @@ export default function TournamentApp() {
                     >
                       Dashboard
                     </button>
-                    <button
-                      onClick={() => {
-                        viewProfile(currentUser.username);
-                        setMobileMenuOpen(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
-                    >
-                      Profile
-                    </button>
+                    {currentUser && (
+                      <button
+                        onClick={() => {
+                          viewProfile(currentUser.username);
+                          setMobileMenuOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                      >
+                        Profile
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setCurrentPage('rules');
@@ -1216,7 +1248,7 @@ export default function TournamentApp() {
                     >
                       Rules
                     </button>
-                    {currentUser.isStaff && (
+                    {user.isStaff && (
                       <button
                         onClick={() => {
                           setCurrentPage('create');
@@ -1227,7 +1259,7 @@ export default function TournamentApp() {
                         Create Tournament
                       </button>
                     )}
-                    {currentUser.isStaff && (
+                    {user.isStaff && (
                       <button
                         onClick={() => {
                           setCurrentPage('staff_dashboard');
@@ -1238,36 +1270,49 @@ export default function TournamentApp() {
                         Staff Dashboard
                       </button>
                     )}
-                    <div className="px-4 py-2 text-sm text-gray-400 border-t border-gray-700 pt-3">
-                      {currentUser.username}
-                      {currentUser.isStaff && <span className="ml-2 text-white font-bold">[STAFF]</span>}
-                    </div>
-                    <button
-                      onClick={handleLogout}
-                      className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
-                    >
-                      Logout
-                    </button>
+                    {currentUser ? (
+                      <>
+                        <div className="px-4 py-2 text-sm text-gray-400 border-t border-gray-700 pt-3">
+                          {user.username}
+                          {user.isStaff && <span className="ml-2 text-white font-bold">[STAFF]</span>}
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
+                        >
+                          Logout
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setCurrentPage('login');
+                          setMobileMenuOpen(false);
+                        }}
+                        className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded mt-1"
+                      >
+                        Log In
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           </div>
         </nav>
-      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentPage === 'landing' && (
-          <LandingPage onEnter={() => setCurrentPage('login')} />
+          <LandingPage onEnter={() => setCurrentPage('dashboard')} />
         )}
 
         {currentPage === 'login' && (
           <LoginPage onAccountCreated={() => setShowDiscordSetup(true)} />
         )}
 
-        {currentPage === 'dashboard' && currentUser && (
+        {currentPage === 'dashboard' && (
           <DashboardPage
-            user={currentUser}
+            user={user}
             tournaments={tournaments}
             userMatches={userMatches}
             onJoinTournament={handleJoinTournament}
@@ -1308,11 +1353,11 @@ export default function TournamentApp() {
           )
         )}
 
-        {currentPage === 'tournament' && currentUser && (
+        {currentPage === 'tournament' && (
           <TournamentPage
             tournament={tournaments.find(t => t.id === selectedTournamentId)}
             matches={matches}
-            user={currentUser}
+            user={user}
             onSelectMatch={(matchId) => {
               setSelectedMatchId(matchId);
               setCurrentPage('match');
@@ -1365,7 +1410,7 @@ export default function TournamentApp() {
           />
         )}
 
-        {currentPage === 'rules' && currentUser && <RulesPage />}
+        {currentPage === 'rules' && <RulesPage />}
       </div>
 
       {flagModalOpen && (
@@ -1724,7 +1769,7 @@ function DashboardPage({ user, tournaments, userMatches, onJoinTournament, onSta
 
   return (
     <div className="space-y-8">
-      {!user.discordId && (
+      {!user.isGuest && !user.discordId && (
         <div className="bg-gray-800 rounded-lg border-2 border-[#5865F2] p-5 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h2 className="text-lg font-bold">💬 Join our Discord</h2>
@@ -2344,7 +2389,10 @@ function TournamentCard({ tournament, user, onJoin, onStart, onDelete, onView })
 
   const bhOk = tournament.requiredBuilderHallLevel == null || user.builderHallLevel === tournament.requiredBuilderHallLevel;
   const trophyOk = tournament.minBestTrophies == null || (user.bestBuilderBaseTrophies ?? -1) >= tournament.minBestTrophies;
-  const meetsRequirements = bhOk && trophyOk;
+  // A guest has no verified stats to check yet - that happens after they sign
+  // up - so let them attempt to join rather than showing a false "doesn't
+  // meet requirements" before they've even made an account.
+  const meetsRequirements = user.isGuest || (bhOk && trophyOk);
   const hasRequirements = tournament.requiredBuilderHallLevel != null || tournament.minBestTrophies != null;
 
   const canJoin = !hasJoined && !isCreator && tournament.status === 'signups_open' && !deadlinePassed && meetsRequirements;
@@ -3061,7 +3109,7 @@ function TournamentPage({ tournament, matches, user, onSelectMatch, onPlayerRead
         <TournamentResults tournament={tournament} onViewProfile={onViewProfile} />
       )}
 
-      {tournament.status === 'completed' && <RewardCard tournament={tournament} user={user} />}
+      {tournament.status === 'completed' && !user.isGuest && <RewardCard tournament={tournament} user={user} />}
       {tournament.status === 'completed' && user.isStaff && <RewardsPanel tournament={tournament} matches={matches} />}
 
       {user.isStaff && tournament.status === 'in_progress' && (
@@ -4082,7 +4130,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         {showDetails && (
           <MatchDetailModal match={match} tournament={tournament} onClose={() => setShowDetails(false)} onViewProfile={onViewProfile} isStaff={user.isStaff} user={user} />
         )}
-        {!userIsPlayer && match.status === 'pending' && match.player1 && match.player2 && match.player1 !== 'BYE' && match.player2 !== 'BYE' && (
+        {!userIsPlayer && !user.isGuest && match.status === 'pending' && match.player1 && match.player2 && match.player1 !== 'BYE' && match.player2 !== 'BYE' && (
           <button
             onClick={() => setShowVote(true)}
             className="border border-gray-600 text-gray-300 hover:border-white hover:text-white px-3 py-2 rounded text-sm transition"
@@ -4330,7 +4378,7 @@ function MatchPrediction({ match, user }) {
   useEffect(() => subscribeToMatchPredictions(match.tournamentId, match.id, setPredictions), [match.tournamentId, match.id]);
 
   const isPlayer = user.username === match.player1 || user.username === match.player2;
-  if (isPlayer || match.player1 === 'BYE' || match.player2 === 'BYE' || predictions === null) return null;
+  if (user.isGuest || isPlayer || match.player1 === 'BYE' || match.player2 === 'BYE' || predictions === null) return null;
 
   const mine = predictions.find((p) => p.id === user.uid);
   const open = match.status === 'pending';
