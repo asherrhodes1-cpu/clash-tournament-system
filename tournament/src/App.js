@@ -3502,7 +3502,7 @@ function RewardsPanel({ tournament, matches }) {
   const { links, badLines } = parseRewardLinks(linksText);
   const badLink = badLines[0];
   const duplicateLink = links.find((l, i) => links.indexOf(l) !== i);
-  const chosen = ranking.filter((r) => selected.has(r.username));
+  const chosen = top.filter((r) => selected.has(r.username));
   const ready = chosen.length > 0 && chosen.length === links.length && !badLink && !duplicateLink;
 
   let problem = '';
