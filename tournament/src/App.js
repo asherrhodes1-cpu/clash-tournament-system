@@ -36,7 +36,7 @@ import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './
 import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/rewards';
 import { subscribeToMatchPredictions, submitPrediction, subscribeToTournamentPredictionScores, setPredictionsStartDay } from './api/predictions';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
-import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
+import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, parseRewardLinks, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
 
 // ============================================================================
 // FLAG REPORT MODAL COMPONENT
@@ -3499,8 +3499,8 @@ function RewardsPanel({ tournament, matches }) {
     setSelected(new Set(top.filter((r) => !hasReward(r.username)).map((r) => r.username)));
   }, [count, rewardedKey, ranking.length]);
 
-  const links = linksText.split('\n').map((l) => l.trim()).filter(Boolean);
-  const badLink = links.find((l) => !/^https?:\/\/\S+$/i.test(l));
+  const { links, badLines } = parseRewardLinks(linksText);
+  const badLink = badLines[0];
   const duplicateLink = links.find((l, i) => links.indexOf(l) !== i);
   const chosen = ranking.filter((r) => selected.has(r.username));
   const ready = chosen.length > 0 && chosen.length === links.length && !badLink && !duplicateLink;
@@ -3540,7 +3540,7 @@ function RewardsPanel({ tournament, matches }) {
       <div>
         <h2 className="text-xl font-bold">🎁 Dispense rewards</h2>
         <p className="text-sm text-gray-400">
-          Paste one link per line. The top finishers each get one by DM and in the app.
+          Paste your prize list, one per line - rows copied from a spreadsheet work too, only the link in each is used. The top finishers each get one by DM and in the app.
           {sentCount > 0 && ` ${sentCount} already sent.`}
         </p>
       </div>
@@ -3565,6 +3565,9 @@ function RewardsPanel({ tournament, matches }) {
         placeholder={'https://link.clashofclans.com/...\nhttps://link.clashofclans.com/...'}
         className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-white font-mono"
       />
+      {links.length > 0 && (
+        <p className="text-xs text-gray-400">{links.length} link{links.length === 1 ? '' : 's'} found</p>
+      )}
 
       <div className="space-y-1">
         {top.map((r, i) => {

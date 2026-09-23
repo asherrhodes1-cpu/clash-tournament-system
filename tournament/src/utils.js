@@ -548,3 +548,23 @@ export function rankPredictionScores(scores, scope = 'all') {
     .filter((r) => r.total > 0)
     .sort((a, b) => b.correct - a.correct || b.correct / b.total - a.correct / a.total || b.total - a.total);
 }
+
+// Pulls the prize link out of each line of a pasted prize list. Rows copied
+// from a spreadsheet look like "Goblin Explorer<TAB>https://...<TAB>Yes<TAB>date",
+// where only the link matters, and the first row can have lost its leading
+// columns - so each line just takes the first web address in it. Lines with
+// none are returned separately so they can be reported instead of skipped.
+export function parseRewardLinks(text) {
+  const links = [];
+  const badLines = [];
+  String(text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const match = line.match(/https?:\/\/\S+/i);
+      if (match) links.push(match[0]);
+      else badLines.push(line);
+    });
+  return { links, badLines };
+}
