@@ -58,9 +58,9 @@ function GoalProgress({ goal, large = false }) {
   const pct = percentOf(goal.raised, goal.target);
   return (
     <div className="space-y-1">
-      <div className={`relative overflow-hidden rounded bg-gray-900 border border-gray-700 ${large ? 'h-8' : 'h-6'}`}>
-        <div className="absolute inset-y-0 left-0 bg-lime-500 transition-all duration-500" style={{ width: `${pct}%` }} />
-        <div className="relative h-full flex items-center justify-center text-sm font-bold">
+      <div className={`relative overflow-hidden rounded bg-gray-900 border border-gray-700 ${large ? 'h-10' : 'h-6'}`}>
+        <div className="absolute inset-y-0 left-0 bg-lime-600 transition-all duration-500" style={{ width: `${pct}%` }} />
+        <div className={`relative h-full flex items-center justify-center font-bold ${large ? 'text-xl' : 'text-sm'}`}>
           <Gems amount={goal.raised} />
           <span className="mx-1">/</span>
           {formatGems(goal.target)}
@@ -282,8 +282,8 @@ export function ChallengeOverlayCard({ goal, donations }) {
   if (phase === 'cancelling' || phase === 'cancelled') return null;
 
   return (
-    <div className="w-[520px] bg-gray-900/90 rounded-xl border-2 border-lime-500 p-5 shadow-2xl space-y-3">
-      <div className="flex justify-between items-baseline gap-3 text-sm font-bold uppercase tracking-wide">
+    <div className="w-[520px] bg-gray-950 rounded-xl border-4 border-lime-500 p-5 shadow-2xl space-y-3">
+      <div className="flex flex-wrap justify-between items-baseline gap-x-3 text-base font-bold uppercase tracking-wide [&>span]:whitespace-nowrap">
         <span className="text-lime-400">Challenge goal</span>
         {phase === 'collecting' && <span className="text-green-400">Donate at {window.location.host}/live</span>}
         {phase === 'voting' && <span className="text-green-400">Donors: vote now!</span>}

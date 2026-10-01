@@ -5,6 +5,15 @@ import { useGemDrop, GemDropOverlayCard } from './GemDrop';
 import { useNow, Countdown } from './shared';
 import { effectiveStatus, bettingEndsAt, roundKind } from './liveUtils';
 
+// How much bigger than the page the overlay draws, so small labels stay
+// readable once the stream is shrunk onto a viewer's screen. Set it from the
+// OBS Browser source URL, e.g. /live/overlay?scale=2.
+const DEFAULT_SCALE = 1.5;
+function overlayScale() {
+  const value = Number(new URLSearchParams(window.location.search).get('scale'));
+  return value >= 0.5 && value <= 4 ? value : DEFAULT_SCALE;
+}
+
 const STATUS_TEXT = {
   closed: 'Betting closed',
   settling: 'Paying out...',
@@ -20,8 +29,8 @@ function BetOverlayCard({ round, bets }) {
   else status = <span className="text-gray-300">{STATUS_TEXT[current]}</span>;
 
   return (
-    <div className="w-[520px] bg-gray-900/90 rounded-xl border-2 border-yellow-500 p-5 shadow-2xl">
-      <div className="flex justify-between items-baseline gap-3 mb-1 text-sm font-bold uppercase tracking-wide">
+    <div className="w-[520px] bg-gray-950 rounded-xl border-4 border-yellow-500 p-5 shadow-2xl">
+      <div className="flex flex-wrap justify-between items-baseline gap-x-3 mb-1 text-base font-bold uppercase tracking-wide [&>span]:whitespace-nowrap">
         <span className="text-yellow-400">Live bet</span>
         {status}
       </div>
@@ -29,7 +38,7 @@ function BetOverlayCard({ round, bets }) {
       {current === 'open' && (
         <div className="mb-4"><Countdown endsAt={bettingEndsAt(round)} durationMs={round.bettingMs} now={now} label="Betting closes in" large /></div>
       )}
-      <SideBars round={round} bets={bets} />
+      <SideBars round={round} bets={bets} large />
     </div>
   );
 }
@@ -50,7 +59,7 @@ export default function LiveOverlay() {
   if (!round && !goal && !drop) return null;
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-4" style={{ zoom: overlayScale() }}>
       {drop && <GemDropOverlayCard drop={drop} claims={claims} />}
       {round && <BetOverlayCard round={round} bets={bets} />}
       {goal && <ChallengeOverlayCard goal={goal} donations={donations} />}

@@ -102,8 +102,8 @@ export function GemDropOverlayCard({ drop, claims }) {
   const now = useNow(endsAt != null && Date.now() < endsAt);
   if (endsAt == null || now >= endsAt) return null;
   return (
-    <div className="w-[520px] bg-gray-900/90 rounded-xl border-2 border-yellow-400 p-5 shadow-2xl space-y-3">
-      <div className="flex justify-between items-baseline gap-3 text-sm font-bold uppercase tracking-wide">
+    <div className="w-[520px] bg-gray-950 rounded-xl border-4 border-yellow-400 p-5 shadow-2xl space-y-3">
+      <div className="flex flex-wrap justify-between items-baseline gap-x-3 text-base font-bold uppercase tracking-wide [&>span]:whitespace-nowrap">
         <span className="text-yellow-400">Gem drop</span>
         <span className="text-green-400">Claim at {window.location.host}/live</span>
       </div>
@@ -111,7 +111,7 @@ export function GemDropOverlayCard({ drop, claims }) {
         <img src="/gem.png" alt="" className="w-16 h-16 object-contain animate-bounce" />
         <div>
           <p className="text-3xl font-bold"><Gems amount={drop.amount} /> free</p>
-          <p className="text-sm text-gray-300">{claimedText(claims.length)}</p>
+          <p className="text-lg text-gray-200">{claimedText(claims.length)}</p>
         </div>
       </div>
       <Countdown endsAt={endsAt} durationMs={drop.durationMs} now={now} label="Ends in" large />

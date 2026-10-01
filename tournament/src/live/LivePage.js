@@ -88,12 +88,44 @@ export function useMyGems(uid) {
 
 // Succeed vs fail, each bar filled to its share of the gems bet. Once a
 // round is settled the winning side stays lit and the other dims.
-export function SideBars({ round, bets }) {
+export function SideBars({ round, bets, large = false }) {
   const kind = roundKind(round);
   const totals = tallyBets(bets, kind.sides);
   const pot = kind.sides.reduce((sum, side) => sum + totals[side].gems, 0);
   // Exact stars has 7 options, so each gets one slim line instead of two.
   const compact = kind.sides.length > 2;
+  // On the stream overlay every label is one size up and on a single line,
+  // since the small second line doesn't survive the stream being shrunk.
+  if (large) {
+    return (
+      <div className={compact ? 'space-y-1.5' : 'space-y-2'}>
+        {kind.sides.map((side) => {
+          const { gems, bettors } = totals[side];
+          const won = round.status === 'settled' && round.result === side;
+          const lost = round.status === 'settled' && round.result !== side;
+          return (
+            <div key={side} className={`relative overflow-hidden rounded border-2 bg-gray-900 ${won ? 'border-white' : 'border-gray-600'}`}>
+              <div
+                className={`absolute inset-y-0 left-0 ${lost ? 'bg-gray-600' : kind.colors[side]} transition-all duration-500`}
+                style={{ width: `${percentOf(gems, pot)}%` }}
+              />
+              <div className={`relative flex justify-between items-center gap-3 px-4 ${compact ? 'py-1 text-lg' : 'py-3 text-2xl'}`}>
+                <span className="font-bold">
+                  {kind.labels[side]}
+                  <span className="ml-2 text-gray-200">{kind.multipliers[side]}x</span>
+                  {won && <span className="ml-2">WINNER</span>}
+                </span>
+                <span className="font-bold shrink-0">
+                  <Gems amount={gems} />
+                  <span className="ml-2 text-gray-200">· {bettors} {bettors === 1 ? 'bet' : 'bets'}</span>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className={compact ? 'space-y-1' : 'space-y-2'}>
       {kind.sides.map((side) => {
@@ -570,7 +602,7 @@ function StaffLivePanel({ state, user, children }) {
           >
             {overlayUrl}
           </button>
-          {' '}(click to copy). It shows what's on screen - bets, gem drops, challenge goals - and is transparent everywhere else.
+          {' '}(click to copy). It shows what's on screen - bets, gem drops, challenge goals - and is transparent everywhere else. Too big or small on stream? Add <span className="font-mono">?scale=2</span> (bigger) or <span className="font-mono">?scale=1</span> (smaller) to the end of the link - the default is 1.5.
         </p>
         <form onSubmit={saveVideo} className="space-y-2">
           <label className="block font-bold">YouTube stream link</label>
