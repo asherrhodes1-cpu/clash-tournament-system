@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFeaturedRound, SideBars } from './LivePage';
 import { useChallengeGoal, ChallengeOverlayCard } from './ChallengeGoal';
 import { useGemDrop, GemDropOverlayCard } from './GemDrop';
@@ -12,6 +12,44 @@ const DEFAULT_SCALE = 1.5;
 function overlayScale() {
   const value = Number(new URLSearchParams(window.location.search).get('scale'));
   return value >= 0.5 && value <= 4 ? value : DEFAULT_SCALE;
+}
+
+// How to draw the overlay so every card fits inside the Browser source (a
+// tall exact-stars table plus a gem drop won't fit OBS's default 800x600 at
+// full size): cards stacked or side by side, whichever lets them be drawn
+// bigger, at the requested scale or as much smaller as it takes. Measured
+// from the cards' own sizes, which don't depend on the arrangement, and
+// re-measured whenever they change or the source is resized.
+const PAD = 24; // p-6
+const GAP = 16; // gap-4
+// `cards` names the cards on screen, so one appearing or going re-measures.
+function useFitLayout(el, cards) {
+  const wanted = overlayScale();
+  const [layout, setLayout] = useState({ scale: wanted, row: false });
+  useEffect(() => {
+    if (!el) return;
+    const fit = () => {
+      const sizes = [...el.children].map((c) => ({ w: c.offsetWidth, h: c.offsetHeight }));
+      if (!sizes.length) return;
+      const gaps = GAP * (sizes.length - 1);
+      const sum = (key) => sizes.reduce((total, c) => total + c[key], 0);
+      const max = (key) => Math.max(...sizes.map((c) => c[key]));
+      const scaleFor = (w, h) => Math.min(wanted, window.innerWidth / (w + 2 * PAD), window.innerHeight / (h + 2 * PAD));
+      const stacked = scaleFor(max('w'), sum('h') + gaps);
+      const sideBySide = scaleFor(sum('w') + gaps, max('h'));
+      const row = sizes.length > 1 && sideBySide > stacked;
+      setLayout({ scale: row ? sideBySide : stacked, row });
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    [...el.children].forEach((c) => observer.observe(c));
+    window.addEventListener('resize', fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', fit);
+    };
+  }, [el, wanted, cards]);
+  return layout;
 }
 
 const STATUS_TEXT = {
@@ -50,16 +88,24 @@ export default function LiveOverlay() {
   const { state, round, bets } = useFeaturedRound();
   const { goal, donations } = useChallengeGoal(state.goalId);
   const { drop, claims } = useGemDrop(state.dropId);
+  const [content, setContent] = useState(null);
+  const { scale, row } = useFitLayout(content, [drop && 'drop', round && 'round', goal && 'goal'].filter(Boolean).join());
 
   useEffect(() => {
     const els = [document.documentElement, document.body, document.getElementById('root')];
     els.forEach((el) => el && (el.style.background = 'transparent'));
+    // Never show scrollbars in OBS; the overlay scales itself to fit instead.
+    document.documentElement.style.overflow = 'hidden';
   }, []);
 
   if (!round && !goal && !drop) return null;
 
   return (
-    <div className="live-overlay p-6 space-y-4" style={{ zoom: overlayScale() }}>
+    <div
+      ref={setContent}
+      className={`live-overlay p-6 w-max flex gap-4 ${row ? 'flex-row items-start' : 'flex-col'}`}
+      style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+    >
       {drop && <GemDropOverlayCard drop={drop} claims={claims} />}
       {round && <BetOverlayCard round={round} bets={bets} />}
       {goal && <ChallengeOverlayCard goal={goal} donations={donations} />}

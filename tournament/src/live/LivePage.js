@@ -602,7 +602,7 @@ function StaffLivePanel({ state, user, children }) {
           >
             {overlayUrl}
           </button>
-          {' '}(click to copy). It shows what's on screen - bets, gem drops, challenge goals - and is transparent everywhere else. Too big or small on stream? Add <span className="font-mono">?scale=2</span> (bigger) or <span className="font-mono">?scale=1</span> (smaller) to the end of the link - the default is 1.5.
+          {' '}(click to copy). It shows what's on screen - bets, gem drops, challenge goals - and is transparent everywhere else. It shrinks itself to fit the Browser source, so nothing gets cut off - set the source to 1920x1080 for the sharpest text. Want it smaller even when there's room? Add <span className="font-mono">?scale=1</span> to the end of the link (the default is 1.5).
         </p>
         <form onSubmit={saveVideo} className="space-y-2">
           <label className="block font-bold">YouTube stream link</label>
