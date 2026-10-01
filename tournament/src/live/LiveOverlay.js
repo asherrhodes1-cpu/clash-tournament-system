@@ -59,7 +59,7 @@ export default function LiveOverlay() {
   if (!round && !goal && !drop) return null;
 
   return (
-    <div className="p-6 space-y-4" style={{ zoom: overlayScale() }}>
+    <div className="live-overlay p-6 space-y-4" style={{ zoom: overlayScale() }}>
       {drop && <GemDropOverlayCard drop={drop} claims={claims} />}
       {round && <BetOverlayCard round={round} bets={bets} />}
       {goal && <ChallengeOverlayCard goal={goal} donations={donations} />}

@@ -90,3 +90,18 @@ code {
     drop-shadow(0 0.07em 0 #000)
     drop-shadow(0 -0.07em 0 #000);
 }
+
+/* The OBS overlay: OBS's built-in browser ignores paint-order, so the
+   stroke above lands on top of the letters and eats thin ones away. On the
+   overlay the outline is a ring of text-shadows instead, which every browser
+   draws behind the text. Same colour and the same drop shadow underneath. */
+body .live-overlay,
+body .live-overlay * {
+  -webkit-text-stroke: 0;
+  text-shadow:
+    -0.07em -0.07em 0 #0a1230, 0.07em -0.07em 0 #0a1230,
+    -0.07em 0.07em 0 #0a1230, 0.07em 0.07em 0 #0a1230,
+    0 -0.07em 0 #0a1230, 0 0.07em 0 #0a1230,
+    -0.07em 0 0 #0a1230, 0.07em 0 0 #0a1230,
+    0 0.14em 0 rgba(0, 0, 0, 0.5);
+}
