@@ -35,6 +35,8 @@ import {
 import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './api/users';
 import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/rewards';
 import { subscribeToMatchPredictions, submitPrediction, subscribeToTournamentPredictionScores, setPredictionsStartDay } from './api/predictions';
+import LivePage from './live/LivePage';
+import LiveHeader from './live/LiveHeader';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
 import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, parseRewardLinks, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
 
@@ -367,6 +369,90 @@ function JoinDiscordButton({ className = '', children = 'Join our Discord' }) {
       <MessageCircle className="w-4 h-4" />
       {children}
     </a>
+  );
+}
+
+// Step one of joining for an account that hasn't proven its Clash of Clans
+// account yet (e.g. one made in the Live section). Once verified, the
+// user's profile updates live and the join flow moves on to Discord.
+function VerifyClashModal({ user, onCancel }) {
+  const [clashTag, setClashTag] = useState(user.clashTag || '');
+  const [apiToken, setApiToken] = useState('');
+  const [error, setError] = useState('');
+  const [verifying, setVerifying] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const tag = clashTag.trim().toUpperCase();
+    if (!tag.startsWith('#')) {
+      setError('Clash tag must start with #');
+      return;
+    }
+    if (!apiToken.trim()) {
+      setError('Your Clash of Clans API token is required');
+      return;
+    }
+    setVerifying(true);
+    try {
+      await verifyClashAccount({ clashTag: tag, apiToken: apiToken.trim() });
+    } catch (err) {
+      setError(err.message || 'Couldn\'t verify that account. Try again.');
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-1">Verify your Clash account</h2>
+        <p className="text-gray-300 text-sm mb-4">
+          Joining tournaments requires a verified Clash of Clans account, so we know the tag is really yours and can check the tournament's requirements.
+        </p>
+        {error && (
+          <div className="mb-4 p-3 bg-neutral-800 border-2 border-white rounded text-white text-sm">{error}</div>
+        )}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium mb-2">Clash of Clans Tag</label>
+            <input
+              type="text"
+              value={clashTag}
+              onChange={(e) => setClashTag(e.target.value.toUpperCase())}
+              placeholder="e.g., #ABC123XYZ"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Clash of Clans API Token</label>
+            <input
+              type="text"
+              value={apiToken}
+              onChange={(e) => setApiToken(e.target.value)}
+              placeholder="Paste your API token"
+              className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              In Clash of Clans: Settings → More Settings → scroll down to "API Token" → tap Show → copy and paste it here.
+            </p>
+          </div>
+          <button
+            type="submit"
+            disabled={verifying}
+            className="w-full bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-black font-bold py-2 px-4 rounded transition disabled:opacity-50"
+          >
+            {verifying ? 'Verifying...' : 'Verify and continue'}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="w-full border border-gray-600 hover:border-white py-2 px-4 rounded transition"
+          >
+            Cancel, don't join
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -849,7 +935,11 @@ const GUEST_USER = { uid: null, username: null, isStaff: false, discordId: '', c
 export default function TournamentApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authInitializing, setAuthInitializing] = useState(true);
-  const [currentPage, setCurrentPage] = useState('landing');
+  // /live is shareable (it's what the stream overlay tells viewers to open),
+  // so it's the one page that can be linked to directly.
+  const [currentPage, setCurrentPage] = useState(() => (
+    window.location.pathname.replace(/\/+$/, '') === '/live' ? 'live' : 'landing'
+  ));
   const [tournaments, setTournaments] = useState([]);
   const [matches, setMatches] = useState([]);
   const [userMatches, setUserMatches] = useState([]);
@@ -895,14 +985,31 @@ export default function TournamentApp() {
   // browsing instead of rendering broken (e.g. after a logout while on one).
   const ACCOUNT_ONLY_PAGES = ['create', 'match', 'profile', 'staff_dashboard'];
 
+  // Where to land after logging in - the Live section sends people back to
+  // it so they can vote, the tournament section goes to the dashboard. The
+  // login page also takes on that section's header while it's open.
+  const [loginReturnPage, setLoginReturnPage] = useState('dashboard');
+
   useEffect(() => {
-    if (currentUser && (currentPage === 'landing' || currentPage === 'login')) {
-      setCurrentPage('dashboard');
+    if (currentPage !== 'login' && currentPage !== 'live') setLoginReturnPage('dashboard');
+  }, [currentPage]);
+
+  // The landing page is the hub for picking a section (Tournaments or Live),
+  // so it's shown to signed-in players too - only the login page moves on.
+  useEffect(() => {
+    if (currentUser && currentPage === 'login') {
+      setCurrentPage(loginReturnPage);
     }
     if (!currentUser && !authInitializing && ACCOUNT_ONLY_PAGES.includes(currentPage)) {
       setCurrentPage('dashboard');
     }
-  }, [currentUser, authInitializing, currentPage]);
+  }, [currentUser, authInitializing, currentPage, loginReturnPage]);
+
+  useEffect(() => {
+    const onLive = window.location.pathname.replace(/\/+$/, '') === '/live';
+    if (currentPage === 'live' && !onLive) window.history.replaceState(null, '', '/live');
+    if (currentPage !== 'live' && onLive) window.history.replaceState(null, '', '/');
+  }, [currentPage]);
 
   useEffect(() => subscribeToTournaments(setTournaments), []);
 
@@ -1003,14 +1110,15 @@ export default function TournamentApp() {
     }
   };
 
-  // A player without Discord linked gets no match reminders, so joining
-  // starts with the Discord prompt (link it, or skip and join anyway).
+  // Joining needs a verified Clash account and a linked Discord (the rules
+  // enforce both). Accounts made in the Live section have neither, so the
+  // missing step opens as a prompt first - verify, then link, then join.
   const handleJoinTournament = async (tournamentId) => {
     if (!currentUser) {
       setCurrentPage('login');
       return;
     }
-    if (!currentUser.discordId) {
+    if (!currentUser.clashVerified || !currentUser.discordId) {
       setPendingJoinId(tournamentId);
       return;
     }
@@ -1132,20 +1240,40 @@ export default function TournamentApp() {
   // GUEST_USER) so read-only pages don't need to special-case "no account".
   const user = currentUser || GUEST_USER;
 
+  // Live is its own section off the landing page, with its own header.
+  const inLiveSection = currentPage === 'live' || (currentPage === 'login' && loginReturnPage === 'live');
+
   return (
     <div className="min-h-screen bg-black text-white">
+      {currentPage === 'landing' ? null : inLiveSection ? (
+        <LiveHeader
+          user={user}
+          onHome={() => setCurrentPage('landing')}
+          onLogin={() => {
+            setLoginReturnPage('live');
+            setCurrentPage('login');
+          }}
+          onLogout={handleLogout}
+        />
+      ) : (
       <nav className="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16 gap-4">
-              <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => setCurrentPage('landing')} aria-label="Home" className="flex items-center gap-2 shrink-0">
                 <span className="font-display font-bold text-lg tracking-tight whitespace-nowrap hidden sm:inline title-outline">BUILDER</span>
                 <img src="/badges/builder-league.png" alt="Builder League" className="w-9 h-9 object-contain" />
                 <span className="font-display font-bold text-lg tracking-tight whitespace-nowrap hidden sm:inline">
                   <span className="bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent title-outline-gradient">LEAGUE</span>
                 </span>
-              </div>
+              </button>
 
               <div className={`${user.isStaff ? 'hidden xl:flex' : 'hidden lg:flex'} items-center gap-3 text-sm whitespace-nowrap`}>
+                <button
+                  onClick={() => setCurrentPage('landing')}
+                  className="hover:text-neutral-300 transition"
+                >
+                  Home
+                </button>
                 <button
                   onClick={() => setCurrentPage('dashboard')}
                   className="hover:text-neutral-300 transition"
@@ -1219,6 +1347,15 @@ export default function TournamentApp() {
                 {mobileMenuOpen && (
                   <div className="absolute right-0 top-full mt-3 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl p-2 space-y-1 z-50">
                     <JoinDiscordButton className="w-full px-4 py-2" />
+                    <button
+                      onClick={() => {
+                        setCurrentPage('landing');
+                        setMobileMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                    >
+                      Home
+                    </button>
                     <button
                       onClick={() => {
                         setCurrentPage('dashboard');
@@ -1300,14 +1437,20 @@ export default function TournamentApp() {
             </div>
           </div>
         </nav>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentPage === 'landing' && (
-          <LandingPage onEnter={() => setCurrentPage('dashboard')} />
+          <LandingPage onEnter={() => setCurrentPage('dashboard')} onWatchLive={() => setCurrentPage('live')} />
         )}
 
         {currentPage === 'login' && (
-          <LoginPage onAccountCreated={() => setShowDiscordSetup(true)} />
+          <LoginPage
+            section={inLiveSection ? 'live' : 'tournaments'}
+            onAccountCreated={() => {
+              if (!inLiveSection) setShowDiscordSetup(true);
+            }}
+          />
         )}
 
         {currentPage === 'dashboard' && (
@@ -1411,6 +1554,16 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'rules' && <RulesPage />}
+
+        {currentPage === 'live' && (
+          <LivePage
+            user={user}
+            onLogin={() => {
+              setLoginReturnPage('live');
+              setCurrentPage('login');
+            }}
+          />
+        )}
       </div>
 
       {flagModalOpen && (
@@ -1436,7 +1589,14 @@ export default function TournamentApp() {
         <DiscordSetupModal user={currentUser} onClose={() => setShowDiscordSetup(false)} />
       )}
 
-      {pendingJoinId && currentUser && (
+      {pendingJoinId && currentUser && !currentUser.clashVerified && (
+        <VerifyClashModal
+          user={currentUser}
+          onCancel={() => setPendingJoinId(null)}
+        />
+      )}
+
+      {pendingJoinId && currentUser && currentUser.clashVerified && (
         <DiscordSetupModal
           joining
           user={currentUser}
@@ -1456,7 +1616,7 @@ export default function TournamentApp() {
 // PAGE COMPONENTS
 // ============================================================================
 
-function LandingPage({ onEnter }) {
+function LandingPage({ onEnter, onWatchLive }) {
   return (
     <div className="text-center max-w-lg mx-auto mt-20">
       <img
@@ -1464,17 +1624,29 @@ function LandingPage({ onEnter }) {
         alt="MercifulAj Logo"
         className="w-64 h-64 sm:w-72 sm:h-72 mx-auto mb-12 object-contain"
       />
-      <button
-        onClick={onEnter}
-        className="inline-block bg-white text-black px-12 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
-      >
-        ENTER TOURNAMENTS
-      </button>
+      <div className="flex flex-col sm:flex-row justify-center gap-4">
+        <button
+          onClick={onEnter}
+          className="sm:w-56 bg-white text-black px-8 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
+        >
+          TOURNAMENTS
+        </button>
+        <button
+          onClick={onWatchLive}
+          className="sm:w-56 bg-white text-black px-8 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
+        >
+          LIVE
+        </button>
+      </div>
     </div>
   );
 }
 
-function LoginPage({ onAccountCreated }) {
+// Tournament accounts are created with a verified Clash account (tag + API
+// token). The Live section only needs a username and password to vote; the
+// Clash account is verified later if the player joins a tournament.
+function LoginPage({ section = 'tournaments', onAccountCreated }) {
+  const needsClash = section !== 'live';
   const [isCreating, setIsCreating] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -1519,17 +1691,17 @@ function LoginPage({ onAccountCreated }) {
       return;
     }
 
-    if (!clashTag.trim()) {
+    if (needsClash && !clashTag.trim()) {
       setError('Clash of Clans tag is required');
       return;
     }
 
-    if (!clashTag.startsWith('#')) {
+    if (needsClash && !clashTag.startsWith('#')) {
       setError('Clash tag must start with #');
       return;
     }
 
-    if (!apiToken.trim()) {
+    if (needsClash && !apiToken.trim()) {
       setError('Your Clash of Clans API token is required');
       return;
     }
@@ -1539,8 +1711,8 @@ function LoginPage({ onAccountCreated }) {
       await signUp({
         username,
         password,
-        clashTag: clashTag.toUpperCase(),
-        apiToken: apiToken.trim(),
+        clashTag: needsClash ? clashTag.toUpperCase() : '',
+        apiToken: needsClash ? apiToken.trim() : '',
         inviteCode: inviteCode.trim(),
       });
       onAccountCreated?.();
@@ -1627,6 +1799,8 @@ function LoginPage({ onAccountCreated }) {
               />
             </div>
 
+            {needsClash && (
+            <>
             <div>
               <label className="block text-sm font-medium mb-2">Clash of Clans Tag</label>
               <input
@@ -1655,6 +1829,14 @@ function LoginPage({ onAccountCreated }) {
                 This proves the tag above is really yours and unlocks your verified Builder Hall level and best trophies.
               </p>
             </div>
+            </>
+            )}
+
+            {!needsClash && (
+              <p className="text-xs text-gray-400">
+                That's all you need to vote in stream polls. To play in tournaments later, you'll verify your Clash of Clans account and link Discord when you join one.
+              </p>
+            )}
 
             <div>
               <label className="block text-sm font-medium mb-2">Staff Invite Code (optional)</label>
@@ -1946,7 +2128,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
     e.preventDefault();
     setVerifyError('');
 
-    const tagToVerify = editingVerifyTag ? verifyClashTag.trim().toUpperCase() : profile?.clashTag;
+    const tagToVerify = editingVerifyTag || !profile?.clashTag ? verifyClashTag.trim().toUpperCase() : profile?.clashTag;
     if (!tagToVerify || !tagToVerify.startsWith('#')) {
       setVerifyError('Clash tag must start with #');
       return;
@@ -2281,7 +2463,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
               {verifyError && (
                 <div className="p-2 bg-neutral-800 border border-white rounded text-white text-xs">{verifyError}</div>
               )}
-              {editingVerifyTag ? (
+              {editingVerifyTag || !profile?.clashTag ? (
                 <input
                   type="text"
                   value={verifyClashTag}

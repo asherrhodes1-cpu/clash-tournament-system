@@ -15,6 +15,10 @@ const { planSingleElimAdvancement } = require('./advancement');
 const { planDoubleElimAdvancement } = require('./doubleElim');
 const { planScoreChanges, tallyScores } = require('./predictions');
 const { readyUpDeadline, playDeadline } = require('./reminders');
+const { STARTING_GEMS, ROUND_KINDS, kindOf, planBet, payoutFor, bettingIsOpen } = require('./betting');
+const { POCKET_COUNT, POCKETS, checkSpin, spinPayout } = require('./roulette');
+const { VOTING_MS, planDonation, pickOptions, votingIsOpen } = require('./challenges');
+const { dropIsOpen } = require('./drops');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -213,6 +217,10 @@ async function verifyAndFetchClashPlayer(cleanTag, apiToken) {
 // The player's Clash of Clans tag is verified via their in-game API token
 // before the account is created, and their Builder Hall level and best
 // Builder Base trophies are recorded from that verified lookup.
+// The tag and token are optional as a pair: the Live section signs people up
+// with just a username and password so they can vote in stream polls. Those
+// accounts stay unverified until they verify from their profile, which
+// joining a tournament requires (see firestore.rules).
 // ============================================================================
 exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE, CLASH_API_KEY, CLASH_RELAY_SECRET] }, async (request) => {
   const { username, password, clashTag, apiToken, inviteCode } = request.data || {};
@@ -231,15 +239,19 @@ exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE, CLASH_API_KEY, CLASH_RELA
   if (!password || typeof password !== 'string' || password.length < 6) {
     throw new HttpsError('invalid-argument', 'Password must be at least 6 characters');
   }
-  if (!clashTag || typeof clashTag !== 'string' || !clashTag.startsWith('#')) {
-    throw new HttpsError('invalid-argument', 'Clash tag must start with #');
+  const withClash = !!clashTag || !!apiToken;
+  let cleanTag = '';
+  let clashStats = null;
+  if (withClash) {
+    if (!clashTag || typeof clashTag !== 'string' || !clashTag.startsWith('#')) {
+      throw new HttpsError('invalid-argument', 'Clash tag must start with #');
+    }
+    if (!apiToken || typeof apiToken !== 'string' || apiToken.trim().length < 5) {
+      throw new HttpsError('invalid-argument', 'Your Clash of Clans API token is required');
+    }
+    cleanTag = clashTag.trim().toUpperCase().replace(/^#/, '');
+    clashStats = await verifyAndFetchClashPlayer(cleanTag, apiToken.trim());
   }
-  if (!apiToken || typeof apiToken !== 'string' || apiToken.trim().length < 5) {
-    throw new HttpsError('invalid-argument', 'Your Clash of Clans API token is required');
-  }
-
-  const cleanTag = clashTag.trim().toUpperCase().replace(/^#/, '');
-  const clashStats = await verifyAndFetchClashPlayer(cleanTag, apiToken.trim());
 
   const usernameLower = username.trim().toLowerCase();
   const usernameDocRef = db.collection('usernames').doc(usernameLower);
@@ -269,12 +281,14 @@ exports.signUp = onCall({ secrets: [STAFF_INVITE_CODE, CLASH_API_KEY, CLASH_RELA
     await db.collection('users').doc(userRecord.uid).set({
       username: username.trim(),
       usernameLower,
-      clashTag: `#${cleanTag}`,
+      clashTag: withClash ? `#${cleanTag}` : '',
       isStaff,
       createdAt: new Date().toISOString(),
-      clashVerified: true,
-      builderHallLevel: clashStats.builderHallLevel,
-      bestBuilderBaseTrophies: clashStats.bestBuilderBaseTrophies,
+      clashVerified: withClash,
+      ...(withClash && {
+        builderHallLevel: clashStats.builderHallLevel,
+        bestBuilderBaseTrophies: clashStats.bestBuilderBaseTrophies,
+      }),
     });
 
     await usernameDocRef.set({ uid: userRecord.uid, username: username.trim() });
@@ -1452,4 +1466,295 @@ exports.setPredictionsStartDay = onCall(async (request) => {
     await batch.commit();
   }
   return { fromDay: day, players: Object.keys(totals).length, votesCounted: Object.values(totals).reduce((n, r) => n + r.total, 0) };
+});
+
+// ============================================================================
+// Live-stream betting. Viewers bet pretend gems on whether the streamer
+// succeeds or fails at the current round. Balances (gemBalances/{uid}) and
+// bets (liveRounds/{roundId}/bets/{uid}) are only written here - the rules
+// make both read-only to clients - so nobody can hand themselves gems.
+// ============================================================================
+
+// Place, change or (side: null) take back a bet while the round is open.
+// Changing refunds the old stake first, so switching sides or amounts is free.
+exports.placeLiveBet = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Log in to bet');
+  const { roundId, side = null, amount } = request.data || {};
+  if (!roundId || typeof roundId !== 'string') throw new HttpsError('invalid-argument', 'Missing round');
+
+  const uid = request.auth.uid;
+  const username = request.auth.token.username || null;
+  const roundRef = db.collection('liveRounds').doc(roundId);
+  const betRef = roundRef.collection('bets').doc(uid);
+  const balanceRef = db.collection('gemBalances').doc(uid);
+
+  return db.runTransaction(async (tx) => {
+    const [roundSnap, betSnap, balanceSnap] = await Promise.all([tx.get(roundRef), tx.get(betRef), tx.get(balanceRef)]);
+    if (!roundSnap.exists) throw new HttpsError('not-found', 'That round no longer exists');
+    const round = roundSnap.data();
+    if (!bettingIsOpen({ ...round, openedAtMs: round.openedAt ? round.openedAt.toMillis() : null }, Date.now())) {
+      throw new HttpsError('failed-precondition', 'Betting is closed for this round');
+    }
+
+    const balance = balanceSnap.exists ? balanceSnap.data().gems : STARTING_GEMS;
+    const existingAmount = betSnap.exists ? betSnap.data().amount : 0;
+
+    if (side === null) {
+      if (!betSnap.exists) return { gems: balance };
+      tx.delete(betRef);
+      tx.set(balanceRef, { username, gems: balance + existingAmount }, { merge: true });
+      return { gems: balance + existingAmount };
+    }
+
+    let plan;
+    try {
+      plan = planBet({ balance, existingAmount, side, amount, sides: ROUND_KINDS[kindOf(round)].sides });
+    } catch (err) {
+      throw new HttpsError('invalid-argument', err.message);
+    }
+    tx.set(betRef, { username, ...plan.bet, paid: false, updatedAt: Date.now() });
+    tx.set(balanceRef, { username, gems: plan.balance }, { merge: true });
+    return { gems: plan.balance };
+  });
+});
+
+// Staff: settle a round with its result - 'succeed'/'fail', or the star
+// count for an exact-stars round - paying out by that side's multiplier, or
+// 'cancel' it (refunding every stake). The round is marked
+// 'settling' first, which stops new bets, and each bet is marked paid in the
+// same batch as its payout - so if this is cut off halfway, running it again
+// with the same result just finishes the rest without paying anyone twice.
+exports.settleLiveRound = onCall(async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Only staff can settle rounds');
+  const { roundId, result } = request.data || {};
+  if (!roundId || typeof roundId !== 'string') throw new HttpsError('invalid-argument', 'Missing round');
+  if (typeof result !== 'string') throw new HttpsError('invalid-argument', 'Missing result');
+
+  const roundRef = db.collection('liveRounds').doc(roundId);
+  let multipliers;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(roundRef);
+    if (!snap.exists) throw new HttpsError('not-found', 'Round not found');
+    const round = snap.data();
+    const kind = ROUND_KINDS[kindOf(round)];
+    if (result !== 'cancel' && !kind.sides.includes(result)) {
+      throw new HttpsError('invalid-argument', `Result must be one of ${kind.sides.join(', ')} or cancel`);
+    }
+    multipliers = kind.multipliers;
+    if (round.status === 'settled' || round.status === 'cancelled') {
+      throw new HttpsError('failed-precondition', 'This round is already finished');
+    }
+    if (round.status === 'settling' && round.pendingResult !== result) {
+      throw new HttpsError('failed-precondition', `This round is already being settled as "${round.pendingResult}"`);
+    }
+    tx.update(roundRef, { status: 'settling', pendingResult: result });
+  });
+
+  let paidOut = 0;
+  let bettors = 0;
+  for (;;) {
+    const unpaid = await roundRef.collection('bets').where('paid', '==', false).limit(200).get();
+    if (unpaid.empty) break;
+    const batch = db.batch();
+    unpaid.docs.forEach((d) => {
+      const bet = d.data();
+      const payout = result === 'cancel' ? bet.amount : payoutFor(bet, result, multipliers);
+      batch.update(d.ref, { paid: true, payout });
+      if (payout > 0) {
+        batch.set(db.collection('gemBalances').doc(d.id), {
+          gems: admin.firestore.FieldValue.increment(payout),
+        }, { merge: true });
+      }
+      paidOut += payout;
+      bettors += 1;
+    });
+    await batch.commit();
+  }
+
+  await roundRef.update({
+    status: result === 'cancel' ? 'cancelled' : 'settled',
+    result: result === 'cancel' ? null : result,
+    settledAt: Date.now(),
+  });
+  return { bettors, paidOut };
+});
+
+// ============================================================================
+// Community challenge goals. Viewers donate gems toward a target; the
+// donation that reaches it picks random challenges from the goal's pool and
+// opens a timed vote for everyone who donated. Goals are created by staff
+// from the client (the rules check the shape); everything that moves gems or
+// changes a goal's status happens here.
+// ============================================================================
+
+exports.donateToChallengeGoal = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Log in to donate');
+  const { goalId, amount } = request.data || {};
+  if (!goalId || typeof goalId !== 'string') throw new HttpsError('invalid-argument', 'Missing goal');
+
+  const uid = request.auth.uid;
+  const username = request.auth.token.username || null;
+  const goalRef = db.collection('challengeGoals').doc(goalId);
+  const donationRef = goalRef.collection('donations').doc(uid);
+  const balanceRef = db.collection('gemBalances').doc(uid);
+
+  return db.runTransaction(async (tx) => {
+    const [goalSnap, donationSnap, balanceSnap] = await Promise.all([tx.get(goalRef), tx.get(donationRef), tx.get(balanceRef)]);
+    if (!goalSnap.exists) throw new HttpsError('not-found', 'That goal no longer exists');
+    const goal = goalSnap.data();
+    if (goal.status !== 'collecting') throw new HttpsError('failed-precondition', 'This goal isn\'t taking donations any more');
+
+    const balance = balanceSnap.exists ? balanceSnap.data().gems : STARTING_GEMS;
+    let plan;
+    try {
+      plan = planDonation({ balance, raised: goal.raised, target: goal.target, amount });
+    } catch (err) {
+      throw new HttpsError('invalid-argument', err.message);
+    }
+
+    const goalUpdate = { raised: plan.raised };
+    if (plan.reached) {
+      Object.assign(goalUpdate, {
+        status: 'voting',
+        options: pickOptions(goal.pool),
+        votingOpenedAt: admin.firestore.FieldValue.serverTimestamp(),
+        votingMs: VOTING_MS,
+      });
+    }
+    tx.update(goalRef, goalUpdate);
+    tx.set(balanceRef, { username, gems: plan.balance }, { merge: true });
+    tx.set(donationRef, donationSnap.exists
+      ? { gems: donationSnap.data().gems + plan.taken }
+      : { username, gems: plan.taken, vote: null, refunded: false }, { merge: true });
+    return { taken: plan.taken, gems: plan.balance, reached: plan.reached };
+  });
+});
+
+// Donors only, one vote each, changeable until the countdown ends.
+exports.voteOnChallenge = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Log in to vote');
+  const { goalId, option } = request.data || {};
+  if (!goalId || typeof goalId !== 'string') throw new HttpsError('invalid-argument', 'Missing goal');
+
+  const goalRef = db.collection('challengeGoals').doc(goalId);
+  const donationRef = goalRef.collection('donations').doc(request.auth.uid);
+  await db.runTransaction(async (tx) => {
+    const [goalSnap, donationSnap] = await Promise.all([tx.get(goalRef), tx.get(donationRef)]);
+    if (!goalSnap.exists) throw new HttpsError('not-found', 'That goal no longer exists');
+    const goal = goalSnap.data();
+    const openedAtMs = goal.votingOpenedAt ? goal.votingOpenedAt.toMillis() : null;
+    if (!votingIsOpen({ ...goal, votingOpenedAtMs: openedAtMs }, Date.now())) {
+      throw new HttpsError('failed-precondition', 'Voting is closed');
+    }
+    if (!donationSnap.exists) throw new HttpsError('permission-denied', 'Only people who donated to this goal can vote');
+    if (!Number.isInteger(option) || option < 0 || option >= goal.options.length) {
+      throw new HttpsError('invalid-argument', 'Pick one of the challenges');
+    }
+    tx.update(donationRef, { vote: option });
+  });
+  return { success: true };
+});
+
+// Staff: call off a goal that's still collecting or voting and give every
+// donor their gems back. Like settleLiveRound, each refund is marked in the
+// same batch as the gems it returns, so re-running it finishes a cut-off one.
+exports.cancelChallengeGoal = onCall(async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Only staff can cancel goals');
+  const { goalId } = request.data || {};
+  if (!goalId || typeof goalId !== 'string') throw new HttpsError('invalid-argument', 'Missing goal');
+
+  const goalRef = db.collection('challengeGoals').doc(goalId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(goalRef);
+    if (!snap.exists) throw new HttpsError('not-found', 'Goal not found');
+    if (!['collecting', 'voting', 'cancelling'].includes(snap.data().status)) {
+      throw new HttpsError('failed-precondition', 'This goal is already finished');
+    }
+    tx.update(goalRef, { status: 'cancelling' });
+  });
+
+  let refunded = 0;
+  for (;;) {
+    const pending = await goalRef.collection('donations').where('refunded', '==', false).limit(200).get();
+    if (pending.empty) break;
+    const batch = db.batch();
+    pending.docs.forEach((d) => {
+      const gems = d.data().gems || 0;
+      batch.update(d.ref, { refunded: true });
+      if (gems > 0) {
+        batch.set(db.collection('gemBalances').doc(d.id), { gems: admin.firestore.FieldValue.increment(gems) }, { merge: true });
+      }
+      refunded += gems;
+    });
+    await batch.commit();
+  }
+  await goalRef.update({ status: 'cancelled' });
+  return { refunded };
+});
+
+// ============================================================================
+// Gem Roulette - a solo gem game. The server rolls (crypto-secure) and
+// pays out in one transaction; the wheel animation on the page just shows
+// where this already landed. Each spin is logged to rouletteSpins for the
+// public "recent spins" feed.
+// ============================================================================
+exports.spinRoulette = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Log in to spin');
+  const { pick, amount } = request.data || {};
+  const uid = request.auth.uid;
+  const username = request.auth.token.username || null;
+  const balanceRef = db.collection('gemBalances').doc(uid);
+  const spinRef = db.collection('rouletteSpins').doc();
+
+  return db.runTransaction(async (tx) => {
+    const balanceSnap = await tx.get(balanceRef);
+    const data = balanceSnap.exists ? balanceSnap.data() : {};
+    const balance = balanceSnap.exists ? data.gems : STARTING_GEMS;
+    const now = Date.now();
+    try {
+      checkSpin({ balance, pick, amount, lastSpinAt: data.lastSpinAt || 0, now });
+    } catch (err) {
+      throw new HttpsError('invalid-argument', err.message);
+    }
+
+    const pocket = crypto.randomInt(POCKET_COUNT);
+    const payout = spinPayout(pick, pocket, amount);
+    const gems = balance - amount + payout;
+    tx.set(balanceRef, { username, gems, lastSpinAt: now }, { merge: true });
+    tx.set(spinRef, { uid, username, pick, amount, pocket, landed: POCKETS[pocket], payout, at: now });
+    return { pocket, landed: POCKETS[pocket], payout, gems };
+  });
+});
+
+// ============================================================================
+// Gem drops - free gems staff hand out on stream. Staff create the drop from
+// the client (the rules check the shape and that openedAt is server time);
+// claiming happens here so each account gets it once, and only in time.
+// Claims don't touch the drop doc itself, so a rush of viewers clicking at
+// once doesn't pile up on one document.
+// ============================================================================
+exports.claimGemDrop = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Log in to claim');
+  const { dropId } = request.data || {};
+  if (!dropId || typeof dropId !== 'string') throw new HttpsError('invalid-argument', 'Missing drop');
+
+  const uid = request.auth.uid;
+  const username = request.auth.token.username || null;
+  const dropRef = db.collection('gemDrops').doc(dropId);
+  const claimRef = dropRef.collection('claims').doc(uid);
+  const balanceRef = db.collection('gemBalances').doc(uid);
+
+  return db.runTransaction(async (tx) => {
+    const [dropSnap, claimSnap, balanceSnap] = await Promise.all([tx.get(dropRef), tx.get(claimRef), tx.get(balanceRef)]);
+    if (!dropSnap.exists) throw new HttpsError('not-found', 'That drop no longer exists');
+    const drop = dropSnap.data();
+    const openedAtMs = drop.openedAt ? drop.openedAt.toMillis() : null;
+    if (!dropIsOpen({ ...drop, openedAtMs }, Date.now())) throw new HttpsError('failed-precondition', 'Too late - this drop is over');
+    if (claimSnap.exists) throw new HttpsError('already-exists', 'You already claimed this drop');
+
+    const balance = balanceSnap.exists ? balanceSnap.data().gems : STARTING_GEMS;
+    tx.set(claimRef, { username, gems: drop.amount, at: Date.now() });
+    tx.set(balanceRef, { username, gems: balance + drop.amount }, { merge: true });
+    return { gems: balance + drop.amount, amount: drop.amount };
+  });
 });

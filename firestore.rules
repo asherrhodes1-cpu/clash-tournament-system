@@ -53,9 +53,12 @@ service cloud.firestore {
         let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
         let bhReq = resource.data.get('requiredBuilderHallLevel', null);
         let trophyReq = resource.data.get('minBestTrophies', null);
-        // Joining also needs a Discord account linked with /link, so every
-        // player can be reached about their matches.
-        return profile.get('discordId', '') != ''
+        // Live-section accounts are created without a Clash account, so a
+        // verified one (API token, set by a Cloud Function only) is required
+        // here. Joining also needs a Discord account linked with /link, so
+        // every player can be reached about their matches.
+        return profile.get('clashVerified', false) == true
+            && profile.get('discordId', '') != ''
             && (bhReq == null || profile.get('builderHallLevel', -1) == bhReq)
             && (trophyReq == null || profile.get('bestBuilderBaseTrophies', -1) >= trophyReq);
       }
@@ -154,6 +157,110 @@ service cloud.firestore {
     // group query needs this wildcard form to be granted read access at all.
     match /{path=**}/matches/{matchId} {
       allow read: if true;
+    }
+
+    // Live streams. Everything is publicly readable because the OBS overlay
+    // (/live/overlay) runs without an account.
+    // live/state: the stream link and which betting round is featured.
+    match /live/{docId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // A betting round: will the streamer succeed or fail? Staff open and
+    // close betting here; settling (payouts) is the settleLiveRound Cloud
+    // Function only, so once a round is settling staff can't reopen it.
+    match /liveRounds/{roundId} {
+      allow read: if true;
+      // Betting runs for bettingMs from openedAt (the countdown), and
+      // openedAt has to be the server's own time so a wrong clock on the
+      // streamer's computer can't stretch it. placeLiveBet enforces the end.
+      allow create: if isStaff()
+                    && request.resource.data.keys().hasOnly(['description', 'kind', 'status', 'result', 'createdBy', 'createdAt', 'openedAt', 'bettingMs'])
+                    && request.resource.data.get('kind', 'outcome') in ['outcome', 'stars']
+                    && request.resource.data.description is string
+                    && request.resource.data.description.size() > 0
+                    && request.resource.data.description.size() <= 200
+                    && request.resource.data.status == 'open'
+                    && request.resource.data.result == null
+                    && request.resource.data.openedAt == request.time
+                    && request.resource.data.bettingMs is int
+                    && request.resource.data.bettingMs > 0
+                    && request.resource.data.bettingMs <= 600000;
+      // Close betting early, or reopen it (which restarts the countdown).
+      allow update: if isStaff()
+                    && resource.data.status in ['open', 'closed']
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'openedAt'])
+                    && request.resource.data.status in ['open', 'closed']
+                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['openedAt'])
+                        || request.resource.data.openedAt == request.time);
+      allow delete: if false;
+
+      // Written by the placeLiveBet / settleLiveRound Cloud Functions only.
+      match /bets/{uid} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // Community challenge goals: viewers donate gems toward the target, then
+    // donors vote on a challenge. Staff create a goal here (with `pool`, a
+    // snapshot of their challenge list from live/challenges); donating,
+    // voting, and cancelling are Cloud Functions only.
+    match /challengeGoals/{goalId} {
+      allow read: if true;
+      allow create: if isStaff()
+                    && request.resource.data.keys().hasOnly(['target', 'raised', 'status', 'pool', 'createdBy', 'createdAt'])
+                    && request.resource.data.target is int
+                    && request.resource.data.target >= 1
+                    && request.resource.data.target <= 1000000
+                    && request.resource.data.raised == 0
+                    && request.resource.data.status == 'collecting'
+                    && request.resource.data.pool is list
+                    && request.resource.data.pool.size() >= 2
+                    && request.resource.data.pool.size() <= 50;
+      allow update, delete: if false;
+
+      match /donations/{uid} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // Gem drops: free gems staff hand out for a short window. Staff create
+    // one here (openedAt must be server time, so the countdown can't be
+    // stretched); claiming is the claimGemDrop Cloud Function only.
+    match /gemDrops/{dropId} {
+      allow read: if true;
+      allow create: if isStaff()
+                    && request.resource.data.keys().hasOnly(['amount', 'durationMs', 'openedAt', 'createdBy', 'createdAt'])
+                    && request.resource.data.amount is int
+                    && request.resource.data.amount >= 1
+                    && request.resource.data.amount <= 100000
+                    && request.resource.data.durationMs is int
+                    && request.resource.data.durationMs >= 5000
+                    && request.resource.data.durationMs <= 600000
+                    && request.resource.data.openedAt == request.time;
+      allow update, delete: if false;
+
+      match /claims/{uid} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // League Roulette spins, logged by the spinRoulette Cloud Function for
+    // the public "recent spins" feed.
+    match /rouletteSpins/{spinId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Pretend-currency balances, public for the leaderboard. Cloud Functions
+    // only - a client can never set its own gems.
+    match /gemBalances/{uid} {
+      allow read: if true;
+      allow write: if false;
     }
 
     match /flags/{flagId} {
