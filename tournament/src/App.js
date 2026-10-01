@@ -4008,7 +4008,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   const userIsPlayer = match.player1 === user.username || match.player2 === user.username;
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
   const userReady = match.player1 === user.username ? match.player1Ready : match.player2Ready;
-  const timeDisplay = getTimeRemainingDisplay(match.scheduledStartTime);
+  const timeDisplay = getTimeRemainingDisplay(match);
   const unlockTime = match.unlockAt ?? getRoundUnlockTime(tournament, match.day ?? match.round);
   const roundLocked = unlockTime && Date.now() < unlockTime;
   const [forcingWinner, setForcingWinner] = useState(false);
@@ -4619,7 +4619,7 @@ function MatchPage({ match, user, onReportWinner, onCancel }) {
   }
 
   const opponent = match.player1 === user.username ? match.player2 : match.player1;
-  const timeDisplay = getTimeRemainingDisplay(match.scheduledStartTime);
+  const timeDisplay = getTimeRemainingDisplay(match);
   const userVote = match.player1 === user.username ? match.winner1Vote : match.winner2Vote;
 
   const handleSendMessage = () => {

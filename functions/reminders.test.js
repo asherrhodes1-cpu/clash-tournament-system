@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { dueReminders, readyUpDeadline, TIMEOUT_MS, READY_UP_MIN_WINDOW_MS } = require('./reminders');
+const { dueReminders, readyUpDeadline, playDeadline, TIMEOUT_MS, READY_UP_MIN_WINDOW_MS } = require('./reminders');
 
 const H = 60 * 60 * 1000;
 // A day that opened at 12:00 PM Central; it ends 24h later, at the next 12:00 PM.
@@ -61,8 +61,8 @@ test('matches from before days were tracked keep the old 16h clock', () => {
 });
 
 test('report warning only goes to whoever has not reported', () => {
-  const m = { ...base, status: 'waiting_for_opponent', player1Ready: true, player2Ready: true, scheduledStartTime: 5_000_000_000_000, winner1Vote: 'A' };
-  const deadline = m.scheduledStartTime + TIMEOUT_MS;
+  const m = { ...base, status: 'waiting_for_opponent', player1Ready: true, player2Ready: true, scheduledStartTime: base.unlockAt + 2 * H, winner1Vote: 'A' };
+  const deadline = base.unlockAt + DAY;
   assert.deepStrictEqual(keys(m, deadline - 5 * H), []);
   assert.deepStrictEqual(keys(m, deadline - 3 * H), ['deadline_report:B']);
   assert.deepStrictEqual(keys({ ...m, remindersSent: { deadline_report: true } }, deadline - 3 * H), []);
@@ -78,6 +78,16 @@ test('finished, disputed and BYE matches never get reminders', () => {
 test('every reminder carries a specific prompt for the link back to the site', () => {
   const ready = dueReminders(base, base.unlockAt + 60_000)[0];
   assert.strictEqual(ready.linkLabel, 'Open Builder League to ready up');
-  const m = { ...base, status: 'waiting_for_opponent', player1Ready: true, player2Ready: true, scheduledStartTime: 5_000_000_000_000, winner1Vote: 'A' };
-  assert.strictEqual(dueReminders(m, m.scheduledStartTime + TIMEOUT_MS - 3 * H)[0].linkLabel, 'Open Builder League to report your result');
+  const m = { ...base, status: 'waiting_for_opponent', player1Ready: true, player2Ready: true, scheduledStartTime: base.unlockAt + 2 * H, winner1Vote: 'A' };
+  assert.strictEqual(dueReminders(m, base.unlockAt + DAY - 3 * H)[0].linkLabel, 'Open Builder League to report your result');
+});
+
+test('a readied-up match has to be played by the end of its day, not 16h after readying', () => {
+  const early = { ...base, scheduledStartTime: base.unlockAt + 2 * H };
+  const late = { ...base, scheduledStartTime: base.unlockAt + 20 * H };
+  const overran = { ...base, scheduledStartTime: base.unlockAt + DAY + H };
+  assert.strictEqual(playDeadline(early), base.unlockAt + DAY);
+  assert.strictEqual(playDeadline(late), late.scheduledStartTime + READY_UP_MIN_WINDOW_MS); // readied with <6h left: gets the 6h floor
+  assert.strictEqual(playDeadline(overran), overran.scheduledStartTime + READY_UP_MIN_WINDOW_MS);
+  assert.strictEqual(playDeadline({ ...early, unlockAt: undefined }), early.scheduledStartTime + TIMEOUT_MS);
 });

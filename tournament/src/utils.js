@@ -115,12 +115,15 @@ export function formatCountdown(ms) {
   return `${hours}h ${minutes}m`;
 }
 
-export function getTimeRemaining(startTime) {
-  if (!startTime) return null;
-  const now = new Date().getTime();
-  const elapsed = now - startTime;
-  const TIMEOUT_MS = 16 * 60 * 60 * 1000;
-  const remaining = TIMEOUT_MS - elapsed;
+// Mirrors playDeadline in functions/reminders.js: a match both players readied
+// up for has to be played by the end of its day (or 6h after they readied, if
+// that's later). Matches from before days were tracked keep a flat 16h.
+export function getTimeRemaining(match) {
+  if (!match?.scheduledStartTime) return null;
+  const deadline = match.unlockAt
+    ? Math.max(dayEndsAt(match.unlockAt), match.scheduledStartTime + 6 * 60 * 60 * 1000)
+    : match.scheduledStartTime + 16 * 60 * 60 * 1000;
+  const remaining = deadline - Date.now();
 
   if (remaining <= 0) return 'EXPIRED';
 
@@ -130,8 +133,8 @@ export function getTimeRemaining(startTime) {
   return `${hours}h ${minutes}m`;
 }
 
-export function getTimeRemainingDisplay(startTime) {
-  const remaining = getTimeRemaining(startTime);
+export function getTimeRemainingDisplay(match) {
+  const remaining = getTimeRemaining(match);
   if (!remaining) return null;
   if (remaining === 'EXPIRED') return { text: 'TIMEOUT', color: 'text-white font-bold' };
 

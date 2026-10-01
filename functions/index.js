@@ -14,7 +14,7 @@ const { generateSeededBracket, seedDoubleEliminationBracket, matchPosition } = r
 const { planSingleElimAdvancement } = require('./advancement');
 const { planDoubleElimAdvancement } = require('./doubleElim');
 const { planScoreChanges, tallyScores } = require('./predictions');
-const { readyUpDeadline } = require('./reminders');
+const { readyUpDeadline, playDeadline } = require('./reminders');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -37,7 +37,6 @@ function siteUrl() {
 }
 const CLASH_RELAY_URL = 'https://174-138-44-50.nip.io';
 const EMAIL_DOMAIN = 'clash-tournament.local';
-const TIMEOUT_MS = 16 * 60 * 60 * 1000;
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
@@ -626,8 +625,7 @@ async function handleTimeouts(tournamentRef, tournament, matches) {
     const isTimeoutEligible = ['active', 'scheduled', 'waiting_for_opponent'].includes(m.status);
     if (!isTimeoutEligible || !m.scheduledStartTime) continue;
 
-    const elapsed = now - m.scheduledStartTime;
-    if (elapsed <= TIMEOUT_MS) continue;
+    if (now <= playDeadline(m)) continue;
 
     const player1Reported = !!m.winner1Vote;
     const player2Reported = !!m.winner2Vote;

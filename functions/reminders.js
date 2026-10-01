@@ -34,6 +34,14 @@ function readyUpDeadline(match, readyTime) {
   return Math.max(dayEndsAt(match.unlockAt), readyTime + READY_UP_MIN_WINDOW_MS);
 }
 
+// When a match both players readied up for has to be played: the end of the
+// match's day, or READY_UP_MIN_WINDOW_MS after they readied, whichever is
+// later. Matches from before days were tracked keep the flat TIMEOUT_MS.
+function playDeadline(match) {
+  if (!match.unlockAt) return match.scheduledStartTime + TIMEOUT_MS;
+  return Math.max(dayEndsAt(match.unlockAt), match.scheduledStartTime + READY_UP_MIN_WINDOW_MS);
+}
+
 // Discord renders these in each reader's own timezone, so no formatting here.
 function discordTime(ms, style = 'R') {
   return `<t:${Math.floor(ms / 1000)}:${style}>`;
@@ -99,7 +107,7 @@ function dueReminders(m, now) {
   // Both readied up: whoever hasn't reported by the deadline gets settled
   // against (opponent wins if only they reported, staff review if neither).
   if (IN_PLAY.includes(m.status) && m.scheduledStartTime) {
-    const deadline = m.scheduledStartTime + TIMEOUT_MS;
+    const deadline = playDeadline(m);
     const unreported = players.filter((p) => !p.voted);
     if (!sent.deadline_report && unreported.length && now >= deadline - DEADLINE_WARNING_MS && now < deadline) {
       due.push({
@@ -113,4 +121,4 @@ function dueReminders(m, now) {
   return due;
 }
 
-module.exports = { dueReminders, discordTime, readyUpDeadline, TIMEOUT_MS, READY_UP_MIN_WINDOW_MS };
+module.exports = { dueReminders, discordTime, readyUpDeadline, playDeadline, TIMEOUT_MS, READY_UP_MIN_WINDOW_MS };
