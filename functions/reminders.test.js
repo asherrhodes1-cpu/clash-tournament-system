@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { dueReminders, readyUpDeadline, playDeadline, TIMEOUT_MS, READY_UP_MIN_WINDOW_MS } = require('./reminders');
+const { dueReminders, readyUpDeadline, playDeadline, matchDayEnd, TIMEOUT_MS, READY_UP_MIN_WINDOW_MS } = require('./reminders');
 
 const H = 60 * 60 * 1000;
 // A day that opened at 12:00 PM Central; it ends 24h later, at the next 12:00 PM.
@@ -90,4 +90,16 @@ test('a readied-up match has to be played by the end of its day, not 16h after r
   assert.strictEqual(playDeadline(late), late.scheduledStartTime + READY_UP_MIN_WINDOW_MS); // readied with <6h left: gets the 6h floor
   assert.strictEqual(playDeadline(overran), overran.scheduledStartTime + READY_UP_MIN_WINDOW_MS);
   assert.strictEqual(playDeadline({ ...early, unlockAt: undefined }), early.scheduledStartTime + TIMEOUT_MS);
+});
+
+test('a match with its own day end (a 1v1) uses that instead of noon Central', () => {
+  const opened = Date.UTC(2026, 9, 2, 3, 0); // 10pm Central the night before
+  const ladder = { unlockAt: opened, dayEndsAt: opened + 24 * H, scheduledStartTime: opened + H };
+  assert.strictEqual(matchDayEnd(ladder), opened + 24 * H);
+  assert.strictEqual(playDeadline(ladder), opened + 24 * H);
+  assert.strictEqual(readyUpDeadline(ladder, opened + 2 * H), opened + 24 * H);
+  // Readied up near the end: still the minimum window after that.
+  assert.strictEqual(readyUpDeadline(ladder, opened + 23 * H), opened + 23 * H + READY_UP_MIN_WINDOW_MS);
+  // Without it, the same match would end at the next noon Central.
+  assert.notStrictEqual(matchDayEnd({ unlockAt: opened }), opened + 24 * H);
 });

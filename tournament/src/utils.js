@@ -121,7 +121,7 @@ export function formatCountdown(ms) {
 export function getTimeRemaining(match) {
   if (!match?.scheduledStartTime) return null;
   const deadline = match.unlockAt
-    ? Math.max(dayEndsAt(match.unlockAt), match.scheduledStartTime + 6 * 60 * 60 * 1000)
+    ? Math.max(match.dayEndsAt ?? dayEndsAt(match.unlockAt), match.scheduledStartTime + 6 * 60 * 60 * 1000)
     : match.scheduledStartTime + 16 * 60 * 60 * 1000;
   const remaining = deadline - Date.now();
 

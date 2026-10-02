@@ -203,6 +203,19 @@ service cloud.firestore {
       }
     }
 
+    // The 1v1 ladder. Its matches are ordinary match docs under
+    // tournaments/ladder (so the match rules above cover them); these are the
+    // Elo ratings and the matchmaking queue, both written only by Cloud
+    // Functions (rateLadderMatch, joinLadderQueue / leaveLadderQueue).
+    match /ladderRatings/{usernameLower} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /ladderQueue/{uid} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     // Community challenge goals: viewers donate gems toward the target, then
     // donors vote on a challenge. Staff create a goal here (with `pool`, a
     // snapshot of their challenge list from live/challenges); donating,

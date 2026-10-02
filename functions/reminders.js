@@ -24,6 +24,12 @@ const UNLOCK_WINDOW_MS = 2 * HOUR_MS;
 
 const IN_PLAY = ['scheduled', 'active', 'waiting_for_opponent'];
 
+// When a match's day ends. Tournament days end at noon Central; a match can
+// carry its own end instead (`dayEndsAt` - 1v1 ladder matches get a flat 24h).
+function matchDayEnd(match) {
+  return match.dayEndsAt ?? dayEndsAt(match.unlockAt);
+}
+
 // When a player who hasn't readied up forfeits to an opponent who has: the end
 // of the match's day (the same boundary the "next day unlocks in" countdown
 // counts down to), or READY_UP_MIN_WINDOW_MS after the opponent readied,
@@ -31,7 +37,7 @@ const IN_PLAY = ['scheduled', 'active', 'waiting_for_opponent'];
 // older flat TIMEOUT_MS from when the opponent readied up.
 function readyUpDeadline(match, readyTime) {
   if (!match.unlockAt) return readyTime + TIMEOUT_MS;
-  return Math.max(dayEndsAt(match.unlockAt), readyTime + READY_UP_MIN_WINDOW_MS);
+  return Math.max(matchDayEnd(match), readyTime + READY_UP_MIN_WINDOW_MS);
 }
 
 // When a match both players readied up for has to be played: the end of the
@@ -39,7 +45,7 @@ function readyUpDeadline(match, readyTime) {
 // later. Matches from before days were tracked keep the flat TIMEOUT_MS.
 function playDeadline(match) {
   if (!match.unlockAt) return match.scheduledStartTime + TIMEOUT_MS;
-  return Math.max(dayEndsAt(match.unlockAt), match.scheduledStartTime + READY_UP_MIN_WINDOW_MS);
+  return Math.max(matchDayEnd(match), match.scheduledStartTime + READY_UP_MIN_WINDOW_MS);
 }
 
 // Discord renders these in each reader's own timezone, so no formatting here.
@@ -121,4 +127,4 @@ function dueReminders(m, now) {
   return due;
 }
 
-module.exports = { dueReminders, discordTime, readyUpDeadline, playDeadline, TIMEOUT_MS, READY_UP_MIN_WINDOW_MS };
+module.exports = { dueReminders, discordTime, readyUpDeadline, playDeadline, matchDayEnd, TIMEOUT_MS, READY_UP_MIN_WINDOW_MS };

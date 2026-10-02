@@ -9,6 +9,15 @@ const dayOf = (match) => match.day ?? match.round;
 // Sent to one player when a match with a new opponent is created.
 function newOpponentMessage(match, player, now = Date.now()) {
   const opponent = match.player1 === player ? match.player2 : match.player1;
+  // A 1v1 from the ladder queue: no days or rounds, just a 24-hour window.
+  if (match.ladder) {
+    return {
+      text:
+        `⚔️ **1v1 found:** you're up against **${opponent}**. You have until ${discordTime(match.dayEndsAt)} - ready up!\n` +
+        `💬 Their match chat messages will show up here. Replying here won't reach them, so reply in your match chat on the site.`,
+      linkLabel: 'Open Builder League to ready up',
+    };
+  }
   const opensLater = match.unlockAt && match.unlockAt > now;
   const when = opensLater ? `Your match opens ${discordTime(match.unlockAt)}.` : 'Your match is open, so ready up!';
   return {

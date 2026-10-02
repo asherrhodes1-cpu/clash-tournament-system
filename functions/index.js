@@ -5,7 +5,7 @@ const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/
 const { defineSecret, defineString } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
-const { dueReminders, discordTime } = require('./reminders');
+const { dueReminders, discordTime, matchDayEnd } = require('./reminders');
 const { nextRoundUnlockAt } = require('./schedule');
 const { newOpponentMessage, chatMessage, opponentReadyMessage, sentToStaffMessage } = require('./messages');
 const { fetchWithRetry, fetchTransientRetry } = require('./http');
@@ -19,6 +19,7 @@ const { STARTING_GEMS, ROUND_KINDS, kindOf, planBet, payoutFor, bettingIsOpen } 
 const { POCKET_COUNT, POCKETS, checkSpin, spinPayout } = require('./roulette');
 const { VOTING_MS, planDonation, pickOptions, votingIsOpen } = require('./challenges');
 const { dropIsOpen } = require('./drops');
+const { LADDER_ID, LADDER_MATCH_MS, START_RATING, outcomeOf, rateMatch, pickOpponent, pairQueue } = require('./ladder');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -490,6 +491,14 @@ exports.advanceTournaments = onSchedule({ schedule: 'every 5 minutes', secrets: 
     } else {
       await handleRoundAdvancement(tournamentDoc.ref, tournament, matches);
     }
+  }
+
+  // The 1v1 ladder isn't a tournament 'in_progress', so it gets its own pass.
+  // Kept apart so a problem there can never hold up a tournament.
+  try {
+    await processLadder();
+  } catch (err) {
+    logger.error('processLadder failed', err);
   }
 });
 
@@ -1082,6 +1091,7 @@ exports.notifyTournamentCreated = onDocumentCreated(
   { document: 'tournaments/{tournamentId}', secrets: [DISCORD_BOT_TOKEN] },
   async (event) => {
     const t = event.data.data();
+    if (t.kind === 'ladder') return; // the 1v1 ladder's container, not a tournament
     await notifyDiscord(`🏆 New tournament created: **${t.name}** — sign up now!`);
   }
 );
@@ -1756,5 +1766,199 @@ exports.claimGemDrop = onCall(async (request) => {
     tx.set(claimRef, { username, gems: drop.amount, at: Date.now() });
     tx.set(balanceRef, { username, gems: balance + drop.amount }, { merge: true });
     return { gems: balance + drop.amount, amount: drop.amount };
+  });
+});
+
+// ============================================================================
+// The 1v1 ladder. Players queue and are paired with someone of similar
+// rating; the 1v1 is then an ordinary match under tournaments/ladder, so
+// ready-up, self-reporting, disputes, chat and the Discord DMs are the
+// tournament ones, unchanged. What's added here: the queue, a flat 24h
+// window, and Elo ratings (ladderRatings/{usernameLower}).
+// ============================================================================
+const ladderRef = db.collection('tournaments').doc(LADDER_ID);
+const ladderQueueRef = db.collection('ladderQueue');
+const ladderRatingRef = (username) => db.collection('ladderRatings').doc(username.toLowerCase());
+
+// The tournament-shaped doc the ladder's matches hang off. It has to exist
+// (the match rules read it) and `startedAt: null` keeps them always unlocked;
+// status 'ladder' keeps it out of every tournament list and the scheduler's
+// bracket logic.
+const LADDER_DOC = {
+  id: LADDER_ID, kind: 'ladder', name: '1v1 Ladder', status: 'ladder', format: 'ladder',
+  startedAt: null, players: [], createdBy: 'system',
+};
+
+// Who `username` already has an unfinished 1v1 against - they aren't paired
+// with them again until that one is done.
+async function openLadderOpponents(username) {
+  const matches = ladderRef.collection('matches');
+  const [asP1, asP2] = await Promise.all([
+    matches.where('player1', '==', username).where('completedAt', '==', null).get(),
+    matches.where('player2', '==', username).where('completedAt', '==', null).get(),
+  ]);
+  return new Set([...asP1.docs.map((d) => d.data().player2), ...asP2.docs.map((d) => d.data().player1)]);
+}
+
+// Reads (inside the transaction) the two players' Clash tags, then writes
+// the match. `a` is listed first - the one who waited longer.
+async function createLadderMatch(tx, a, b, now) {
+  const usersSnap = await tx.get(
+    db.collection('users').where('usernameLower', 'in', [a.username.toLowerCase(), b.username.toLowerCase()])
+  );
+  const playerStats = {};
+  usersSnap.docs.forEach((d) => {
+    const data = d.data();
+    playerStats[data.username] = { tag: data.clashTag || '', bestBuilderBaseTrophies: data.bestBuilderBaseTrophies || 0 };
+  });
+  const ref = ladderRef.collection('matches').doc();
+  tx.set(ladderRef, LADDER_DOC, { merge: true });
+  tx.set(ref, {
+    ...newMatchDoc({ id: ref.id, tournamentId: LADDER_ID, player1: a.username, player2: b.username, round: 1, playerStats, now }),
+    ladder: true,
+    createdAt: now,
+    dayEndsAt: now + LADDER_MATCH_MS,
+    player1Rating: a.rating,
+    player2Rating: b.rating,
+  });
+  return ref.id;
+}
+
+// Join the queue. If someone suitable is already waiting you're matched on
+// the spot; otherwise you wait, and the scheduler pairs you once the rating
+// range has widened enough (see allowedGap in ladder.js).
+exports.joinLadderQueue = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Log in to play 1v1s');
+  const uid = request.auth.uid;
+  const username = request.auth.token.username;
+  if (!username) throw new HttpsError('failed-precondition', 'This account has no username');
+
+  // Same bar as joining a tournament: a verified Clash account, and Discord
+  // linked so players can be reached about their match.
+  const profile = (await db.collection('users').doc(uid).get()).data() || {};
+  if (!profile.clashVerified) throw new HttpsError('failed-precondition', 'Verify your Clash of Clans account to play 1v1s');
+  if (!profile.discordId) throw new HttpsError('failed-precondition', 'Link your Discord account to play 1v1s');
+
+  const [ratingSnap, playing] = await Promise.all([ladderRatingRef(username).get(), openLadderOpponents(username)]);
+  const rating = ratingSnap.exists ? ratingSnap.data().rating : START_RATING;
+
+  return db.runTransaction(async (tx) => {
+    const now = Date.now();
+    const queueSnap = await tx.get(ladderQueueRef);
+    const mine = queueSnap.docs.find((d) => d.id === uid);
+    const me = { uid, username, rating, joinedAt: mine ? mine.data().joinedAt : now };
+    const others = queueSnap.docs.filter((d) => d.id !== uid).map((d) => d.data());
+    const opponent = pickOpponent(me, others, now, (x, y) => playing.has(x === username ? y : x));
+
+    if (!opponent) {
+      tx.set(ladderQueueRef.doc(uid), me);
+      return { matched: false };
+    }
+    const matchId = await createLadderMatch(tx, opponent, me, now);
+    tx.delete(ladderQueueRef.doc(opponent.uid));
+    if (mine) tx.delete(mine.ref);
+    return { matched: true, matchId, opponent: opponent.username };
+  });
+});
+
+exports.leaveLadderQueue = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Log in first');
+  await ladderQueueRef.doc(request.auth.uid).delete();
+  return { success: true };
+});
+
+// Pairs up whoever in the queue can now be paired - people whose acceptable
+// rating range has widened since they joined. Each pair is made in its own
+// transaction, which re-checks both are still waiting.
+async function runLadderMatchmaking() {
+  const queueSnap = await ladderQueueRef.get();
+  if (queueSnap.size < 2) return;
+  const entries = queueSnap.docs.map((d) => d.data());
+  const playing = {};
+  await Promise.all(entries.map(async (e) => { playing[e.username] = await openLadderOpponents(e.username); }));
+  const now = Date.now();
+  const pairs = pairQueue(entries, now, (x, y) => playing[x]?.has(y) || playing[y]?.has(x));
+
+  for (const [a, b] of pairs) {
+    try {
+      await db.runTransaction(async (tx) => {
+        const [aSnap, bSnap] = await Promise.all([tx.get(ladderQueueRef.doc(a.uid)), tx.get(ladderQueueRef.doc(b.uid))]);
+        if (!aSnap.exists || !bSnap.exists) return;
+        await createLadderMatch(tx, a, b, Date.now());
+        tx.delete(aSnap.ref);
+        tx.delete(bSnap.ref);
+      });
+    } catch (err) {
+      logger.error('ladder pairing failed', { a: a.username, b: b.username, err });
+    }
+  }
+}
+
+// The scheduler's pass over the ladder: settle overdue 1v1s exactly as
+// tournament matches are, send the same reminders, then pair the queue.
+async function processLadder() {
+  const now = Date.now();
+  const openSnap = await ladderRef.collection('matches').where('completedAt', '==', null).get();
+  const matches = openSnap.docs.map((d) => d.data());
+
+  // Neither player readied up in the whole window: nothing was played and
+  // both are no-shows. (handleTimeouts covers the case where only one did.)
+  const batch = db.batch();
+  let abandoned = 0;
+  for (const m of matches) {
+    if (m.status === 'pending' && !m.player1Ready && !m.player2Ready && now > matchDayEnd(m)) {
+      batch.update(ladderRef.collection('matches').doc(m.id), {
+        status: 'completed', winner: null, resolvedReason: 'both_no_show', autoResolvedAt: now, completedAt: now,
+      });
+      abandoned += 1;
+    }
+  }
+  if (abandoned) await batch.commit();
+
+  await handleTimeouts(ladderRef, LADDER_DOC, matches);
+  await sendMatchReminders(ladderRef, matches);
+  await runLadderMatchmaking();
+}
+
+// Moves both players' ratings when a 1v1 finishes - however it finished
+// (agreed result, staff decision, forfeit). The outcome is recorded on the
+// match (`rating`), which is also what makes this run once per match.
+exports.rateLadderMatch = onDocumentUpdated(`tournaments/${LADDER_ID}/matches/{matchId}`, async (event) => {
+  const after = event.data.after.data();
+  if (after.rating || !outcomeOf(after)) return;
+
+  await db.runTransaction(async (tx) => {
+    const matchSnap = await tx.get(event.data.after.ref);
+    const m = matchSnap.data();
+    const outcome = m && outcomeOf(m);
+    if (!outcome || m.rating) return;
+
+    const refs = [ladderRatingRef(m.player1), ladderRatingRef(m.player2)];
+    const [snap1, snap2] = await Promise.all(refs.map((ref) => tx.get(ref)));
+    const current = (snap, username) => (snap.exists
+      ? snap.data()
+      : { username, rating: START_RATING, games: 0, wins: 0, losses: 0 });
+    const p1 = current(snap1, m.player1);
+    const p2 = current(snap2, m.player2);
+    const change = rateMatch(p1, p2, outcome);
+
+    const now = Date.now();
+    const apply = (p, c) => ({
+      username: p.username,
+      rating: p.rating + c.delta,
+      games: p.games + c.games,
+      wins: p.wins + c.wins,
+      losses: p.losses + c.losses,
+      updatedAt: now,
+    });
+    tx.set(refs[0], apply(p1, change.p1));
+    tx.set(refs[1], apply(p2, change.p2));
+    tx.update(matchSnap.ref, {
+      rating: {
+        type: outcome.type,
+        p1: { before: p1.rating, delta: change.p1.delta },
+        p2: { before: p2.rating, delta: change.p2.delta },
+      },
+    });
   });
 });

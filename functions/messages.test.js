@@ -55,3 +55,13 @@ test('the staff-review DM says why, from each player\'s point of view', () => {
   const disputed = { ...noReport, status: 'disputed' };
   assert.match(sentToStaffMessage(disputed, 'Ana').text, /reported different winners/);
 });
+
+test('a 1v1 from the ladder queue is announced as one, with its 24h deadline', () => {
+  const match = { ladder: true, player1: 'Ana', player2: 'Ben', unlockAt: 1_000_000, dayEndsAt: 1_000_000 + 24 * 60 * 60 * 1000 };
+  const { text, linkLabel } = newOpponentMessage(match, 'Ben', 1_000_500);
+  assert.match(text, /1v1 found/);
+  assert.match(text, /\*\*Ana\*\*/);
+  assert.match(text, /<t:87400:R>/);
+  assert.doesNotMatch(text, /Day/);
+  assert.match(linkLabel, /ready up/);
+});

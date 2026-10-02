@@ -36,6 +36,8 @@ import { subscribeToUserProfile, updateProfile, createDiscordLinkCode } from './
 import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/rewards';
 import { subscribeToMatchPredictions, submitPrediction, subscribeToTournamentPredictionScores, setPredictionsStartDay } from './api/predictions';
 import LivePage from './live/LivePage';
+import LadderPage from './ladder/LadderPage';
+import { LADDER_ID, LADDER_TOURNAMENT, joinLadderQueue } from './api/ladder';
 import LiveHeader from './live/LiveHeader';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
 import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, parseRewardLinks, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
@@ -929,16 +931,18 @@ function StaffDashboard({ flags, onUpdateFlagStatus, onAddResponse }) {
 // a player in this match".
 const GUEST_USER = { uid: null, username: null, isStaff: false, discordId: '', clashTag: '', clashVerified: false, isGuest: true };
 
+const PAGE_FOR_PATH = { '/live': 'live', '/1v1': 'ladder' };
+
 // ============================================================================
 // MAIN APP COMPONENT
 // ============================================================================
 export default function TournamentApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authInitializing, setAuthInitializing] = useState(true);
-  // /live is shareable (it's what the stream overlay tells viewers to open),
-  // so it's the one page that can be linked to directly.
+  // /live and /1v1 are shareable (the stream overlay tells viewers to open
+  // /live), so they're the pages that can be linked to directly.
   const [currentPage, setCurrentPage] = useState(() => (
-    window.location.pathname.replace(/\/+$/, '') === '/live' ? 'live' : 'landing'
+    PAGE_FOR_PATH[window.location.pathname.replace(/\/+$/, '')] || 'landing'
   ));
   const [tournaments, setTournaments] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -991,7 +995,7 @@ export default function TournamentApp() {
   const [loginReturnPage, setLoginReturnPage] = useState('dashboard');
 
   useEffect(() => {
-    if (currentPage !== 'login' && currentPage !== 'live') setLoginReturnPage('dashboard');
+    if (!['login', 'live', 'ladder'].includes(currentPage)) setLoginReturnPage('dashboard');
   }, [currentPage]);
 
   // The landing page is the hub for picking a section (Tournaments or Live),
@@ -1005,13 +1009,17 @@ export default function TournamentApp() {
     }
   }, [currentUser, authInitializing, currentPage, loginReturnPage]);
 
+  // Keep the address bar in step with the linkable pages.
   useEffect(() => {
-    const onLive = window.location.pathname.replace(/\/+$/, '') === '/live';
-    if (currentPage === 'live' && !onLive) window.history.replaceState(null, '', '/live');
-    if (currentPage !== 'live' && onLive) window.history.replaceState(null, '', '/');
+    const path = window.location.pathname.replace(/\/+$/, '');
+    const wanted = Object.keys(PAGE_FOR_PATH).find((p) => PAGE_FOR_PATH[p] === currentPage);
+    if (wanted && path !== wanted) window.history.replaceState(null, '', wanted);
+    if (!wanted && PAGE_FOR_PATH[path]) window.history.replaceState(null, '', '/');
   }, [currentPage]);
 
-  useEffect(() => subscribeToTournaments(setTournaments), []);
+  // The 1v1 ladder's matches hang off a tournament-shaped doc (see
+  // api/ladder.js); it isn't a tournament, so it stays out of every list.
+  useEffect(() => subscribeToTournaments((all) => setTournaments(all.filter((t) => t.kind !== 'ladder'))), []);
 
   useEffect(() => {
     if (!currentUser) {
@@ -1030,7 +1038,9 @@ export default function TournamentApp() {
   }, [currentUser?.username]);
 
   useEffect(() => {
-    if (!selectedTournamentId) {
+    // The ladder's matches aren't browsed as a bracket (and there's no end
+    // to them) - a player's own 1v1s are already in userMatches.
+    if (!selectedTournamentId || selectedTournamentId === LADDER_ID) {
       setMatches([]);
       return;
     }
@@ -1100,6 +1110,14 @@ export default function TournamentApp() {
   };
 
   const joinNow = async (tournamentId) => {
+    if (tournamentId === LADDER_ID) {
+      try {
+        await joinLadderQueue();
+      } catch (err) {
+        alert(err.message);
+      }
+      return;
+    }
     const tournament = tournaments.find(t => t.id === tournamentId);
     if (!tournament) return;
     try {
@@ -1123,6 +1141,16 @@ export default function TournamentApp() {
       return;
     }
     await joinNow(tournamentId);
+  };
+
+  // Queuing for a 1v1 has the same requirements as joining a tournament, so
+  // it goes through the same prompts when something's missing.
+  const handleJoinLadderQueue = async () => {
+    if (!currentUser.clashVerified || !currentUser.discordId) {
+      setPendingJoinId(LADDER_ID);
+      return;
+    }
+    await joinLadderQueue();
   };
 
   const handleDeleteTournament = async (tournamentId) => {
@@ -1187,12 +1215,14 @@ export default function TournamentApp() {
     }
   };
 
-  const handlePlayerReady = async (matchId) => {
-    await playerReady(selectedTournamentId, matchId, currentUser.username);
+  const handlePlayerReady = async (matchId, tournamentId = selectedTournamentId) => {
+    await playerReady(tournamentId, matchId, currentUser.username);
   };
 
   const handleReportMatch = async (matchId, selectedWinner, screenshotFiles) => {
-    const match = matches.find(m => m.id === matchId);
+    // A 1v1 isn't in `matches` (see the subscription above) - it's one of
+    // the player's own, and its tournamentId says where it lives.
+    const match = matches.find(m => m.id === matchId) || userMatches.find(m => m.id === matchId);
     if (!match) return;
     const isPlayer1 = currentUser.username === match.player1;
     const alreadyVoted = isPlayer1 ? match.winner1Vote : match.winner2Vote;
@@ -1200,17 +1230,17 @@ export default function TournamentApp() {
       throw new Error('You already submitted a result for this match.');
     }
     const screenshotPaths = await uploadMatchScreenshots(
-      selectedTournamentId,
+      match.tournamentId,
       matchId,
       isPlayer1 ? 'player1' : 'player2',
       screenshotFiles
     );
-    await reportMatch(selectedTournamentId, matchId, currentUser.username, selectedWinner, screenshotPaths);
+    await reportMatch(match.tournamentId, matchId, currentUser.username, selectedWinner, screenshotPaths);
   };
 
-  const handleResolveDispute = async (matchId, winner) => {
+  const handleResolveDispute = async (matchId, winner, tournamentId = selectedTournamentId) => {
     try {
-      await resolveDispute(selectedTournamentId, matchId, winner, currentUser.username);
+      await resolveDispute(tournamentId, matchId, winner, currentUser.username);
     } catch (err) {
       alert(err.message);
     }
@@ -1279,6 +1309,12 @@ export default function TournamentApp() {
                   className="hover:text-neutral-300 transition"
                 >
                   Dashboard
+                </button>
+                <button
+                  onClick={() => setCurrentPage('ladder')}
+                  className="hover:text-neutral-300 transition"
+                >
+                  1v1
                 </button>
                 {currentUser && (
                   <button
@@ -1365,6 +1401,15 @@ export default function TournamentApp() {
                     >
                       Dashboard
                     </button>
+                    <button
+                      onClick={() => {
+                        setCurrentPage('ladder');
+                        setMobileMenuOpen(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-700 rounded"
+                    >
+                      1v1
+                    </button>
                     {currentUser && (
                       <button
                         onClick={() => {
@@ -1441,7 +1486,11 @@ export default function TournamentApp() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentPage === 'landing' && (
-          <LandingPage onEnter={() => setCurrentPage('dashboard')} onWatchLive={() => setCurrentPage('live')} />
+          <LandingPage
+            onEnter={() => setCurrentPage('dashboard')}
+            onPlayLadder={() => setCurrentPage('ladder')}
+            onWatchLive={() => setCurrentPage('live')}
+          />
         )}
 
         {currentPage === 'login' && (
@@ -1529,9 +1578,9 @@ export default function TournamentApp() {
             user={currentUser}
             onReportWinner={async (winner, screenshotFiles) => {
               await handleReportMatch(selectedMatchId, winner, screenshotFiles);
-              setCurrentPage('tournament');
+              setCurrentPage(selectedTournamentId === LADDER_ID ? 'ladder' : 'tournament');
             }}
-            onCancel={() => setCurrentPage('tournament')}
+            onCancel={() => setCurrentPage(selectedTournamentId === LADDER_ID ? 'ladder' : 'tournament')}
           />
         )}
 
@@ -1554,6 +1603,38 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'rules' && <RulesPage />}
+
+        {currentPage === 'ladder' && (
+          <LadderPage
+            user={user}
+            userMatches={userMatches}
+            onJoinQueue={handleJoinLadderQueue}
+            onLogin={() => {
+              setLoginReturnPage('ladder');
+              setCurrentPage('login');
+            }}
+            onViewProfile={viewProfile}
+            renderMatch={(match) => (
+              <MatchCard
+                match={match}
+                user={user}
+                tournament={LADDER_TOURNAMENT}
+                onSelectMatch={() => {
+                  setSelectedTournamentId(LADDER_ID);
+                  setSelectedMatchId(match.id);
+                  setCurrentPage('match');
+                }}
+                onPlayerReady={() => handlePlayerReady(match.id, LADDER_ID)}
+                onViewProfile={viewProfile}
+                onResolveDispute={(matchId, winner) => handleResolveDispute(matchId, winner, LADDER_ID)}
+                onFlagMatch={() => {
+                  setFlagRelatedMatch(match.id);
+                  setFlagModalOpen(true);
+                }}
+              />
+            )}
+          />
+        )}
 
         {currentPage === 'live' && (
           <LivePage
@@ -1616,9 +1697,9 @@ export default function TournamentApp() {
 // PAGE COMPONENTS
 // ============================================================================
 
-function LandingPage({ onEnter, onWatchLive }) {
+function LandingPage({ onEnter, onPlayLadder, onWatchLive }) {
   return (
-    <div className="text-center max-w-lg mx-auto mt-20">
+    <div className="text-center max-w-3xl mx-auto mt-20">
       <img
         src="/logo.png"
         alt="MercifulAj Logo"
@@ -1630,6 +1711,12 @@ function LandingPage({ onEnter, onWatchLive }) {
           className="sm:w-56 bg-white text-black px-8 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
         >
           TOURNAMENTS
+        </button>
+        <button
+          onClick={onPlayLadder}
+          className="sm:w-56 bg-white text-black px-8 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
+        >
+          1V1
         </button>
         <button
           onClick={onWatchLive}
@@ -4199,6 +4286,9 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
   const [showVote, setShowVote] = useState(false);
   const isPlayer1Winner = match.status === 'completed' && !!match.winner && match.winner === match.player1;
   const isPlayer2Winner = match.status === 'completed' && !!match.winner && match.winner === match.player2;
+  // A 1v1 from the ladder: no predictions, and its result moves ratings the
+  // moment it's settled, so there's no changing it afterwards.
+  const isLadder = match.tournamentId === LADDER_ID;
 
   const handleForceWinner = (winner) => {
     if (!window.confirm(`Force ${winner} as the winner of this match? This immediately completes it.`)) return;
@@ -4271,6 +4361,8 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           )}
           {match.status === 'completed' && match.resolvedReason === 'mutual_no_show' ? (
             <p className="text-white">⚠️ Both players disqualified — neither reported a result</p>
+          ) : match.status === 'completed' && match.resolvedReason === 'both_no_show' ? (
+            <p className="text-white">⚠️ Neither player readied up — no match played</p>
           ) : match.status === 'completed' && match.resolvedReason === 'grace_period' ? (
             <p className="text-white">🕊️ Neither player reported — both advance under a one-time grace period</p>
           ) : match.status === 'completed' && (match.resolvedReason === 'opponent_timeout' || match.resolvedReason === 'opponent_no_show' || match.resolvedReason === 'staff_override') && (
@@ -4315,7 +4407,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         {showDetails && (
           <MatchDetailModal match={match} tournament={tournament} onClose={() => setShowDetails(false)} onViewProfile={onViewProfile} isStaff={user.isStaff} user={user} />
         )}
-        {!userIsPlayer && !user.isGuest && match.status === 'pending' && match.player1 && match.player2 && match.player1 !== 'BYE' && match.player2 !== 'BYE' && (
+        {!isLadder && !userIsPlayer && !user.isGuest && match.status === 'pending' && match.player1 && match.player2 && match.player1 !== 'BYE' && match.player2 !== 'BYE' && (
           <button
             onClick={() => setShowVote(true)}
             className="border border-gray-600 text-gray-300 hover:border-white hover:text-white px-3 py-2 rounded text-sm transition"
@@ -4369,7 +4461,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
             🚩 Flag
           </button>
         )}
-        {user.isStaff && match.status === 'completed' && ['staff_override', 'opponent_no_show'].includes(match.resolvedReason) && match.player2 !== 'BYE' && (
+        {!isLadder && user.isStaff && match.status === 'completed' && ['staff_override', 'opponent_no_show'].includes(match.resolvedReason) && match.player2 !== 'BYE' && (
           changingResult ? (
             <div className="flex gap-2 items-center flex-wrap">
               <span className="text-xs text-gray-400">Wrong call?</span>
