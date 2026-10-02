@@ -20,8 +20,8 @@ const SPIN_COOLDOWN_MS = 3000;
 // Checks a spin before the roll. Throws an Error whose message is safe to show.
 function checkSpin({ balance, pick, amount, lastSpinAt = 0, now }) {
   if (!Object.prototype.hasOwnProperty.call(PAYOUTS, pick)) throw new Error('Pick Elixir, Gold or Gem');
-  if (!Number.isInteger(amount) || amount < 1) throw new Error('Bet at least 1 gem');
-  if (amount > balance) throw new Error(`You only have ${balance} gems`);
+  if (!Number.isInteger(amount) || amount < 1) throw new Error('Bet at least 1 Gold');
+  if (amount > balance) throw new Error(`You only have ${balance} Gold`);
   if (now - lastSpinAt < SPIN_COOLDOWN_MS) throw new Error('The wheel is still spinning - try again in a moment');
 }
 

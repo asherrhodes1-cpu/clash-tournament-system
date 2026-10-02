@@ -1,6 +1,7 @@
-// Live-stream betting with a pretend currency (gems). Viewers bet on how the
-// streamer's attack goes; balances only ever change in the Cloud Functions
-// that use these helpers, never from the client.
+// Live-stream betting with a pretend currency, Gold (stored as `gems`, its
+// original name, in gemBalances - players already hold balances there).
+// Viewers bet on how the streamer's attack goes; balances only ever change
+// in the Cloud Functions that use these helpers, never from the client.
 
 const STARTING_GEMS = 1000;
 // A player with no gems can still pick a side for free, and wins this much
@@ -33,10 +34,10 @@ function kindOf(round) {
 // balance, or throws an Error whose message is safe to show the player.
 function planBet({ balance, existingAmount = 0, side, amount, sides = ROUND_KINDS.outcome.sides }) {
   if (!sides.includes(side)) throw new Error('Pick one of the options');
-  if (!Number.isInteger(amount) || amount < 0) throw new Error('Bet a whole number of gems');
+  if (!Number.isInteger(amount) || amount < 0) throw new Error('Bet a whole number of Gold');
   const available = balance + existingAmount;
-  if (amount > available) throw new Error(`You only have ${available} gems`);
-  if (amount === 0 && available > 0) throw new Error('Bet at least 1 gem');
+  if (amount > available) throw new Error(`You only have ${available} Gold`);
+  if (amount === 0 && available > 0) throw new Error('Bet at least 1 Gold');
   return { bet: { side, amount }, balance: available - amount };
 }
 

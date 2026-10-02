@@ -63,11 +63,11 @@ export function GemDropCard({ drop, claims, user, onLogin }) {
   return (
     <div className="bg-gray-800 rounded-lg border-2 border-yellow-400 p-6 space-y-4 text-center">
       <div className="flex justify-between items-baseline gap-3 text-sm">
-        <span className="text-yellow-400 font-bold uppercase tracking-wide">Gem drop</span>
+        <span className="text-yellow-400 font-bold uppercase tracking-wide">Gold drop</span>
         <span className="text-gray-300">{open ? 'Claim it now!' : 'Over'}</span>
       </div>
       <img
-        src="/gem.png"
+        src="/gold.png"
         alt=""
         className={`w-20 h-20 mx-auto object-contain ${open && !mine ? 'animate-bounce' : ''}`}
       />
@@ -104,11 +104,11 @@ export function GemDropOverlayCard({ drop, claims }) {
   return (
     <div className="w-[520px] bg-gray-950 rounded-xl border-4 border-yellow-400 p-5 shadow-2xl space-y-3">
       <div className="flex flex-wrap justify-between items-baseline gap-x-3 text-base font-bold uppercase tracking-wide [&>span]:whitespace-nowrap">
-        <span className="text-yellow-400">Gem drop</span>
+        <span className="text-yellow-400">Gold drop</span>
         <span className="text-green-400">Claim at {window.location.host}/live</span>
       </div>
       <div className="flex items-center gap-4">
-        <img src="/gem.png" alt="" className="w-16 h-16 object-contain animate-bounce" />
+        <img src="/gold.png" alt="" className="w-16 h-16 object-contain animate-bounce" />
         <div>
           <p className="text-3xl font-bold"><Gems amount={drop.amount} /> free</p>
           <p className="text-lg text-gray-200">{claimedText(claims.length)}</p>
@@ -148,14 +148,14 @@ export function StaffGemDropPanel({ drop, claims, user }) {
     const gems = Number(amount);
     const secs = Number(seconds);
     if (!Number.isInteger(gems) || gems < 1 || gems > 100000) {
-      setError('Give between 1 and 100,000 gems.');
+      setError('Give between 1 and 100,000 Gold.');
       return;
     }
     if (!Number.isInteger(secs) || secs < 5 || secs > 600) {
       setError('Run it for 5 to 600 seconds.');
       return;
     }
-    run(() => startGemDrop(gems, secs, user.username), `Drop is live - ${formatGems(gems)} gems for ${secs} seconds.`);
+    run(() => startGemDrop(gems, secs, user.username), `Drop is live - ${formatGems(gems)} Gold for ${secs} seconds.`);
   };
 
   return (
@@ -176,7 +176,7 @@ export function StaffGemDropPanel({ drop, claims, user }) {
         <form onSubmit={start} className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <label className="text-sm">
-              Gems each
+              Gold each
               <input type="number" min={1} step={1} value={amount} onChange={(e) => setAmount(e.target.value)} className={`${INPUT} mt-1`} />
             </label>
             <label className="text-sm">
@@ -184,7 +184,7 @@ export function StaffGemDropPanel({ drop, claims, user }) {
               <input type="number" min={5} step={1} value={seconds} onChange={(e) => setSeconds(e.target.value)} className={`${INPUT} mt-1`} />
             </label>
           </div>
-          <button type="submit" disabled={busy} className={`${GOLD_BUTTON} w-full py-3 text-lg`}>Start gem drop</button>
+          <button type="submit" disabled={busy} className={`${GOLD_BUTTON} w-full py-3 text-lg`}>Start Gold drop</button>
           <p className="text-xs text-gray-500">Every logged-in viewer can claim it once before the countdown ends.</p>
         </form>
       )}

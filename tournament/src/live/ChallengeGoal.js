@@ -25,7 +25,7 @@ const OUTLINE_BUTTON = 'border border-white text-white hover:bg-white hover:text
 const INPUT = 'w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-white';
 
 const PHASE_TEXT = {
-  collecting: 'Collecting gems',
+  collecting: 'Collecting Gold',
   voting: 'Voting now',
   decided: 'Challenge picked',
   cancelling: 'Refunding...',
@@ -189,7 +189,7 @@ export function ChallengeGoalCard({ goal, donations, user, gems, onLogin }) {
                 step={1}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder={`Gems to donate (you have ${formatGems(gems)})`}
+                placeholder={`Gold to donate (you have ${formatGems(gems)})`}
                 className={INPUT}
               />
               <div className="grid grid-cols-4 gap-2 text-sm">
@@ -212,7 +212,7 @@ export function ChallengeGoalCard({ goal, donations, user, gems, onLogin }) {
                 </button>
               </div>
               <button onClick={donate} disabled={!donationValid || submitting} className={`${GOLD_BUTTON} w-full py-2`}>
-                {submitting ? 'Donating...' : donationValid ? <>Donate <Gems amount={Math.min(donation, remaining)} /></> : gems === 0 ? 'You\'re out of gems' : 'Enter an amount'}
+                {submitting ? 'Donating...' : donationValid ? <>Donate <Gems amount={Math.min(donation, remaining)} /></> : gems === 0 ? 'You\'re out of Gold' : 'Enter an amount'}
               </button>
               {myDonation && (
                 <p className="text-sm text-gray-300">You've donated <Gems amount={myDonation.gems} className="font-bold text-white" /> to this goal.</p>
@@ -349,19 +349,19 @@ export function StaffChallengePanel({ goal, user }) {
   const startGoal = (e) => {
     e.preventDefault();
     if (!Number.isInteger(targetNumber) || targetNumber < 1) {
-      setError('Set a goal of at least 1 gem.');
+      setError('Set a goal of at least 1 Gold.');
       return;
     }
     if (list.length < 2) {
       setError('Add at least 2 challenges to your list first.');
       return;
     }
-    run(() => startChallengeGoal(targetNumber, list, user.username), `Goal started - ${formatGems(targetNumber)} gems to go.`);
+    run(() => startChallengeGoal(targetNumber, list, user.username), `Goal started - ${formatGems(targetNumber)} Gold to go.`);
   };
 
   const cancel = () => {
     if (!window.confirm('Cancel this goal and refund every donation?')) return;
-    run(() => cancelChallengeGoal(goal.id), ({ refunded }) => `Cancelled - ${formatGems(refunded)} gems refunded.`);
+    run(() => cancelChallengeGoal(goal.id), ({ refunded }) => `Cancelled - ${formatGems(refunded)} Gold refunded.`);
   };
 
   return (

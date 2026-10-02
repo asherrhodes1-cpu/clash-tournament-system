@@ -4,11 +4,12 @@ import { formatGems } from './liveUtils';
 
 // Small pieces used across the Live page, the challenge goal and the overlay.
 
-// A gem amount with the gem icon in front, sized to the surrounding text.
+// An amount of Gold (the Live section's pretend currency - stored as `gems`,
+// its original name) with the gold icon in front, sized to the surrounding text.
 export function Gems({ amount, className = '' }) {
   return (
     <span className={`inline-flex items-center gap-1 whitespace-nowrap align-middle ${className}`}>
-      <img src="/gem.png" alt="gems" className="w-[1.1em] h-[1.1em] object-contain" />
+      <img src="/gold.png" alt="Gold" className="w-[1.1em] h-[1.1em] object-contain" />
       {formatGems(amount)}
     </span>
   );

@@ -8,8 +8,8 @@ const VOTING_MS = 60 * 1000;
 // Works out a donation. Only what the goal still needs is taken, so the last
 // donor never overpays. Throws an Error whose message is safe to show.
 function planDonation({ balance, raised, target, amount }) {
-  if (!Number.isInteger(amount) || amount < 1) throw new Error('Donate at least 1 gem');
-  if (amount > balance) throw new Error(`You only have ${balance} gems`);
+  if (!Number.isInteger(amount) || amount < 1) throw new Error('Donate at least 1 Gold');
+  if (amount > balance) throw new Error(`You only have ${balance} Gold`);
   const taken = Math.min(amount, target - raised);
   if (taken <= 0) throw new Error('This goal is already full');
   const newRaised = raised + taken;

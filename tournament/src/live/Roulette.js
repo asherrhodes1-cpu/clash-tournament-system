@@ -62,7 +62,7 @@ function Wheel({ rotation, spinning }) {
           );
         })}
         <circle r="100" fill="#111827" stroke="#0a1230" strokeWidth="4" />
-        <image href="/gem.png" x="-34" y="-34" width="68" height="68" />
+        <image href="/gold.png" x="-34" y="-34" width="68" height="68" />
       </svg>
     </div>
   );
@@ -125,9 +125,9 @@ export default function Roulette({ user, gems, onLogin }) {
     <div className="grid lg:grid-cols-2 gap-6 items-start">
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         <div>
-          <h2 className="text-2xl font-bold">Gem Roulette</h2>
+          <h2 className="text-2xl font-bold">Roulette</h2>
           <p className="text-sm text-gray-300">
-            Bet on Elixir or Gold to double your gems, or on the single Gem pocket for 36x.
+            Bet on an Elixir or Gold pocket to double your bet, or on the single Gem pocket for 36x.
           </p>
         </div>
         <Wheel rotation={rotation} spinning={spinning} />
@@ -179,7 +179,7 @@ export default function Roulette({ user, gems, onLogin }) {
                 step={1}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder={`Gems to bet (you have ${formatGems(gems)})`}
+                placeholder={`Gold to bet (you have ${formatGems(gems)})`}
                 className={INPUT}
               />
               <div className="grid grid-cols-4 gap-2 text-sm">
@@ -199,7 +199,7 @@ export default function Roulette({ user, gems, onLogin }) {
                 {spinning
                   ? 'Spinning...'
                   : gems === 0
-                  ? 'You\'re out of gems'
+                  ? 'You\'re out of Gold'
                   : !picked
                   ? 'Pick Elixir, Gold or Gem'
                   : !stakeValid

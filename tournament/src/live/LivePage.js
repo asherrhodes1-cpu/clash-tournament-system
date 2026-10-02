@@ -270,7 +270,7 @@ function BetCard({ round, bets, user, gems, onLogin }) {
 
           {freePick ? (
             <p className="text-sm text-gray-300">
-              You're out of gems, but you can still pick a side for free. Get it right and you win <Gems amount={FREE_PICK_REWARD} className="font-bold text-white" />.
+              You're out of Gold, but you can still pick a side for free. Get it right and you win <Gems amount={FREE_PICK_REWARD} className="font-bold text-white" />.
             </p>
           ) : (
             <div className="space-y-2">
@@ -282,7 +282,7 @@ function BetCard({ round, bets, user, gems, onLogin }) {
                 step={1}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder={`Gems to bet (you have ${formatGems(available)})`}
+                placeholder={`Gold to bet (you have ${formatGems(available)})`}
                 className={INPUT}
               />
               <div className="grid grid-cols-4 gap-2 text-sm">
@@ -353,7 +353,7 @@ function Leaderboard({ user }) {
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-      <h2 className="text-xl font-bold mb-3">Most gems</h2>
+      <h2 className="text-xl font-bold mb-3">Most Gold</h2>
       {rows.length === 0 ? (
         <p className="text-sm text-gray-400">Nobody has bet yet. Everyone starts with <Gems amount={STARTING_GEMS} />.</p>
       ) : (
@@ -440,7 +440,7 @@ function StaffLivePanel({ state, user, children }) {
     if (!window.confirm(prompt)) return;
     run(
       () => settleLiveRound(round.id, result),
-      ({ bettors, paidOut }) => `Done - ${bettors} ${bettors === 1 ? 'bet' : 'bets'}, ${formatGems(paidOut)} gems paid out.`
+      ({ bettors, paidOut }) => `Done - ${bettors} ${bettors === 1 ? 'bet' : 'bets'}, ${formatGems(paidOut)} Gold paid out.`
     );
   };
 
@@ -602,7 +602,7 @@ function StaffLivePanel({ state, user, children }) {
           >
             {overlayUrl}
           </button>
-          {' '}(click to copy). It shows what's on screen - bets, gem drops, challenge goals - and is transparent everywhere else. It shrinks itself to fit the Browser source, so nothing gets cut off - set the source to 1920x1080 for the sharpest text. Want it smaller even when there's room? Add <span className="font-mono">?scale=1</span> to the end of the link (the default is 1.5).
+          {' '}(click to copy). It shows what's on screen - bets, Gold drops, challenge goals - and is transparent everywhere else. It shrinks itself to fit the Browser source, so nothing gets cut off - set the source to 1920x1080 for the sharpest text. Want it smaller even when there's room? Add <span className="font-mono">?scale=1</span> to the end of the link (the default is 1.5).
         </p>
         <form onSubmit={saveVideo} className="space-y-2">
           <label className="block font-bold">YouTube stream link</label>
@@ -646,7 +646,7 @@ export default function LivePage({ user, onLogin }) {
         </div>
         {!user.isGuest && (
           <p className="text-lg">
-            <span className="text-gray-400">Your gems: </span>
+            <span className="text-gray-400">Your Gold: </span>
             <Gems amount={gems} className="font-bold" />
           </p>
         )}
@@ -682,7 +682,7 @@ export default function LivePage({ user, onLogin }) {
             <BetCard round={round} bets={bets} user={user} gems={gems} onLogin={onLogin} />
           ) : (
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 text-center text-gray-400">
-              No bet running. When an attack starts during the stream, bet your gems on how it goes.
+              No bet running. When an attack starts during the stream, bet your Gold on how it goes.
             </div>
           )}
           {goal && <ChallengeGoalCard goal={goal} donations={donations} user={user} gems={gems} onLogin={onLogin} />}
@@ -692,7 +692,7 @@ export default function LivePage({ user, onLogin }) {
 
       {user.isStaff && (
         <StaffLivePanel state={state} user={user}>
-          <Section id="gem-drop" title="Gem drop" summary={drop ? `${claims.length} claimed` : null}>
+          <Section id="gem-drop" title="Gold drop" summary={drop ? `${claims.length} claimed` : null}>
             <StaffGemDropPanel drop={drop} claims={claims} user={user} />
           </Section>
           <Section id="challenge-goal" title="Challenge goal" summary={goal ? `${formatGems(goal.raised)} / ${formatGems(goal.target)}` : null}>
