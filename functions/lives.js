@@ -19,7 +19,7 @@ function loseLife(run) {
 }
 
 // What the life after this one will cost: the current price times the run's
-// multiplier (2.5 turns 100,000 into 250,000, then 625,000), as whole Gold.
+// multiplier (2 doubles it: 500,000, then 1,000,000, 2,000,000), as whole Gold.
 function nextPrice(run) {
   return Math.round(run.price * run.priceMultiplier);
 }

@@ -17,9 +17,9 @@ const OUTLINE_BUTTON = 'border border-white text-white hover:bg-white hover:text
 const INPUT = 'w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-white';
 
 export const DEFAULT_LIVES = 3;
-// 100,000 for the first extra life, then 250,000, 625,000, ...
-export const DEFAULT_LIFE_PRICE = 100000;
-export const DEFAULT_LIFE_MULTIPLIER = 2.5;
+// 500,000 for the first extra life, doubling each time: 1,000,000, 2,000,000, ...
+export const DEFAULT_LIFE_PRICE = 500000;
+export const DEFAULT_LIFE_MULTIPLIER = 2;
 // Must match nextPrice in functions/lives.js, which sets the real price.
 const nextPrice = (price, multiplier) => Math.round(price * multiplier);
 const MAX_LIFE_PRICE = 100000000;
