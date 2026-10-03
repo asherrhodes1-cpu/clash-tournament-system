@@ -301,3 +301,67 @@ const claimGemDropCallable = httpsCallable(functions, 'claimGemDrop');
 export async function claimGemDrop(dropId) {
   return call(claimGemDropCallable, { dropId });
 }
+
+// ---------------------------------------------------------------------------
+// Extra lives
+// ---------------------------------------------------------------------------
+
+const lifeRunsRef = collection(db, 'lifeRuns');
+
+// The run on screen: { id, lives, price, priceMultiplier, raised, bought, status, lastBuyer }.
+export function subscribeToLifeRun(runId, onChange) {
+  return onSnapshot(
+    doc(lifeRunsRef, runId),
+    (snap) => onChange(snap.exists() ? { id: snap.id, ...snap.data() } : null),
+    () => onChange(null)
+  );
+}
+
+// Who's put the most Gold into this run: [{ id (uid), username, gems }].
+export function subscribeToLifeDonors(runId, onChange, count = 5) {
+  return onSnapshot(
+    query(collection(db, 'lifeRuns', runId, 'donors'), orderBy('gems', 'desc'), limit(count)),
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    () => onChange([])
+  );
+}
+
+// Staff: start a run and put it on the page and overlay. `price` is what the
+// first extra life costs; each one after costs `priceMultiplier` times the last.
+export async function startLifeRun({ lives, price, priceMultiplier }, createdBy) {
+  const ref = await addDoc(lifeRunsRef, {
+    lives,
+    price,
+    priceMultiplier,
+    raised: 0,
+    bought: 0,
+    status: 'active',
+    createdBy,
+    createdAt: Date.now(),
+  });
+  await featureLifeRun(ref.id);
+  return ref.id;
+}
+
+// null takes the run off the live page and the overlay (and failed attacks
+// stop costing it lives).
+export async function featureLifeRun(runId) {
+  await setDoc(stateRef, { lifeRunId: runId }, { merge: true });
+}
+
+// Staff: correct the life count by hand.
+export async function setLifeRunLives(runId, lives) {
+  await updateDoc(doc(lifeRunsRef, runId), { lives });
+}
+
+// Staff: end the run - no more donations.
+export async function endLifeRun(runId) {
+  await updateDoc(doc(lifeRunsRef, runId), { status: 'ended' });
+}
+
+const donateToLifeGoalCallable = httpsCallable(functions, 'donateToLifeGoal');
+
+// Resolves to { taken, gems (new balance), lifeBought, lives }.
+export async function donateToLifeGoal(runId, amount) {
+  return call(donateToLifeGoalCallable, { runId, amount });
+}

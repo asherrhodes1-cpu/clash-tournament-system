@@ -240,6 +240,41 @@ service cloud.firestore {
       }
     }
 
+    // Extra lives: a run the streamer plays with a number of lives, which
+    // viewers pool Gold into to buy more. Staff start a run here and can
+    // correct the life count or end it; Gold going in, the goal filling and
+    // the life it buys are the donateToLifeGoal Cloud Function only (and
+    // settleLiveRound takes a life for a failed attack).
+    match /lifeRuns/{runId} {
+      allow read: if true;
+      allow create: if isStaff()
+                    && request.resource.data.keys().hasOnly(['lives', 'price', 'priceMultiplier', 'raised', 'bought', 'status', 'createdBy', 'createdAt'])
+                    && request.resource.data.lives is int
+                    && request.resource.data.lives >= 0
+                    && request.resource.data.lives <= 99
+                    && request.resource.data.price is int
+                    && request.resource.data.price >= 1
+                    && request.resource.data.price <= 100000000
+                    && request.resource.data.priceMultiplier is number
+                    && request.resource.data.priceMultiplier >= 1
+                    && request.resource.data.priceMultiplier <= 10
+                    && request.resource.data.raised == 0
+                    && request.resource.data.bought == 0
+                    && request.resource.data.status == 'active';
+      allow update: if isStaff()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lives', 'status'])
+                    && request.resource.data.lives is int
+                    && request.resource.data.lives >= 0
+                    && request.resource.data.lives <= 99
+                    && request.resource.data.status in ['active', 'ended'];
+      allow delete: if false;
+
+      match /donors/{uid} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
     // Gem drops: free gems staff hand out for a short window. Staff create
     // one here (openedAt must be server time, so the countdown can't be
     // stretched); claiming is the claimGemDrop Cloud Function only.

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useFeaturedRound, SideBars } from './LivePage';
 import { useChallengeGoal, ChallengeOverlayCard } from './ChallengeGoal';
 import { useGemDrop, GemDropOverlayCard } from './GemDrop';
+import { useLifeRun, ExtraLivesOverlayCard } from './ExtraLives';
 import { useNow, Countdown } from './shared';
 import { effectiveStatus, bettingEndsAt, roundKind } from './liveUtils';
 
@@ -82,14 +83,16 @@ function BetOverlayCard({ round, bets }) {
 }
 
 // Loaded on its own at /live/overlay as an OBS Browser source. The page is
-// transparent, so only the cards show on stream: a gem drop while it's open,
-// the betting round and the challenge goal, each disappearing when hidden.
+// transparent, so only the cards show on stream: a Gold drop while it's open,
+// the lives run, the betting round and the challenge goal, each disappearing
+// when hidden.
 export default function LiveOverlay() {
   const { state, round, bets } = useFeaturedRound();
   const { goal, donations } = useChallengeGoal(state.goalId);
   const { drop, claims } = useGemDrop(state.dropId);
+  const { run: lifeRun } = useLifeRun(state.lifeRunId);
   const [content, setContent] = useState(null);
-  const { scale, row } = useFitLayout(content, [drop && 'drop', round && 'round', goal && 'goal'].filter(Boolean).join());
+  const { scale, row } = useFitLayout(content, [drop && 'drop', lifeRun && 'lives', round && 'round', goal && 'goal'].filter(Boolean).join());
 
   useEffect(() => {
     const els = [document.documentElement, document.body, document.getElementById('root')];
@@ -98,7 +101,7 @@ export default function LiveOverlay() {
     document.documentElement.style.overflow = 'hidden';
   }, []);
 
-  if (!round && !goal && !drop) return null;
+  if (!round && !goal && !drop && !lifeRun) return null;
 
   return (
     <div
@@ -107,6 +110,7 @@ export default function LiveOverlay() {
       style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
     >
       {drop && <GemDropOverlayCard drop={drop} claims={claims} />}
+      {lifeRun && <ExtraLivesOverlayCard run={lifeRun} />}
       {round && <BetOverlayCard round={round} bets={bets} />}
       {goal && <ChallengeOverlayCard goal={goal} donations={donations} />}
     </div>

@@ -19,6 +19,7 @@ const { STARTING_GEMS, ROUND_KINDS, kindOf, planBet, payoutFor, bettingIsOpen } 
 const { POCKET_COUNT, POCKETS, checkSpin, spinPayout } = require('./roulette');
 const { VOTING_MS, planDonation, pickOptions, votingIsOpen } = require('./challenges');
 const { dropIsOpen } = require('./drops');
+const { attackCostsLife, loseLife, buyLife } = require('./lives');
 const { LADDER_ID, LADDER_MATCH_MS, START_RATING, outcomeOf, rateMatch, pickOpponent, pairQueue } = require('./ladder');
 
 admin.initializeApp();
@@ -1542,7 +1543,10 @@ exports.settleLiveRound = onCall(async (request) => {
 
   const roundRef = db.collection('liveRounds').doc(roundId);
   let multipliers;
+  // Lives left after this result cost one, or null if it didn't (see below).
+  let livesLeft = null;
   await db.runTransaction(async (tx) => {
+    livesLeft = null;
     const snap = await tx.get(roundRef);
     if (!snap.exists) throw new HttpsError('not-found', 'Round not found');
     const round = snap.data();
@@ -1557,7 +1561,26 @@ exports.settleLiveRound = onCall(async (request) => {
     if (round.status === 'settling' && round.pendingResult !== result) {
       throw new HttpsError('failed-precondition', `This round is already being settled as "${round.pendingResult}"`);
     }
-    tx.update(roundRef, { status: 'settling', pendingResult: result });
+    // An attack that wasn't a 6-star costs a life on the extra-lives run
+    // that's on screen. Done here, as the round first moves to 'settling',
+    // so re-running a cut-off settle can't take a second one.
+    let runRef = null;
+    let run = null;
+    if (round.status !== 'settling' && attackCostsLife(kindOf(round), result)) {
+      const stateSnap = await tx.get(db.collection('live').doc('state'));
+      const runId = stateSnap.exists ? stateSnap.data().lifeRunId : null;
+      if (runId) {
+        runRef = db.collection('lifeRuns').doc(runId);
+        const runSnap = await tx.get(runRef);
+        if (runSnap.exists && runSnap.data().status === 'active') run = runSnap.data();
+      }
+    }
+    tx.update(roundRef, { status: 'settling', pendingResult: result, ...(run ? { lifeLost: true } : {}) });
+    if (run) {
+      const next = loseLife(run);
+      tx.update(runRef, next);
+      livesLeft = next.lives;
+    }
   });
 
   let paidOut = 0;
@@ -1586,7 +1609,7 @@ exports.settleLiveRound = onCall(async (request) => {
     result: result === 'cancel' ? null : result,
     settledAt: Date.now(),
   });
-  return { bettors, paidOut };
+  return { bettors, paidOut, livesLeft };
 });
 
 // ============================================================================
@@ -1960,5 +1983,46 @@ exports.rateLadderMatch = onDocumentUpdated(`tournaments/${LADDER_ID}/matches/{m
         p2: { before: p2.rating, delta: change.p2.delta },
       },
     });
+  });
+});
+
+// ============================================================================
+// Extra lives. The streamer plays a run with a number of lives (a
+// lifeRuns/{runId} doc, started by staff from the client); a failed attack
+// takes one (see settleLiveRound). Viewers pool Gold into the run's goal -
+// when it fills, the run gains a life and the next one costs more. Only this
+// function moves Gold into a run or adds a life from it.
+// ============================================================================
+exports.donateToLifeGoal = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Log in to donate');
+  const { runId, amount } = request.data || {};
+  if (!runId || typeof runId !== 'string') throw new HttpsError('invalid-argument', 'Missing run');
+
+  const uid = request.auth.uid;
+  const username = request.auth.token.username || null;
+  const runRef = db.collection('lifeRuns').doc(runId);
+  const donorRef = runRef.collection('donors').doc(uid);
+  const balanceRef = db.collection('gemBalances').doc(uid);
+
+  return db.runTransaction(async (tx) => {
+    const [runSnap, donorSnap, balanceSnap] = await Promise.all([tx.get(runRef), tx.get(donorRef), tx.get(balanceRef)]);
+    if (!runSnap.exists) throw new HttpsError('not-found', 'That run no longer exists');
+    const run = runSnap.data();
+    if (run.status !== 'active') throw new HttpsError('failed-precondition', 'This run is over');
+
+    const balance = balanceSnap.exists ? balanceSnap.data().gems : STARTING_GEMS;
+    let plan;
+    try {
+      // Same rule as a challenge goal: only what the bar still needs is taken.
+      plan = planDonation({ balance, raised: run.raised, target: run.price, amount });
+    } catch (err) {
+      throw new HttpsError('invalid-argument', err.message);
+    }
+
+    const runUpdate = plan.reached ? { ...buyLife(run), lastBuyer: username } : { raised: plan.raised };
+    tx.update(runRef, runUpdate);
+    tx.set(balanceRef, { username, gems: plan.balance }, { merge: true });
+    tx.set(donorRef, { username, gems: (donorSnap.exists ? donorSnap.data().gems : 0) + plan.taken }, { merge: true });
+    return { taken: plan.taken, gems: plan.balance, lifeBought: plan.reached, lives: plan.reached ? runUpdate.lives : run.lives };
   });
 });

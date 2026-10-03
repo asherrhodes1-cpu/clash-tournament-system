@@ -32,6 +32,7 @@ import { Gems, Countdown, useNow, useHeldGems, Section } from './shared';
 import { useChallengeGoal, ChallengeGoalCard, StaffChallengePanel } from './ChallengeGoal';
 import Roulette from './Roulette';
 import { useGemDrop, GemDropCard, StaffGemDropPanel } from './GemDrop';
+import { useLifeRun, ExtraLivesCard, StaffLivesPanel } from './ExtraLives';
 
 const GOLD_BUTTON = 'bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-amber-100 hover:to-yellow-400 text-gray-900 font-bold rounded transition disabled:opacity-50';
 const OUTLINE_BUTTON = 'border border-white text-white hover:bg-white hover:text-black rounded transition disabled:opacity-50';
@@ -440,7 +441,9 @@ function StaffLivePanel({ state, user, children }) {
     if (!window.confirm(prompt)) return;
     run(
       () => settleLiveRound(round.id, result),
-      ({ bettors, paidOut }) => `Done - ${bettors} ${bettors === 1 ? 'bet' : 'bets'}, ${formatGems(paidOut)} Gold paid out.`
+      ({ bettors, paidOut, livesLeft }) => `Done - ${bettors} ${bettors === 1 ? 'bet' : 'bets'}, ${formatGems(paidOut)} Gold paid out.${
+        livesLeft != null ? ` That cost a life - ${livesLeft} left.` : ''
+      }`
     );
   };
 
@@ -602,7 +605,7 @@ function StaffLivePanel({ state, user, children }) {
           >
             {overlayUrl}
           </button>
-          {' '}(click to copy). It shows what's on screen - bets, Gold drops, challenge goals - and is transparent everywhere else. It shrinks itself to fit the Browser source, so nothing gets cut off - set the source to 1920x1080 for the sharpest text. Want it smaller even when there's room? Add <span className="font-mono">?scale=1</span> to the end of the link (the default is 1.5).
+          {' '}(click to copy). It shows what's on screen - bets, Gold drops, lives, challenge goals - and is transparent everywhere else. It shrinks itself to fit the Browser source, so nothing gets cut off - set the source to 1920x1080 for the sharpest text. Want it smaller even when there's room? Add <span className="font-mono">?scale=1</span> to the end of the link (the default is 1.5).
         </p>
         <form onSubmit={saveVideo} className="space-y-2">
           <label className="block font-bold">YouTube stream link</label>
@@ -628,6 +631,7 @@ export default function LivePage({ user, onLogin }) {
   const { state, round, bets } = useFeaturedRound();
   const { goal, donations } = useChallengeGoal(state.goalId);
   const { drop, claims } = useGemDrop(state.dropId);
+  const { run: lifeRun, donors: lifeDonors } = useLifeRun(state.lifeRunId);
   const gems = useMyGems(user.uid);
   const videoId = parseYouTubeId(state.videoUrl);
   const [tab, setTab] = useState('stream');
@@ -685,6 +689,7 @@ export default function LivePage({ user, onLogin }) {
               No bet running. When an attack starts during the stream, bet your Gold on how it goes.
             </div>
           )}
+          {lifeRun && <ExtraLivesCard run={lifeRun} donors={lifeDonors} user={user} gems={gems} onLogin={onLogin} />}
           {goal && <ChallengeGoalCard goal={goal} donations={donations} user={user} gems={gems} onLogin={onLogin} />}
           <Leaderboard user={user} />
         </div>
@@ -694,6 +699,13 @@ export default function LivePage({ user, onLogin }) {
         <StaffLivePanel state={state} user={user}>
           <Section id="gem-drop" title="Gold drop" summary={drop ? `${claims.length} claimed` : null}>
             <StaffGemDropPanel drop={drop} claims={claims} user={user} />
+          </Section>
+          <Section
+            id="extra-lives"
+            title="Extra lives"
+            summary={lifeRun ? (lifeRun.status === 'active' ? `${lifeRun.lives} ${lifeRun.lives === 1 ? 'life' : 'lives'} · ${formatGems(lifeRun.raised)} / ${formatGems(lifeRun.price)}` : 'Run over') : null}
+          >
+            <StaffLivesPanel run={lifeRun} user={user} />
           </Section>
           <Section id="challenge-goal" title="Challenge goal" summary={goal ? `${formatGems(goal.raised)} / ${formatGems(goal.target)}` : null}>
             <StaffChallengePanel goal={goal} user={user} />
