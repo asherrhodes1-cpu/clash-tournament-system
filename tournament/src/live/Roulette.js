@@ -187,7 +187,7 @@ export default function Roulette({ user, gems, onLogin }) {
                   <button
                     key={label}
                     type="button"
-                    disabled={gems === 0}
+                    disabled={gems <= 0}
                     onClick={() => setAmount(String(Math.max(1, Math.floor(gems * share))))}
                     className="border border-gray-600 hover:border-white rounded py-1 transition disabled:opacity-50"
                   >
@@ -198,7 +198,7 @@ export default function Roulette({ user, gems, onLogin }) {
               <button onClick={spin} disabled={!picked || !stakeValid || spinning} className={`${GOLD_BUTTON} w-full py-3 text-lg`}>
                 {spinning
                   ? 'Spinning...'
-                  : gems === 0
+                  : gems <= 0
                   ? 'You\'re out of Gold'
                   : !picked
                   ? 'Pick Elixir, Gold or Gem'

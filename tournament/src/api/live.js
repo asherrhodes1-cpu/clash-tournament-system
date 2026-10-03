@@ -98,6 +98,7 @@ export function subscribeToGemLeaderboard(onChange, count = 10) {
 
 const placeLiveBetCallable = httpsCallable(functions, 'placeLiveBet');
 const settleLiveRoundCallable = httpsCallable(functions, 'settleLiveRound');
+const undoLiveRoundCallable = httpsCallable(functions, 'undoLiveRound');
 
 // Place or change a bet on one of the round's sides; balances are handled by the
 // Cloud Function. Resolves to the player's new gem balance.
@@ -144,6 +145,13 @@ export async function setLiveRoundStatus(roundId, status) {
 // One of the round's sides (the result), or 'cancel' (refund everyone).
 export async function settleLiveRound(roundId, result) {
   return call(settleLiveRoundCallable, { roundId, result });
+}
+
+// Staff: undo a wrongly settled (or cancelled) round - takes every payout
+// back and returns it to 'closed' so it can be settled again. Resolves to
+// { bettors, takenBack, livesNow (if a life was given back) }.
+export async function undoLiveRound(roundId) {
+  return call(undoLiveRoundCallable, { roundId });
 }
 
 // ---------------------------------------------------------------------------
@@ -308,19 +316,29 @@ export async function claimGemDrop(dropId) {
 
 const lifeRunsRef = collection(db, 'lifeRuns');
 
-// The run on screen: { id, lives, price, priceMultiplier, raised, bought, status, lastBuyer }.
+// The run on screen: { id, lives, price, priceMultiplier, bought, status,
+// lastBuyer, window, lastWindow }. `window` is the timed extra-life goal
+// while one is open - { id, openedAtMs, ms, raised, state } - else null.
+function toLifeRun(snap) {
+  const data = snap.data({ serverTimestamps: 'estimate' });
+  const window = data.window
+    ? { ...data.window, openedAtMs: data.window.openedAt ? data.window.openedAt.toMillis() : null }
+    : null;
+  return { id: snap.id, ...data, window };
+}
+
 export function subscribeToLifeRun(runId, onChange) {
   return onSnapshot(
     doc(lifeRunsRef, runId),
-    (snap) => onChange(snap.exists() ? { id: snap.id, ...snap.data() } : null),
+    (snap) => onChange(snap.exists() ? toLifeRun(snap) : null),
     () => onChange(null)
   );
 }
 
-// Who's put the most Gold into this run: [{ id (uid), username, gems }].
-export function subscribeToLifeDonors(runId, onChange, count = 5) {
+// Who's put the most Gold into a window: [{ id (uid), username, gems }].
+export function subscribeToLifeWindowDonors(runId, windowId, onChange, count = 5) {
   return onSnapshot(
-    query(collection(db, 'lifeRuns', runId, 'donors'), orderBy('gems', 'desc'), limit(count)),
+    query(collection(db, 'lifeRuns', runId, 'windows', windowId, 'donations'), orderBy('gems', 'desc'), limit(count)),
     (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     () => onChange([])
   );
@@ -333,7 +351,6 @@ export async function startLifeRun({ lives, price, priceMultiplier }, createdBy)
     lives,
     price,
     priceMultiplier,
-    raised: 0,
     bought: 0,
     status: 'active',
     createdBy,
@@ -354,12 +371,26 @@ export async function setLifeRunLives(runId, lives) {
   await updateDoc(doc(lifeRunsRef, runId), { lives });
 }
 
-// Staff: end the run - no more donations.
+// Staff: end the run.
 export async function endLifeRun(runId) {
   await updateDoc(doc(lifeRunsRef, runId), { status: 'ended' });
 }
 
+const openLifeWindowCallable = httpsCallable(functions, 'openLifeWindow');
+const closeLifeWindowCallable = httpsCallable(functions, 'closeLifeWindow');
 const donateToLifeGoalCallable = httpsCallable(functions, 'donateToLifeGoal');
+
+// Staff: open the timed extra-life goal - viewers get 5 minutes to fill the bar.
+export async function openLifeWindow(runId) {
+  return call(openLifeWindowCallable, { runId });
+}
+
+// Closes a window whose time is up, refunding everyone (safe for anything to
+// call - the server only acts once the countdown really has run out). With
+// `cancel`, staff call it off early. Resolves to { closed, refunded }.
+export async function closeLifeWindow(runId, { cancel = false } = {}) {
+  return call(closeLifeWindowCallable, { runId, cancel });
+}
 
 // Resolves to { taken, gems (new balance), lifeBought, lives }.
 export async function donateToLifeGoal(runId, amount) {

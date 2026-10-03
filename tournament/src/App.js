@@ -37,6 +37,7 @@ import { dispenseRewards, subscribeToMyReward, subscribeToRewards } from './api/
 import { subscribeToMatchPredictions, submitPrediction, subscribeToTournamentPredictionScores, setPredictionsStartDay } from './api/predictions';
 import LivePage from './live/LivePage';
 import LadderPage from './ladder/LadderPage';
+import UserManager from './staff/UserManager';
 import { LADDER_ID, LADDER_TOURNAMENT, joinLadderQueue } from './api/ladder';
 import LiveHeader from './live/LiveHeader';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
@@ -1585,11 +1586,14 @@ export default function TournamentApp() {
         )}
 
         {currentPage === 'staff_dashboard' && currentUser?.isStaff && (
+          <div className="space-y-6">
           <StaffDashboard
             flags={flags}
             onUpdateFlagStatus={handleUpdateFlagStatus}
             onAddResponse={handleAddFlagResponse}
           />
+          <UserManager currentUser={currentUser} onViewProfile={viewProfile} />
+          </div>
         )}
 
         {currentPage === 'profile' && currentUser && (

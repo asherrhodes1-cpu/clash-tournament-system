@@ -226,7 +226,7 @@ service cloud.firestore {
                     && request.resource.data.keys().hasOnly(['target', 'raised', 'status', 'pool', 'createdBy', 'createdAt'])
                     && request.resource.data.target is int
                     && request.resource.data.target >= 1
-                    && request.resource.data.target <= 1000000
+                    && request.resource.data.target <= 1000000000
                     && request.resource.data.raised == 0
                     && request.resource.data.status == 'collecting'
                     && request.resource.data.pool is list
@@ -241,14 +241,15 @@ service cloud.firestore {
     }
 
     // Extra lives: a run the streamer plays with a number of lives, which
-    // viewers pool Gold into to buy more. Staff start a run here and can
-    // correct the life count or end it; Gold going in, the goal filling and
-    // the life it buys are the donateToLifeGoal Cloud Function only (and
-    // settleLiveRound takes a life for a failed attack).
+    // viewers buy more of in timed windows. Staff start a run here and can
+    // correct the life count or end it; opening a window, Gold going in, the
+    // bar filling (and the life it buys) and refunds when time runs out are
+    // Cloud Functions only (openLifeWindow, donateToLifeGoal,
+    // closeLifeWindow), and settleLiveRound takes a life for a failed attack.
     match /lifeRuns/{runId} {
       allow read: if true;
       allow create: if isStaff()
-                    && request.resource.data.keys().hasOnly(['lives', 'price', 'priceMultiplier', 'raised', 'bought', 'status', 'createdBy', 'createdAt'])
+                    && request.resource.data.keys().hasOnly(['lives', 'price', 'priceMultiplier', 'bought', 'status', 'createdBy', 'createdAt'])
                     && request.resource.data.lives is int
                     && request.resource.data.lives >= 0
                     && request.resource.data.lives <= 99
@@ -258,7 +259,6 @@ service cloud.firestore {
                     && request.resource.data.priceMultiplier is number
                     && request.resource.data.priceMultiplier >= 1
                     && request.resource.data.priceMultiplier <= 10
-                    && request.resource.data.raised == 0
                     && request.resource.data.bought == 0
                     && request.resource.data.status == 'active';
       allow update: if isStaff()
@@ -269,7 +269,7 @@ service cloud.firestore {
                     && request.resource.data.status in ['active', 'ended'];
       allow delete: if false;
 
-      match /donors/{uid} {
+      match /windows/{windowId}/donations/{uid} {
         allow read: if true;
         allow write: if false;
       }

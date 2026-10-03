@@ -21,7 +21,7 @@ const SPIN_COOLDOWN_MS = 3000;
 function checkSpin({ balance, pick, amount, lastSpinAt = 0, now }) {
   if (!Object.prototype.hasOwnProperty.call(PAYOUTS, pick)) throw new Error('Pick Elixir, Gold or Gem');
   if (!Number.isInteger(amount) || amount < 1) throw new Error('Bet at least 1 Gold');
-  if (amount > balance) throw new Error(`You only have ${balance} Gold`);
+  if (amount > balance) throw new Error(`You only have ${Math.max(0, balance)} Gold`);
   if (now - lastSpinAt < SPIN_COOLDOWN_MS) throw new Error('The wheel is still spinning - try again in a moment');
 }
 

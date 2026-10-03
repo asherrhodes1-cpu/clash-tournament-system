@@ -13,6 +13,7 @@ import {
   featureLiveRound,
   setLiveRoundStatus,
   settleLiveRound,
+  undoLiveRound,
 } from '../api/live';
 import {
   parseYouTubeId,
@@ -44,6 +45,7 @@ const STATUS_TEXT = {
   settling: 'Paying out...',
   settled: 'Result is in',
   cancelled: 'Cancelled',
+  undoing: 'Correcting the result...',
 };
 
 // The featured round and its bets, kept live. Shared by the page and the overlay.
@@ -191,7 +193,7 @@ function BetCard({ round, bets, user, gems, onLogin }) {
   const kind = roundKind(round);
   // Gems you could put on this round: your balance plus what's already on it.
   const available = gems + (myBet?.amount || 0);
-  const freePick = available === 0;
+  const freePick = available <= 0;
   const stake = freePick ? 0 : Number(amount);
   const stakeValid = freePick || (Number.isInteger(stake) && stake >= 1 && stake <= available);
 
@@ -447,16 +449,33 @@ function StaffLivePanel({ state, user, children }) {
     );
   };
 
+  // Takes back a wrong payout. The round goes back to "betting closed" (and
+  // so back into the list above) with everyone's bets intact, to be settled
+  // again with the right result.
+  const undo = (round, resuming = false) => {
+    const what = round.status === 'cancelled' ? 'refunds' : 'payouts';
+    if (!resuming && !window.confirm(
+      `Undo "${round.description}"? This takes the ${what} back from everyone who bet, and puts the round back to "betting closed" so you can settle it again.`
+    )) return;
+    run(
+      () => undoLiveRound(round.id),
+      ({ bettors, takenBack, livesNow }) => `Undone - ${formatGems(takenBack)} Gold taken back from ${bettors} ${bettors === 1 ? 'bet' : 'bets'}.${
+        livesNow != null ? ` Your life is back - ${livesNow} now.` : ''
+      } Now pick the right result.`
+    );
+  };
+
   const overlayUrl = `${window.location.origin}/live/overlay`;
 
   const openRounds = recentRounds.filter((r) => effectiveStatus(r, now) === 'open').length;
   const toSettle = recentRounds.filter((r) => effectiveStatus(r, now) === 'closed').length;
   const roundsSummary = [openRounds && `${openRounds} betting`, toSettle && `${toSettle} to settle`].filter(Boolean).join(' · ');
-  // Rounds that still need something from you come first; finished ones
-  // (settled or cancelled) sit behind a toggle so the list stays short.
+  // Rounds that still need something from you come first. The last finished
+  // one (settled or cancelled) stays in view, so a wrong result can be undone
+  // straight away; older ones sit behind a toggle so the list stays short.
   const finished = (r) => r.status === 'settled' || r.status === 'cancelled';
   const activeRounds = recentRounds.filter((r) => !finished(r));
-  const finishedRounds = recentRounds.filter(finished);
+  const [lastFinished, ...olderFinished] = recentRounds.filter(finished);
 
   return (
     <div className="bg-gray-800 rounded-lg border-2 border-white p-6 space-y-3">
@@ -491,16 +510,16 @@ function StaffLivePanel({ state, user, children }) {
           {activeRounds.length === 0 && (
             <p className="text-sm text-gray-400">Nothing running - start a New attack above.</p>
           )}
-          {finishedRounds.length > 0 && (
+          {olderFinished.length > 0 && (
             <button
               type="button"
               onClick={() => setShowFinished((v) => !v)}
               className="text-sm text-gray-300 underline hover:text-white"
             >
-              {showFinished ? 'Hide' : 'Show'} finished rounds ({finishedRounds.length})
+              {showFinished ? 'Hide' : 'Show'} older finished rounds ({olderFinished.length})
             </button>
           )}
-          {[...activeRounds, ...(showFinished ? finishedRounds : [])].map((round) => {
+          {[...activeRounds, ...(lastFinished ? [lastFinished] : []), ...(showFinished ? olderFinished : [])].map((round) => {
             const featured = state.roundId === round.id;
             const canSettle = round.status === 'open' || round.status === 'closed';
             const status = effectiveStatus(round, now);
@@ -560,6 +579,18 @@ function StaffLivePanel({ state, user, children }) {
                       </>
                     )}
                     <button disabled={busy} onClick={() => settle(round, 'cancel')} className={`${OUTLINE_BUTTON} px-3 py-1`}>Cancel &amp; refund</button>
+                  </div>
+                )}
+                {(round.status === 'settled' || round.status === 'cancelled') && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <button disabled={busy} onClick={() => undo(round)} className={`${OUTLINE_BUTTON} px-3 py-1`}>Undo payout</button>
+                    <span className="text-xs text-gray-500">Wrong result? This takes the payouts back so you can settle it again.</span>
+                  </div>
+                )}
+                {round.status === 'undoing' && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-gray-400">Undo didn't finish.</span>
+                    <button disabled={busy} onClick={() => undo(round, true)} className={`${GOLD_BUTTON} px-3 py-1`}>Finish undoing</button>
                   </div>
                 )}
                 {round.status === 'settling' && (
@@ -703,7 +734,7 @@ export default function LivePage({ user, onLogin }) {
           <Section
             id="extra-lives"
             title="Extra lives"
-            summary={lifeRun ? (lifeRun.status === 'active' ? `${lifeRun.lives} ${lifeRun.lives === 1 ? 'life' : 'lives'} · ${formatGems(lifeRun.raised)} / ${formatGems(lifeRun.price)}` : 'Run over') : null}
+            summary={lifeRun ? (lifeRun.status === 'active' ? `${lifeRun.lives} ${lifeRun.lives === 1 ? 'life' : 'lives'}${lifeRun.window ? ' · goal open' : ''}` : 'Run over') : null}
           >
             <StaffLivesPanel run={lifeRun} user={user} />
           </Section>

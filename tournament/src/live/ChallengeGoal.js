@@ -24,6 +24,8 @@ const GOLD_BUTTON = 'bg-gradient-to-r from-amber-200 to-yellow-500 hover:from-am
 const OUTLINE_BUTTON = 'border border-white text-white hover:bg-white hover:text-black rounded transition disabled:opacity-50';
 const INPUT = 'w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-white';
 
+const MAX_GOAL_TARGET = 1000000000;
+
 const PHASE_TEXT = {
   collecting: 'Collecting Gold',
   voting: 'Voting now',
@@ -212,7 +214,7 @@ export function ChallengeGoalCard({ goal, donations, user, gems, onLogin }) {
                 </button>
               </div>
               <button onClick={donate} disabled={!donationValid || submitting} className={`${GOLD_BUTTON} w-full py-2`}>
-                {submitting ? 'Donating...' : donationValid ? <>Donate <Gems amount={Math.min(donation, remaining)} /></> : gems === 0 ? 'You\'re out of Gold' : 'Enter an amount'}
+                {submitting ? 'Donating...' : donationValid ? <>Donate <Gems amount={Math.min(donation, remaining)} /></> : gems <= 0 ? 'You\'re out of Gold' : 'Enter an amount'}
               </button>
               {myDonation && (
                 <p className="text-sm text-gray-300">You've donated <Gems amount={myDonation.gems} className="font-bold text-white" /> to this goal.</p>
@@ -348,8 +350,9 @@ export function StaffChallengePanel({ goal, user }) {
 
   const startGoal = (e) => {
     e.preventDefault();
-    if (!Number.isInteger(targetNumber) || targetNumber < 1) {
-      setError('Set a goal of at least 1 Gold.');
+    // The same limits the database rules enforce, said in plain words.
+    if (!Number.isInteger(targetNumber) || targetNumber < 1 || targetNumber > MAX_GOAL_TARGET) {
+      setError(`Set a goal between 1 and ${formatGems(MAX_GOAL_TARGET)} Gold.`);
       return;
     }
     if (list.length < 2) {

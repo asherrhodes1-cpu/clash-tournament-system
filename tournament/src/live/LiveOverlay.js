@@ -56,6 +56,7 @@ function useFitLayout(el, cards) {
 const STATUS_TEXT = {
   closed: 'Betting closed',
   settling: 'Paying out...',
+  undoing: 'Correcting the result...',
   cancelled: 'Cancelled - bets refunded',
 };
 

@@ -1,4 +1,4 @@
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../firebase';
 
@@ -19,4 +19,28 @@ const createDiscordLinkCodeCallable = httpsCallable(functions, 'createDiscordLin
 export async function createDiscordLinkCode() {
   const result = await createDiscordLinkCodeCallable();
   return result.data;
+}
+
+// Staff: every account, for the user search - [{ id (uid), username,
+// clashTag, createdAt, isStaff, clashVerified, discordId }]. Loaded once
+// on demand rather than kept live; names are matched in the browser so a
+// search can find text anywhere in a name, not just at the start.
+export async function fetchAllUsers() {
+  const snap = await getDocs(collection(db, 'users'));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+const removeUserCallable = httpsCallable(functions, 'removeUser');
+
+// Staff: delete an account outright (see removeUser in functions/index.js).
+// Resolves to { username, signupsRemoved }.
+export async function removeUser(uid) {
+  try {
+    return (await removeUserCallable({ uid })).data;
+  } catch (err) {
+    if (err.code === 'functions/internal' || err.code === 'functions/unavailable') {
+      throw new Error('Couldn\'t reach the server - try again in a moment.');
+    }
+    throw err;
+  }
 }

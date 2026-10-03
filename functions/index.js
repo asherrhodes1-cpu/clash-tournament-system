@@ -19,7 +19,9 @@ const { STARTING_GEMS, ROUND_KINDS, kindOf, planBet, payoutFor, bettingIsOpen } 
 const { POCKET_COUNT, POCKETS, checkSpin, spinPayout } = require('./roulette');
 const { VOTING_MS, planDonation, pickOptions, votingIsOpen } = require('./challenges');
 const { dropIsOpen } = require('./drops');
-const { attackCostsLife, loseLife, buyLife } = require('./lives');
+const {
+  MAX_LIVES, LIFE_WINDOW_MS, attackCostsLife, loseLife, buyLife, windowIsOpen, windowHasExpired,
+} = require('./lives');
 const { LADDER_ID, LADDER_MATCH_MS, START_RATING, outcomeOf, rateMatch, pickOpponent, pairQueue } = require('./ladder');
 
 admin.initializeApp();
@@ -366,6 +368,69 @@ exports.adminResetPassword = onCall(async (request) => {
 });
 
 // ============================================================================
+// removeUser — staff-only. Deletes an account outright, for usernames staff
+// judge inappropriate: the login, the profile, and the name everywhere it
+// would still be shown (Gold leaderboard, 1v1 leaderboard and queue, the
+// roulette feed, signups for tournaments that haven't started). The name
+// stays reserved so it can't simply be registered again. Staff accounts
+// can't be removed this way. Each removal is logged in removedUsers.
+// ============================================================================
+exports.removeUser = onCall(async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Staff only');
+  const { uid } = request.data || {};
+  if (!uid || typeof uid !== 'string') throw new HttpsError('invalid-argument', 'Missing user');
+  if (uid === request.auth.uid) throw new HttpsError('failed-precondition', 'You can\'t remove your own account');
+
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) throw new HttpsError('not-found', 'That account no longer exists');
+  const user = userSnap.data();
+  if (user.isStaff) throw new HttpsError('failed-precondition', 'Staff accounts can\'t be removed here');
+  const username = user.username;
+  const usernameLower = user.usernameLower || String(username || '').toLowerCase();
+  const removedBy = request.auth.token.username || request.auth.uid;
+  const now = Date.now();
+
+  // The login goes first: with it gone (and its sessions revoked) the
+  // account can't act again while the rest is cleaned up.
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (err) {
+    if (err.code !== 'auth/user-not-found') throw err;
+  }
+
+  const batch = db.batch();
+  batch.set(db.collection('removedUsers').doc(uid), { uid, username, clashTag: user.clashTag || '', removedBy, removedAt: now });
+  batch.delete(userRef);
+  batch.delete(db.collection('gemBalances').doc(uid));
+  batch.delete(db.collection('ladderQueue').doc(uid));
+  if (usernameLower) {
+    // Kept (as a tombstone signUp treats as taken) so the name can't be re-registered.
+    batch.set(db.collection('usernames').doc(usernameLower), { removed: true, removedBy, removedAt: now });
+    batch.delete(db.collection('ladderRatings').doc(usernameLower));
+  }
+  const spins = await db.collection('rouletteSpins').where('uid', '==', uid).limit(400).get();
+  spins.docs.forEach((d) => batch.delete(d.ref));
+  await batch.commit();
+
+  // Out of any tournament still taking signups. One already under way is
+  // left alone - pulling a player from a live bracket is the existing
+  // "remove player" tool's job, which also settles their matches.
+  let signups = 0;
+  if (username) {
+    const open = await db.collection('tournaments').where('status', '==', 'signups_open').get();
+    for (const doc of open.docs) {
+      if ((doc.data().players || []).includes(username)) {
+        await doc.ref.update({ players: admin.firestore.FieldValue.arrayRemove(username) });
+        signups += 1;
+      }
+    }
+  }
+  logger.info('removeUser', { uid, username, removedBy });
+  return { username, signupsRemoved: signups };
+});
+
+// ============================================================================
 // fetchClashPlayer — looks up a player's stats from the real Clash of Clans
 // API. Supercell whitelists API keys by IP and Cloud Functions have no fixed
 // outbound IP, so this calls a small relay (a droplet with a static IP) that
@@ -500,6 +565,11 @@ exports.advanceTournaments = onSchedule({ schedule: 'every 5 minutes', secrets: 
     await processLadder();
   } catch (err) {
     logger.error('processLadder failed', err);
+  }
+  try {
+    await sweepLifeWindows();
+  } catch (err) {
+    logger.error('sweepLifeWindows failed', err);
   }
 });
 
@@ -1558,6 +1628,9 @@ exports.settleLiveRound = onCall(async (request) => {
     if (round.status === 'settled' || round.status === 'cancelled') {
       throw new HttpsError('failed-precondition', 'This round is already finished');
     }
+    if (round.status === 'undoing') {
+      throw new HttpsError('failed-precondition', 'This round\'s payout is being undone - finish that first');
+    }
     if (round.status === 'settling' && round.pendingResult !== result) {
       throw new HttpsError('failed-precondition', `This round is already being settled as "${round.pendingResult}"`);
     }
@@ -1610,6 +1683,78 @@ exports.settleLiveRound = onCall(async (request) => {
     settledAt: Date.now(),
   });
   return { bettors, paidOut, livesLeft };
+});
+
+// Staff: undo a round that was settled (or cancelled) wrongly. Every bet's
+// payout is taken back and the round returns to 'closed' - betting over,
+// bets intact - ready to be settled again with the right result. A life the
+// wrong result cost is given back. Mirrors settleLiveRound: the round is
+// marked 'undoing' first and each bet is un-paid in the same batch as its
+// Gold comes back, so re-running a cut-off undo just finishes the rest.
+// A balance can go below zero if the Gold was already spent.
+exports.undoLiveRound = onCall(async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Only staff can undo payouts');
+  const { roundId } = request.data || {};
+  if (!roundId || typeof roundId !== 'string') throw new HttpsError('invalid-argument', 'Missing round');
+
+  const roundRef = db.collection('liveRounds').doc(roundId);
+  let livesNow = null;
+  await db.runTransaction(async (tx) => {
+    livesNow = null;
+    const snap = await tx.get(roundRef);
+    if (!snap.exists) throw new HttpsError('not-found', 'Round not found');
+    const round = snap.data();
+    if (round.status === 'undoing') return;
+    if (round.status !== 'settled' && round.status !== 'cancelled') {
+      throw new HttpsError('failed-precondition', 'Only a finished round can be undone');
+    }
+
+    // Give back the life this result took, to the run that's on screen.
+    let runRef = null;
+    let run = null;
+    if (round.lifeLost) {
+      const stateSnap = await tx.get(db.collection('live').doc('state'));
+      const runId = stateSnap.exists ? stateSnap.data().lifeRunId : null;
+      if (runId) {
+        runRef = db.collection('lifeRuns').doc(runId);
+        const runSnap = await tx.get(runRef);
+        if (runSnap.exists && runSnap.data().status === 'active') run = runSnap.data();
+      }
+    }
+    tx.update(roundRef, { status: 'undoing', lifeLost: admin.firestore.FieldValue.delete() });
+    if (run) {
+      livesNow = Math.min(MAX_LIVES, run.lives + 1);
+      tx.update(runRef, { lives: livesNow });
+    }
+  });
+
+  let takenBack = 0;
+  let bettors = 0;
+  for (;;) {
+    const paid = await roundRef.collection('bets').where('paid', '==', true).limit(200).get();
+    if (paid.empty) break;
+    const batch = db.batch();
+    paid.docs.forEach((d) => {
+      const payout = d.data().payout || 0;
+      batch.update(d.ref, { paid: false, payout: admin.firestore.FieldValue.delete() });
+      if (payout > 0) {
+        batch.set(db.collection('gemBalances').doc(d.id), {
+          gems: admin.firestore.FieldValue.increment(-payout),
+        }, { merge: true });
+      }
+      takenBack += payout;
+      bettors += 1;
+    });
+    await batch.commit();
+  }
+
+  await roundRef.update({
+    status: 'closed',
+    result: null,
+    pendingResult: admin.firestore.FieldValue.delete(),
+    settledAt: admin.firestore.FieldValue.delete(),
+  });
+  return { bettors, takenBack, livesNow };
 });
 
 // ============================================================================
@@ -1989,10 +2134,39 @@ exports.rateLadderMatch = onDocumentUpdated(`tournaments/${LADDER_ID}/matches/{m
 // ============================================================================
 // Extra lives. The streamer plays a run with a number of lives (a
 // lifeRuns/{runId} doc, started by staff from the client); a failed attack
-// takes one (see settleLiveRound). Viewers pool Gold into the run's goal -
-// when it fills, the run gains a life and the next one costs more. Only this
-// function moves Gold into a run or adds a life from it.
+// takes one (see settleLiveRound). Viewers buy more in timed windows the
+// streamer opens: `run.window` is { id, openedAt, ms, raised, state }, and
+// each viewer's Gold in it is lifeRuns/{runId}/windows/{id}/donations/{uid}.
+// Fill the bar in time and the run gains a life and the next costs more;
+// run out of time and every donation is refunded. Only these functions move
+// Gold into or out of a window, or add a life from one.
 // ============================================================================
+const lifeRunRef = (runId) => db.collection('lifeRuns').doc(runId);
+const lifeWindowOf = (run) => (run.window
+  ? { ...run.window, openedAtMs: run.window.openedAt ? run.window.openedAt.toMillis() : null }
+  : null);
+
+// Staff: open a window - viewers get LIFE_WINDOW_MS to fill the bar.
+exports.openLifeWindow = onCall(async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Only staff can open an extra-life goal');
+  const { runId } = request.data || {};
+  if (!runId || typeof runId !== 'string') throw new HttpsError('invalid-argument', 'Missing run');
+
+  const runRef = lifeRunRef(runId);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(runRef);
+    if (!snap.exists) throw new HttpsError('not-found', 'That run no longer exists');
+    const run = snap.data();
+    if (run.status !== 'active') throw new HttpsError('failed-precondition', 'This run is over');
+    if (run.window) throw new HttpsError('failed-precondition', 'An extra-life goal is already open');
+    const id = runRef.collection('windows').doc().id;
+    tx.update(runRef, {
+      window: { id, openedAt: admin.firestore.FieldValue.serverTimestamp(), ms: LIFE_WINDOW_MS, raised: 0, state: 'open' },
+    });
+    return { windowId: id };
+  });
+});
+
 exports.donateToLifeGoal = onCall(async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Log in to donate');
   const { runId, amount } = request.data || {};
@@ -2000,29 +2174,115 @@ exports.donateToLifeGoal = onCall(async (request) => {
 
   const uid = request.auth.uid;
   const username = request.auth.token.username || null;
-  const runRef = db.collection('lifeRuns').doc(runId);
-  const donorRef = runRef.collection('donors').doc(uid);
+  const runRef = lifeRunRef(runId);
   const balanceRef = db.collection('gemBalances').doc(uid);
 
   return db.runTransaction(async (tx) => {
-    const [runSnap, donorSnap, balanceSnap] = await Promise.all([tx.get(runRef), tx.get(donorRef), tx.get(balanceRef)]);
+    const runSnap = await tx.get(runRef);
     if (!runSnap.exists) throw new HttpsError('not-found', 'That run no longer exists');
     const run = runSnap.data();
-    if (run.status !== 'active') throw new HttpsError('failed-precondition', 'This run is over');
+    const window = lifeWindowOf(run);
+    const now = Date.now();
+    if (run.status !== 'active' || !windowIsOpen(window, now)) {
+      throw new HttpsError('failed-precondition', 'The extra-life goal isn\'t open right now');
+    }
 
+    const donationRef = runRef.collection('windows').doc(window.id).collection('donations').doc(uid);
+    const [donationSnap, balanceSnap] = await Promise.all([tx.get(donationRef), tx.get(balanceRef)]);
     const balance = balanceSnap.exists ? balanceSnap.data().gems : STARTING_GEMS;
     let plan;
     try {
       // Same rule as a challenge goal: only what the bar still needs is taken.
-      plan = planDonation({ balance, raised: run.raised, target: run.price, amount });
+      plan = planDonation({ balance, raised: window.raised, target: run.price, amount });
     } catch (err) {
       throw new HttpsError('invalid-argument', err.message);
     }
 
-    const runUpdate = plan.reached ? { ...buyLife(run), lastBuyer: username } : { raised: plan.raised };
-    tx.update(runRef, runUpdate);
+    // Filling the bar buys the life and ends the window; `lastWindow` is
+    // what the page and overlay announce afterwards.
+    const bought = plan.reached ? buyLife(run) : null;
+    tx.update(runRef, bought
+      ? { ...bought, lastBuyer: username, window: null, lastWindow: { id: window.id, result: 'bought', by: username, price: run.price, at: now } }
+      : { 'window.raised': plan.raised });
     tx.set(balanceRef, { username, gems: plan.balance }, { merge: true });
-    tx.set(donorRef, { username, gems: (donorSnap.exists ? donorSnap.data().gems : 0) + plan.taken }, { merge: true });
-    return { taken: plan.taken, gems: plan.balance, lifeBought: plan.reached, lives: plan.reached ? runUpdate.lives : run.lives };
+    tx.set(donationRef, {
+      username,
+      gems: (donationSnap.exists ? donationSnap.data().gems : 0) + plan.taken,
+      // A filled window keeps its Gold; only an unfilled one refunds these.
+      refunded: false,
+    });
+    return { taken: plan.taken, gems: plan.balance, lifeBought: plan.reached, lives: bought ? bought.lives : run.lives };
   });
 });
+
+// Closes a run's window once its countdown has run out without the bar
+// being filled (or straight away when `force`d by staff), refunding every
+// donation. The window is marked 'refunding' first so no more Gold comes in,
+// and each refund marks its donation in the same transaction as the Gold
+// goes back - so this can be called by several things at once (the overlay,
+// the staff page, the scheduler) or re-run after a cut-off without anyone
+// being refunded twice.
+async function closeLifeWindow(runRef, { force = false } = {}) {
+  const closing = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(runRef);
+    if (!snap.exists) return null;
+    const window = lifeWindowOf(snap.data());
+    if (!window) return null;
+    if (window.state !== 'refunding') {
+      if (!force && !windowHasExpired(window, Date.now())) return null;
+      tx.update(runRef, { 'window.state': 'refunding', 'window.closedBy': force ? 'staff' : 'timer' });
+    }
+    return { id: window.id, raised: window.raised, cancelled: window.state === 'refunding' ? window.closedBy === 'staff' : force };
+  });
+  if (!closing) return { closed: false, refunded: 0 };
+
+  const donationsRef = runRef.collection('windows').doc(closing.id).collection('donations');
+  let refunded = 0;
+  for (;;) {
+    const batch = await db.runTransaction(async (tx) => {
+      const pending = await tx.get(donationsRef.where('refunded', '==', false).limit(100));
+      let gems = 0;
+      pending.docs.forEach((d) => {
+        const given = d.data().gems || 0;
+        tx.update(d.ref, { refunded: true });
+        if (given > 0) {
+          tx.set(db.collection('gemBalances').doc(d.id), { gems: admin.firestore.FieldValue.increment(given) }, { merge: true });
+        }
+        gems += given;
+      });
+      return { count: pending.size, gems };
+    });
+    if (!batch.count) break;
+    refunded += batch.gems;
+  }
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(runRef);
+    if (!snap.exists || snap.data().window?.id !== closing.id) return;
+    tx.update(runRef, {
+      window: null,
+      lastWindow: { id: closing.id, result: closing.cancelled ? 'cancelled' : 'expired', raised: closing.raised, at: Date.now() },
+    });
+  });
+  return { closed: true, refunded };
+}
+
+// Called by the overlay and the staff page when they see the countdown hit
+// zero (no login needed - it only ever does what the timer already decided),
+// and by staff to call a window off early.
+exports.closeLifeWindow = onCall(async (request) => {
+  const { runId, cancel } = request.data || {};
+  if (!runId || typeof runId !== 'string') throw new HttpsError('invalid-argument', 'Missing run');
+  const force = !!cancel;
+  if (force && !request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Only staff can cancel an extra-life goal');
+  return closeLifeWindow(lifeRunRef(runId), { force });
+});
+
+// The scheduler's backstop: refund any window that ran out with nobody
+// around to notice (no overlay open, staff page closed).
+async function sweepLifeWindows() {
+  const snap = await db.collection('lifeRuns').where('window.state', 'in', ['open', 'refunding']).get();
+  for (const doc of snap.docs) {
+    await closeLifeWindow(doc.ref);
+  }
+}

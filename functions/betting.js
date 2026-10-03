@@ -35,9 +35,13 @@ function kindOf(round) {
 function planBet({ balance, existingAmount = 0, side, amount, sides = ROUND_KINDS.outcome.sides }) {
   if (!sides.includes(side)) throw new Error('Pick one of the options');
   if (!Number.isInteger(amount) || amount < 0) throw new Error('Bet a whole number of Gold');
+  // What they could stake: their balance plus what's already on this round.
+  // It can be below zero - an undone payout they'd already spent - in which
+  // case there's nothing to stake, but a free pick is still allowed.
   const available = balance + existingAmount;
-  if (amount > available) throw new Error(`You only have ${available} Gold`);
-  if (amount === 0 && available > 0) throw new Error('Bet at least 1 Gold');
+  const spendable = Math.max(0, available);
+  if (amount > spendable) throw new Error(`You only have ${spendable} Gold`);
+  if (amount === 0 && spendable > 0) throw new Error('Bet at least 1 Gold');
   return { bet: { side, amount }, balance: available - amount };
 }
 

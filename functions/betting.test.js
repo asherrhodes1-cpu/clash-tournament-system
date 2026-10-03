@@ -75,3 +75,13 @@ test('older rounds without a kind are succeed/fail rounds', () => {
   assert.strictEqual(kindOf({ kind: 'stars' }), 'stars');
   assert.strictEqual(kindOf({ kind: 'nonsense' }), 'outcome');
 });
+
+test('a player in the red (an undone payout they had spent) can only make a free pick', () => {
+  assert.deepStrictEqual(planBet({ balance: -500, side: 'fail', amount: 0 }), {
+    bet: { side: 'fail', amount: 0 },
+    balance: -500,
+  });
+  assert.throws(() => planBet({ balance: -500, side: 'fail', amount: 10 }), /only have 0/);
+  // Their own stake coming back off the round can still be re-bet.
+  assert.strictEqual(planBet({ balance: -100, existingAmount: 300, side: 'fail', amount: 200 }).balance, 0);
+});
