@@ -40,12 +40,15 @@ function readyUpDeadline(match, readyTime) {
   return Math.max(matchDayEnd(match), readyTime + READY_UP_MIN_WINDOW_MS);
 }
 
-// When a match both players readied up for has to be played: the end of the
-// match's day, or READY_UP_MIN_WINDOW_MS after they readied, whichever is
-// later. Matches from before days were tracked keep the flat TIMEOUT_MS.
+// When a match both players readied up for has to be played by: the end of
+// the match's day, however late in it they readied. Only a match that already
+// overran its day (they readied after the day ended) gets READY_UP_MIN_WINDOW_MS
+// from readying, since there's no day end left to cut to. Matches from before
+// days were tracked keep the flat TIMEOUT_MS.
 function playDeadline(match) {
   if (!match.unlockAt) return match.scheduledStartTime + TIMEOUT_MS;
-  return Math.max(matchDayEnd(match), match.scheduledStartTime + READY_UP_MIN_WINDOW_MS);
+  const dayEnd = matchDayEnd(match);
+  return match.scheduledStartTime < dayEnd ? dayEnd : match.scheduledStartTime + READY_UP_MIN_WINDOW_MS;
 }
 
 // Discord renders these in each reader's own timezone, so no formatting here.

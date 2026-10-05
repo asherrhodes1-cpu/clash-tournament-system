@@ -4391,6 +4391,11 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           {match.status === 'waiting_for_opponent' && userIsPlayer && !userVote && (
             <p className="text-white">Your opponent has reported a result — submit yours to confirm or dispute it.</p>
           )}
+          {match.status === 'pending' && match.unlockAt && !roundLocked && (match.dayEndsAt ?? dayEndsAt(match.unlockAt)) > Date.now() && (
+            <div className="text-xs mt-2 text-gray-300">
+              <ClockIcon />Day ends in {formatCountdown((match.dayEndsAt ?? dayEndsAt(match.unlockAt)) - Date.now())}
+            </div>
+          )}
           {(match.status === 'active' || match.status === 'scheduled' || match.status === 'waiting_for_opponent') && match.scheduledStartTime && (
             <div className={`text-xs mt-2 ${timeDisplay?.color || 'text-gray-400'}`}>
               <ClockIcon />Time remaining: {timeDisplay?.text}

@@ -87,7 +87,7 @@ test('a readied-up match has to be played by the end of its day, not 16h after r
   const late = { ...base, scheduledStartTime: base.unlockAt + 20 * H };
   const overran = { ...base, scheduledStartTime: base.unlockAt + DAY + H };
   assert.strictEqual(playDeadline(early), base.unlockAt + DAY);
-  assert.strictEqual(playDeadline(late), late.scheduledStartTime + READY_UP_MIN_WINDOW_MS); // readied with <6h left: gets the 6h floor
+  assert.strictEqual(playDeadline(late), base.unlockAt + DAY); // readied with 4h left: still cut at day end
   assert.strictEqual(playDeadline(overran), overran.scheduledStartTime + READY_UP_MIN_WINDOW_MS);
   assert.strictEqual(playDeadline({ ...early, unlockAt: undefined }), early.scheduledStartTime + TIMEOUT_MS);
 });

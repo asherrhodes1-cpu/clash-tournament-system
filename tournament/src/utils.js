@@ -116,13 +116,16 @@ export function formatCountdown(ms) {
 }
 
 // Mirrors playDeadline in functions/reminders.js: a match both players readied
-// up for has to be played by the end of its day (or 6h after they readied, if
-// that's later). Matches from before days were tracked keep a flat 16h.
+// up for has to be played by the end of its day, however late they readied
+// (unless they readied after it ended - then 6h from readying). Matches from
+// before days were tracked keep a flat 16h.
 export function getTimeRemaining(match) {
   if (!match?.scheduledStartTime) return null;
-  const deadline = match.unlockAt
-    ? Math.max(match.dayEndsAt ?? dayEndsAt(match.unlockAt), match.scheduledStartTime + 6 * 60 * 60 * 1000)
-    : match.scheduledStartTime + 16 * 60 * 60 * 1000;
+  let deadline = match.scheduledStartTime + 16 * 60 * 60 * 1000;
+  if (match.unlockAt) {
+    const dayEnd = match.dayEndsAt ?? dayEndsAt(match.unlockAt);
+    deadline = match.scheduledStartTime < dayEnd ? dayEnd : match.scheduledStartTime + 6 * 60 * 60 * 1000;
+  }
   const remaining = deadline - Date.now();
 
   if (remaining <= 0) return 'EXPIRED';
