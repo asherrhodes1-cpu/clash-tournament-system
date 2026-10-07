@@ -44,3 +44,18 @@ export async function removeUser(uid) {
     throw err;
   }
 }
+
+const renameUserCallable = httpsCallable(functions, 'renameUser');
+
+// Staff: give an account a new username everywhere (see renameUser in
+// functions/index.js). Resolves to { from, to, tournaments, matches }.
+export async function renameUser(uid, newUsername) {
+  try {
+    return (await renameUserCallable({ uid, newUsername })).data;
+  } catch (err) {
+    if (err.code === 'functions/internal' || err.code === 'functions/unavailable') {
+      throw new Error('Couldn\'t reach the server - try again in a moment.');
+    }
+    throw err;
+  }
+}

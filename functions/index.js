@@ -19,6 +19,7 @@ const { STARTING_GEMS, ROUND_KINDS, kindOf, planBet, payoutFor, bettingIsOpen } 
 const { POCKET_COUNT, POCKETS, checkSpin, spinPayout } = require('./roulette');
 const { VOTING_MS, planDonation, pickOptions, votingIsOpen } = require('./challenges');
 const { dropIsOpen } = require('./drops');
+const { checkNewUsername, renameChanges } = require('./rename');
 const {
   MAX_LIVES, LIFE_WINDOW_MS, attackCostsLife, loseLife, buyLife, windowIsOpen, windowHasExpired,
 } = require('./lives');
@@ -428,6 +429,115 @@ exports.removeUser = onCall(async (request) => {
   }
   logger.info('removeUser', { uid, username, removedBy });
   return { username, signupsRemoved: signups };
+});
+
+// ============================================================================
+// renameUser — staff-only. Gives an account a new username everywhere the
+// old one is load-bearing: the login (the username is the sign-in name), the
+// profile, Gold balance, 1v1 rating and queue entry, and every tournament and
+// match that records the player by name. The old name stays reserved so it
+// can't be re-registered. The player is signed out and logs back in with the
+// new name (same password). Not rewritten: old chat messages, flags and
+// per-tournament prediction/reward records, which keep the name they were
+// made under.
+// ============================================================================
+exports.renameUser = onCall({ timeoutSeconds: 120 }, async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Staff only');
+  const { uid, newUsername } = request.data || {};
+  if (!uid || typeof uid !== 'string') throw new HttpsError('invalid-argument', 'Missing user');
+  let name;
+  try {
+    name = checkNewUsername(newUsername);
+  } catch (err) {
+    throw new HttpsError('invalid-argument', err.message);
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) throw new HttpsError('not-found', 'That account no longer exists');
+  const oldName = userSnap.data().username;
+  if (!oldName) throw new HttpsError('failed-precondition', 'That account has no username to change');
+  if (name === oldName) throw new HttpsError('failed-precondition', 'That\'s already their name');
+  const oldLower = oldName.toLowerCase();
+  const newLower = name.toLowerCase();
+  // Only the capitalisation changing: the reserved name slot stays the same.
+  const sameSlot = oldLower === newLower;
+  const by = request.auth.token.username || request.auth.uid;
+  const now = Date.now();
+
+  // 1. Claim the new name first, so two renames (or a sign-up) can't collide.
+  const newNameRef = db.collection('usernames').doc(newLower);
+  if (!sameSlot) {
+    await db.runTransaction(async (tx) => {
+      if ((await tx.get(newNameRef)).exists) throw new HttpsError('already-exists', 'That username is taken');
+      tx.set(newNameRef, { uid, username: name });
+    });
+  }
+
+  // 2. The login. If this fails nothing else has changed yet - give the
+  // name back and stop.
+  try {
+    const authUser = await admin.auth().getUser(uid);
+    await admin.auth().updateUser(uid, { email: usernameToEmail(name) });
+    await admin.auth().setCustomUserClaims(uid, { ...(authUser.customClaims || {}), username: name });
+    // Their current session still carries the old name; make them sign in again.
+    await admin.auth().revokeRefreshTokens(uid);
+  } catch (err) {
+    if (!sameSlot) await newNameRef.delete().catch(() => {});
+    logger.error('renameUser: login update failed', { uid, err });
+    throw new HttpsError('aborted', 'Couldn\'t change the login for that account - nothing was renamed');
+  }
+
+  // 3. Everything that shows or looks up the name.
+  const balanceRef = db.collection('gemBalances').doc(uid);
+  const queueRef = db.collection('ladderQueue').doc(uid);
+  const oldRatingRef = db.collection('ladderRatings').doc(oldLower);
+  const stylesRef = db.collection('live').doc('nameStyles');
+  const [balanceSnap, queueSnap, ratingSnap, stylesSnap] = await Promise.all(
+    [balanceRef, queueRef, oldRatingRef, stylesRef].map((ref) => ref.get())
+  );
+  const batch = db.batch();
+  batch.update(userRef, { username: name, usernameLower: newLower });
+  batch.set(newNameRef, { uid, username: name });
+  if (!sameSlot) batch.set(db.collection('usernames').doc(oldLower), { renamed: true, renamedTo: name, renamedBy: by, renamedAt: now });
+  if (balanceSnap.exists) batch.update(balanceRef, { username: name });
+  if (queueSnap.exists) batch.update(queueRef, { username: name });
+  if (ratingSnap.exists) {
+    batch.set(db.collection('ladderRatings').doc(newLower), { ...ratingSnap.data(), username: name });
+    if (!sameSlot) batch.delete(oldRatingRef);
+  }
+  // A golden name follows the player to their new name.
+  const gold = stylesSnap.exists ? stylesSnap.data().gold || [] : [];
+  if (!sameSlot && gold.includes(oldLower)) {
+    batch.set(stylesRef, { gold: [...gold.filter((n) => n !== oldLower), newLower] }, { merge: true });
+  }
+  batch.set(db.collection('renamedUsers').doc(), { uid, from: oldName, to: name, by, at: now });
+  await batch.commit();
+
+  // 4. Tournaments and matches record players by name.
+  const writes = [];
+  const tournaments = await db.collection('tournaments').get();
+  tournaments.docs.forEach((d) => {
+    const changes = renameChanges(d.data(), oldName, name);
+    if (Object.keys(changes).length) writes.push([d.ref, changes]);
+  });
+  const tournamentCount = writes.length;
+  const [asP1, asP2] = await Promise.all([
+    db.collectionGroup('matches').where('player1', '==', oldName).get(),
+    db.collectionGroup('matches').where('player2', '==', oldName).get(),
+  ]);
+  [...asP1.docs, ...asP2.docs].forEach((d) => {
+    const changes = renameChanges(d.data(), oldName, name);
+    if (Object.keys(changes).length) writes.push([d.ref, changes]);
+  });
+  for (let i = 0; i < writes.length; i += 400) {
+    const chunk = db.batch();
+    writes.slice(i, i + 400).forEach(([ref, changes]) => chunk.update(ref, changes));
+    await chunk.commit();
+  }
+
+  logger.info('renameUser', { uid, from: oldName, to: name, by });
+  return { from: oldName, to: name, tournaments: tournamentCount, matches: writes.length - tournamentCount };
 });
 
 // ============================================================================

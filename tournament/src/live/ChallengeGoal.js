@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PlayerName from '../PlayerName';
 import {
   subscribeToChallengeGoal,
   subscribeToGoalDonations,
@@ -227,7 +228,7 @@ export function ChallengeGoalCard({ goal, donations, user, gems, onLogin }) {
               <ol className="space-y-0.5 text-sm">
                 {topDonors.map((d) => (
                   <li key={d.id} className="flex justify-between gap-3">
-                    <span className="truncate">{d.username || 'Unknown'}</span>
+                    <span className="truncate"><PlayerName name={d.username || 'Unknown'} /></span>
                     <Gems amount={d.gems} className="font-bold shrink-0" />
                   </li>
                 ))}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PlayerName from '../PlayerName';
 import {
   subscribeToLiveState,
   subscribeToLiveRound,
@@ -368,7 +369,7 @@ function Leaderboard({ user }) {
             >
               <span className="truncate">
                 <span className="text-gray-400 inline-block w-6">{i + 1}.</span>
-                {row.username || 'Unknown'}
+                <PlayerName name={row.username || 'Unknown'} />
               </span>
               <Gems amount={row.gems} className="font-bold shrink-0" />
             </li>

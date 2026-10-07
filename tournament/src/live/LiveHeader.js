@@ -1,4 +1,5 @@
 import React from 'react';
+import PlayerName from '../PlayerName';
 import { useMyGems } from './LivePage';
 import { Gems } from './shared';
 
@@ -28,7 +29,7 @@ export default function LiveHeader({ user, onHome, onLogin, onLogout }) {
               <>
                 <div className="text-gray-400 max-w-[8rem] sm:max-w-[11rem]">
                   <div className="truncate">
-                    {user.username}
+                    <PlayerName name={user.username} />
                     {user.isStaff && <span className="text-white font-bold ml-2">[STAFF]</span>}
                   </div>
                   <div className="text-xs text-gray-300"><Gems amount={gems} /></div>

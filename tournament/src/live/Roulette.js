@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import PlayerName from '../PlayerName';
 import { spinRoulette, subscribeToRecentSpins } from '../api/live';
 import { ROULETTE_BETS, POCKETS, POCKET_DEGREES, spinTarget, formatGems } from './liveUtils';
 import { Gems, holdGems } from './shared';
@@ -220,7 +221,7 @@ export default function Roulette({ user, gems, onLogin }) {
               {(frozenRecent || recent).filter((s) => ROULETTE_BETS[s.landed] && ROULETTE_BETS[s.pick]).map((s) => (
                 <li key={s.id} className="flex justify-between items-center gap-3">
                   <span className="truncate flex items-center gap-1">
-                    <span className="font-bold truncate">{s.username || 'Unknown'}</span>
+                    <span className="font-bold truncate"><PlayerName name={s.username || 'Unknown'} /></span>
                     <span className="text-gray-400">bet</span>
                     <BetIcon kind={s.pick} className="w-4 h-4" />
                     <span className="text-gray-400">landed</span>

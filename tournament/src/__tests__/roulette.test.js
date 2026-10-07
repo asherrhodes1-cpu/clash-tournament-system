@@ -7,6 +7,7 @@ import { useMyGems } from '../live/LivePage';
 // The server answers straight away and logs the spin to the feed at once;
 // the page must keep both the feed and the balance quiet until the wheel stops.
 let feedListener;
+jest.mock('../api/nameStyles', () => ({ subscribeToGoldNames: () => () => {}, setGoldName: async () => {} }));
 jest.mock('../api/live', () => ({
   spinRoulette: async () => ({ pocket: 0, landed: 'gem', payout: 3600, gems: 4500 }),
   subscribeToRecentSpins: (listener) => {

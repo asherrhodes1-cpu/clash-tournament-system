@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PlayerName from '../PlayerName';
 import {
   LADDER_ID,
   subscribeToLadderLeaderboard,
@@ -138,7 +139,7 @@ function Leaderboard({ rows, user, onViewProfile }) {
             >
               <span className="truncate">
                 <span className="text-gray-400 inline-block w-8">{i + 1}.</span>
-                <button onClick={() => onViewProfile(row.username)} className="font-bold hover:underline">{row.username}</button>
+                <button onClick={() => onViewProfile(row.username)} className="font-bold hover:underline"><PlayerName name={row.username} /></button>
               </span>
               <span className="shrink-0 text-right">
                 <span className="font-bold">{row.rating}</span>

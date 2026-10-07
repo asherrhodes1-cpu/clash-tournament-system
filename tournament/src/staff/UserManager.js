@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchAllUsers, removeUser } from '../api/users';
+import { fetchAllUsers, removeUser, renameUser } from '../api/users';
+import { setGoldName } from '../api/nameStyles';
+import PlayerName, { useGoldNames, hasGoldName } from '../PlayerName';
 
 const INPUT = 'bg-gray-700 border border-gray-600 rounded px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-white';
 const PAGE = 50;
@@ -19,7 +21,7 @@ export function sortUsers(users, order) {
   return [...users].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '') || byName(a, b));
 }
 
-// Staff: search every account and remove ones with inappropriate names.
+// Staff: search every account, rename it, give it a golden name, or remove it.
 export default function UserManager({ currentUser, onViewProfile }) {
   const [users, setUsers] = useState(null);
   const [search, setSearch] = useState('');
@@ -28,6 +30,7 @@ export default function UserManager({ currentUser, onViewProfile }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [removing, setRemoving] = useState(null);
+  const goldNames = useGoldNames();
 
   const load = async () => {
     setError('');
@@ -69,13 +72,47 @@ export default function UserManager({ currentUser, onViewProfile }) {
     }
   };
 
+  const rename = async (user) => {
+    const typed = window.prompt(
+      `New username for "${user.username}"?\n\nLetters, numbers, _ . and - only, at least 3 characters. They'll be signed out and log back in with the new name (same password).`,
+      user.username
+    );
+    if (typed == null || typed.trim() === user.username) return;
+    setError('');
+    setMessage('');
+    setRemoving(user.id);
+    try {
+      const { to, tournaments, matches: matchCount } = await renameUser(user.id, typed);
+      setUsers((list) => list.map((u) => (u.id === user.id ? { ...u, username: to, usernameLower: to.toLowerCase() } : u)));
+      setMessage(`Renamed ${user.username} to ${to}${tournaments || matchCount ? ` (updated in ${tournaments} tournament${tournaments === 1 ? '' : 's'} and ${matchCount} match${matchCount === 1 ? '' : 'es'})` : ''}. They need to log in again with the new name.`);
+    } catch (err) {
+      setError(err.message || 'Couldn\'t rename that account.');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  const toggleGold = async (user) => {
+    const on = !hasGoldName(goldNames, user.username);
+    setError('');
+    setMessage('');
+    try {
+      await setGoldName(user.username, on);
+      setMessage(on ? `${user.username} now has a golden name.` : `${user.username}'s golden name was taken away.`);
+    } catch (err) {
+      setError(err.message || 'Couldn\'t change that.');
+    }
+  };
+
+  const SMALL_BUTTON = 'border border-gray-600 hover:border-white px-3 py-1 rounded text-sm transition disabled:opacity-50';
+
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
       <div>
         <h2 className="text-2xl font-bold">Users</h2>
         <p className="text-sm text-gray-400">
-          Search every account by username or Clash tag, and remove any with an inappropriate name. Removing deletes
-          the account for good and blocks the name from being used again.
+          Search every account by username or Clash tag. Rename one, give it a shimmering golden name, or remove it -
+          removing deletes the account for good and blocks the name from being used again.
         </p>
       </div>
 
@@ -111,7 +148,7 @@ export default function UserManager({ currentUser, onViewProfile }) {
               <li key={user.id} className="py-2 flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <button onClick={() => onViewProfile(user.username)} className="font-bold hover:underline break-all text-left">
-                    {user.username}
+                    <PlayerName name={user.username} />
                   </button>
                   {user.isStaff && <span className="ml-2 text-xs font-bold">[STAFF]</span>}
                   <div className="text-xs text-gray-400">
@@ -120,17 +157,25 @@ export default function UserManager({ currentUser, onViewProfile }) {
                     {user.createdAt && ` · joined ${new Date(user.createdAt).toLocaleDateString()}`}
                   </div>
                 </div>
-                {user.isStaff || user.id === currentUser.uid ? (
-                  <span className="text-xs text-gray-500">{user.id === currentUser.uid ? 'You' : 'Staff - can\'t be removed here'}</span>
-                ) : (
-                  <button
-                    onClick={() => remove(user)}
-                    disabled={removing !== null}
-                    className="border border-red-500 text-red-400 hover:bg-red-600 hover:text-white hover:border-red-600 px-3 py-1 rounded text-sm transition disabled:opacity-50"
-                  >
-                    {removing === user.id ? 'Removing...' : 'Remove'}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={() => toggleGold(user)} disabled={removing !== null} className={SMALL_BUTTON}>
+                    {hasGoldName(goldNames, user.username) ? 'Remove gold name' : 'Gold name'}
                   </button>
-                )}
+                  <button onClick={() => rename(user)} disabled={removing !== null} className={SMALL_BUTTON}>
+                    {removing === user.id ? 'Working...' : 'Rename'}
+                  </button>
+                  {user.isStaff || user.id === currentUser.uid ? (
+                    <span className="text-xs text-gray-500">{user.id === currentUser.uid ? 'You' : 'Staff'}</span>
+                  ) : (
+                    <button
+                      onClick={() => remove(user)}
+                      disabled={removing !== null}
+                      className="border border-red-500 text-red-400 hover:bg-red-600 hover:text-white hover:border-red-600 px-3 py-1 rounded text-sm transition disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

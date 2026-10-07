@@ -1,6 +1,7 @@
 import { matchesSearch, sortUsers } from '../staff/UserManager';
 
 // Only the search and sort helpers are under test - no Firebase needed.
+jest.mock('../api/nameStyles', () => ({ subscribeToGoldNames: () => () => {}, setGoldName: async () => {} }));
 jest.mock('../api/users', () => ({}));
 
 const users = [

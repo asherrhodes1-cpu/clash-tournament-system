@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import PlayerName from './PlayerName';
 import { MessageCircle, Users, Trophy, LogOut, Menu, X, Send, CheckCircle, AlertCircle, ZoomIn, ZoomOut } from 'lucide-react';
 import { signUp, logIn, logOut, subscribeToAuthState, adminResetPassword } from './api/auth';
 import {
@@ -1352,7 +1353,7 @@ export default function TournamentApp() {
                   <>
                     <div className="text-sm text-gray-400 max-w-[11rem]">
                       <div className="flex items-baseline gap-2">
-                        <span className="truncate">{user.username}</span>
+                        <span className="truncate"><PlayerName name={user.username} /></span>
                         {user.isStaff && <span className="text-white font-bold shrink-0">[STAFF]</span>}
                       </div>
                       <div className="text-xs text-gray-500">{user.clashTag}</div>
@@ -2313,7 +2314,7 @@ function ProfilePage({ username, currentUser, tournaments, onViewProfile, onBack
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-3xl font-bold">{username}</h1>
+            <h1 className="text-3xl font-bold"><PlayerName name={username} /></h1>
             <p className="text-gray-400">{profile?.clashTag}</p>
             {profile?.isStaff && <span className="text-white font-bold text-xs">[STAFF]</span>}
           </div>
@@ -4334,7 +4335,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
         <div className="flex items-center gap-2 flex-wrap">
           <div className={isPlayer1Winner ? 'bg-amber-400/10 border border-amber-400/40 rounded px-2 py-1' : isPlayer2Winner ? 'opacity-60' : ''}>
             <button onClick={() => onViewProfile(match.player1)} className={`font-bold hover:underline ${isPlayer1Winner ? 'text-amber-300' : ''}`}>
-              {isPlayer1Winner && '🏆 '}{match.player1}
+              {isPlayer1Winner && '🏆 '}<PlayerName name={match.player1} />
             </button>
             <div className={`text-xs ${isPlayer1Winner ? 'text-amber-300/70' : 'text-gray-400'}`}>{match.player1Tag}</div>
             {match.player1Ready && match.status === 'pending' && <div className="text-xs text-green-400 font-bold">✓ Ready</div>}
@@ -4343,7 +4344,7 @@ function MatchCard({ match, user, tournament, onSelectMatch, onPlayerReady, onFl
           <span className="text-gray-400">vs</span>
           <div className={isPlayer2Winner ? 'bg-amber-400/10 border border-amber-400/40 rounded px-2 py-1' : isPlayer1Winner ? 'opacity-60' : ''}>
             <button onClick={() => onViewProfile(match.player2)} className={`font-bold hover:underline ${isPlayer2Winner ? 'text-amber-300' : ''}`} disabled={match.player2 === 'BYE'}>
-              {isPlayer2Winner && '🏆 '}{match.player2}
+              {isPlayer2Winner && '🏆 '}<PlayerName name={match.player2} />
             </button>
             <div className={`text-xs ${isPlayer2Winner ? 'text-amber-300/70' : 'text-gray-400'}`}>{match.player2Tag}</div>
             {match.player2Ready && match.status === 'pending' && <div className="text-xs text-green-400 font-bold">✓ Ready</div>}
