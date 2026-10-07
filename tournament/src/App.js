@@ -1286,6 +1286,7 @@ export default function TournamentApp() {
             setCurrentPage('login');
           }}
           onLogout={handleLogout}
+          onStaffDashboard={() => setCurrentPage('staff_dashboard')}
         />
       ) : (
       <nav className="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
@@ -1492,6 +1493,7 @@ export default function TournamentApp() {
             onEnter={() => setCurrentPage('dashboard')}
             onPlayLadder={() => setCurrentPage('ladder')}
             onWatchLive={() => setCurrentPage('live')}
+            onStaffDashboard={currentUser?.isStaff ? () => setCurrentPage('staff_dashboard') : null}
           />
         )}
 
@@ -1702,7 +1704,7 @@ export default function TournamentApp() {
 // PAGE COMPONENTS
 // ============================================================================
 
-function LandingPage({ onEnter, onPlayLadder, onWatchLive }) {
+function LandingPage({ onEnter, onPlayLadder, onWatchLive, onStaffDashboard }) {
   return (
     <div className="text-center max-w-3xl mx-auto mt-20">
       <img
@@ -1730,6 +1732,14 @@ function LandingPage({ onEnter, onPlayLadder, onWatchLive }) {
           LIVE
         </button>
       </div>
+      {onStaffDashboard && (
+        <button
+          onClick={onStaffDashboard}
+          className="mt-6 border border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition"
+        >
+          Staff Dashboard
+        </button>
+      )}
     </div>
   );
 }
