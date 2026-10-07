@@ -40,11 +40,25 @@ test('a free pick is only for players with no gems', () => {
   assert.throws(() => planBet({ balance: 0, existingAmount: 20, side: 'fail', amount: 0 }), /at least 1/);
 });
 
-test('winners get double back, losers nothing, free picks the small reward', () => {
-  assert.strictEqual(payoutFor({ side: 'fail', amount: 250 }, 'fail'), 500);
+test('a right bet pays the multiplier for its side, a wrong one nothing, free picks the small reward', () => {
+  // The streamer 6-stars about 90% of the time: backing that pays 1.3x,
+  // betting against it pays 10x.
+  assert.strictEqual(payoutFor({ side: 'succeed', amount: 1000 }, 'succeed'), 1300);
+  assert.strictEqual(payoutFor({ side: 'fail', amount: 250 }, 'fail'), 2500);
   assert.strictEqual(payoutFor({ side: 'fail', amount: 250 }, 'succeed'), 0);
   assert.strictEqual(payoutFor({ side: 'succeed', amount: 0 }, 'succeed'), FREE_PICK_REWARD);
   assert.strictEqual(payoutFor({ side: 'succeed', amount: 0 }, 'fail'), 0);
+});
+
+test('6 stars pays the same on both kinds of round', () => {
+  assert.strictEqual(ROUND_KINDS.stars.multipliers[6], ROUND_KINDS.outcome.multipliers.succeed);
+});
+
+test('a 1.3x payout is always whole Gold, rounded down, never a float slip', () => {
+  for (let amount = 1; amount <= 20000; amount++) {
+    assert.strictEqual(payoutFor({ side: 'succeed', amount }, 'succeed'), Math.floor((amount * 13) / 10));
+  }
+  assert.strictEqual(payoutFor({ side: 'succeed', amount: 1_000_000_000 }, 'succeed'), 1_300_000_000);
 });
 
 test('a timed round takes bets only until its countdown runs out', () => {
@@ -64,7 +78,7 @@ test('exact-stars rounds take bets on 0 to 6 stars and pay more for rarer counts
   assert.deepStrictEqual(planBet({ balance: 500, side: '4', amount: 100, sides }).bet, { side: '4', amount: 100 });
   assert.throws(() => planBet({ balance: 500, side: '7', amount: 100, sides }), /one of the options/);
   assert.throws(() => planBet({ balance: 500, side: 'succeed', amount: 100, sides }), /one of the options/);
-  assert.strictEqual(payoutFor({ side: '6', amount: 100 }, '6', multipliers), 200);
+  assert.strictEqual(payoutFor({ side: '6', amount: 100 }, '6', multipliers), 130);
   assert.strictEqual(payoutFor({ side: '0', amount: 100 }, '0', multipliers), 1000);
   assert.strictEqual(payoutFor({ side: '5', amount: 100 }, '6', multipliers), 0);
   assert.strictEqual(payoutFor({ side: '3', amount: 0 }, '3', multipliers), FREE_PICK_REWARD);

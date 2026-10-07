@@ -13,7 +13,7 @@ export const ROUND_KINDS = {
     sides: ['succeed', 'fail'],
     labels: { succeed: 'Succeed', fail: 'Fail' },
     results: { succeed: 'SUCCEEDED', fail: 'FAILED' },
-    multipliers: { succeed: 2, fail: 2 },
+    multipliers: { succeed: 1.3, fail: 10 },
     colors: { succeed: 'bg-green-600', fail: 'bg-red-600' },
   },
   stars: {
@@ -22,7 +22,7 @@ export const ROUND_KINDS = {
     sides: ['6', '5', '4', '3', '2', '1', '0'],
     labels: { 6: '6 stars', 5: '5 stars', 4: '4 stars', 3: '3 stars', 2: '2 stars', 1: '1 star', 0: '0 stars' },
     results: { 6: '6 STARS', 5: '5 STARS', 4: '4 STARS', 3: '3 STARS', 2: '2 STARS', 1: '1 STAR', 0: '0 STARS' },
-    multipliers: { 6: 2, 5: 3, 4: 4, 3: 5, 2: 6, 1: 8, 0: 10 },
+    multipliers: { 6: 1.3, 5: 3, 4: 4, 3: 5, 2: 6, 1: 8, 0: 10 },
     colors: {
       6: 'bg-green-600', 5: 'bg-lime-600', 4: 'bg-yellow-600', 3: 'bg-amber-600',
       2: 'bg-orange-600', 1: 'bg-red-600', 0: 'bg-red-800',

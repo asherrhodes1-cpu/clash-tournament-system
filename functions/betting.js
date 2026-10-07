@@ -15,12 +15,16 @@ const ROUND_KINDS = {
   // Will I 6-star it? Even money.
   outcome: {
     sides: ['succeed', 'fail'],
-    multipliers: { succeed: 2, fail: 2 },
+    // Priced for a streamer who 6-stars about 90% of the time. Fail pays
+    // 1 / its chance; Succeed is set a little generous on purpose (1.3x, where
+    // break-even would be 1.11x) so backing the streamer still feels worth it.
+    multipliers: { succeed: 1.3, fail: 10 },
   },
   // Exactly how many stars (Builder Base tops out at 6); rarer results pay more.
   stars: {
     sides: ['0', '1', '2', '3', '4', '5', '6'],
-    multipliers: { 6: 2, 5: 3, 4: 4, 3: 5, 2: 6, 1: 8, 0: 10 },
+    // 6 stars is the ~90% outcome, so it pays the same as Succeed above.
+    multipliers: { 6: 1.3, 5: 3, 4: 4, 3: 5, 2: 6, 1: 8, 0: 10 },
   },
 };
 
