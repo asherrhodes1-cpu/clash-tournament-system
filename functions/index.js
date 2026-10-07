@@ -541,6 +541,36 @@ exports.renameUser = onCall({ timeoutSeconds: 120 }, async (request) => {
 });
 
 // ============================================================================
+// setUserGold — staff-only. Sets a player's Gold balance to an exact amount
+// (0 to wipe it). Only what's in their balance changes: Gold they have riding
+// on an open bet, goal or window isn't touched, and comes back (or pays out)
+// as normal. Every change is logged in goldAdjustments.
+// ============================================================================
+const MAX_GOLD_BALANCE = 1000000000000;
+exports.setUserGold = onCall(async (request) => {
+  if (!request.auth?.token?.isStaff) throw new HttpsError('permission-denied', 'Staff only');
+  const { uid, gold } = request.data || {};
+  if (!uid || typeof uid !== 'string') throw new HttpsError('invalid-argument', 'Missing user');
+  if (!Number.isInteger(gold) || gold < 0 || gold > MAX_GOLD_BALANCE) {
+    throw new HttpsError('invalid-argument', 'Gold has to be a whole number, 0 or more');
+  }
+
+  const userSnap = await db.collection('users').doc(uid).get();
+  if (!userSnap.exists) throw new HttpsError('not-found', 'That account no longer exists');
+  const username = userSnap.data().username || null;
+  const by = request.auth.token.username || request.auth.uid;
+  const balanceRef = db.collection('gemBalances').doc(uid);
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(balanceRef);
+    const from = snap.exists ? snap.data().gems : STARTING_GEMS;
+    tx.set(balanceRef, { username, gems: gold }, { merge: true });
+    tx.set(db.collection('goldAdjustments').doc(), { uid, username, from, to: gold, by, at: Date.now() });
+    return { username, from, to: gold };
+  });
+});
+
+// ============================================================================
 // fetchClashPlayer — looks up a player's stats from the real Clash of Clans
 // API. Supercell whitelists API keys by IP and Cloud Functions have no fixed
 // outbound IP, so this calls a small relay (a droplet with a static IP) that

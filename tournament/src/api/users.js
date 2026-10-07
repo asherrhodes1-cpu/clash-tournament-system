@@ -22,12 +22,18 @@ export async function createDiscordLinkCode() {
 }
 
 // Staff: every account, for the user search - [{ id (uid), username,
-// clashTag, createdAt, isStaff, clashVerified, discordId }]. Loaded once
+// clashTag, createdAt, isStaff, clashVerified, discordId, gold }]. Loaded once
 // on demand rather than kept live; names are matched in the browser so a
 // search can find text anywhere in a name, not just at the start.
 export async function fetchAllUsers() {
-  const snap = await getDocs(collection(db, 'users'));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const [users, balances] = await Promise.all([
+    getDocs(collection(db, 'users')),
+    getDocs(collection(db, 'gemBalances')),
+  ]);
+  // `gold` is their Live-section balance, or null if they've never used
+  // Gold (they'd start with the standard amount the first time they do).
+  const gold = Object.fromEntries(balances.docs.map((d) => [d.id, d.data().gems]));
+  return users.docs.map((d) => ({ id: d.id, ...d.data(), gold: gold[d.id] ?? null }));
 }
 
 const removeUserCallable = httpsCallable(functions, 'removeUser');
@@ -52,6 +58,21 @@ const renameUserCallable = httpsCallable(functions, 'renameUser');
 export async function renameUser(uid, newUsername) {
   try {
     return (await renameUserCallable({ uid, newUsername })).data;
+  } catch (err) {
+    if (err.code === 'functions/internal' || err.code === 'functions/unavailable') {
+      throw new Error('Couldn\'t reach the server - try again in a moment.');
+    }
+    throw err;
+  }
+}
+
+const setUserGoldCallable = httpsCallable(functions, 'setUserGold');
+
+// Staff: set a player's Gold balance to an exact amount (see setUserGold in
+// functions/index.js). Resolves to { username, from, to }.
+export async function setUserGold(uid, gold) {
+  try {
+    return (await setUserGoldCallable({ uid, gold })).data;
   } catch (err) {
     if (err.code === 'functions/internal' || err.code === 'functions/unavailable') {
       throw new Error('Couldn\'t reach the server - try again in a moment.');

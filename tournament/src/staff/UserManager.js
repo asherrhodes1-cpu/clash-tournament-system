@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchAllUsers, removeUser, renameUser } from '../api/users';
+import { fetchAllUsers, removeUser, renameUser, setUserGold } from '../api/users';
 import { setGoldName } from '../api/nameStyles';
 import PlayerName, { useGoldNames, hasGoldName } from '../PlayerName';
 
@@ -14,10 +14,19 @@ export function matchesSearch(user, search) {
   return (user.username || '').toLowerCase().includes(q) || (user.clashTag || '').toLowerCase().includes(q);
 }
 
-// Newest accounts first (a bad name is usually a recent one), or A to Z.
+// What a "set Gold" entry means: a whole number, 0 or more, commas and
+// spaces allowed ("1,000,000"). null if it isn't one.
+export function parseGold(text) {
+  const cleaned = String(text ?? '').replace(/[,\s]/g, '');
+  return /^\d+$/.test(cleaned) ? Number(cleaned) : null;
+}
+
+// Newest accounts first (a bad name is usually a recent one), A to Z, or
+// richest first (players who've never used Gold last).
 export function sortUsers(users, order) {
   const byName = (a, b) => (a.username || '').localeCompare(b.username || '', undefined, { sensitivity: 'base' });
   if (order === 'name') return [...users].sort(byName);
+  if (order === 'gold') return [...users].sort((a, b) => (b.gold ?? -Infinity) - (a.gold ?? -Infinity) || byName(a, b));
   return [...users].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '') || byName(a, b));
 }
 
@@ -92,6 +101,31 @@ export default function UserManager({ currentUser, onViewProfile }) {
     }
   };
 
+  const setGold = async (user) => {
+    const typed = window.prompt(
+      `Set ${user.username}'s Gold to how much?\n\nThey have ${user.gold == null ? 'never used Gold (so the standard 1,000)' : user.gold.toLocaleString('en-US')} now. Enter 0 to wipe it.`,
+      '0'
+    );
+    if (typed == null) return;
+    const gold = parseGold(typed);
+    if (gold == null) {
+      setError('Enter a whole number, 0 or more.');
+      return;
+    }
+    setError('');
+    setMessage('');
+    setRemoving(user.id);
+    try {
+      const { from, to } = await setUserGold(user.id, gold);
+      setUsers((list) => list.map((u) => (u.id === user.id ? { ...u, gold: to } : u)));
+      setMessage(`${user.username}'s Gold: ${from.toLocaleString('en-US')} -> ${to.toLocaleString('en-US')}.`);
+    } catch (err) {
+      setError(err.message || 'Couldn\'t change that balance.');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
   const toggleGold = async (user) => {
     const on = !hasGoldName(goldNames, user.username);
     setError('');
@@ -111,8 +145,8 @@ export default function UserManager({ currentUser, onViewProfile }) {
       <div>
         <h2 className="text-2xl font-bold">Users</h2>
         <p className="text-sm text-gray-400">
-          Search every account by username or Clash tag. Rename one, give it a shimmering golden name, or remove it -
-          removing deletes the account for good and blocks the name from being used again.
+          Search every account by username or Clash tag. Set a player's Gold, rename them, give them a shimmering
+          golden name, or remove them - removing deletes the account for good and blocks the name from being used again.
         </p>
       </div>
 
@@ -127,6 +161,7 @@ export default function UserManager({ currentUser, onViewProfile }) {
         <select value={order} onChange={(e) => setOrder(e.target.value)} className={INPUT} aria-label="Sort users">
           <option value="newest">Newest first</option>
           <option value="name">A to Z</option>
+          <option value="gold">Most Gold</option>
         </select>
         <button onClick={load} className="border border-gray-600 hover:border-white px-4 py-2 rounded transition">Refresh</button>
       </div>
@@ -156,10 +191,17 @@ export default function UserManager({ currentUser, onViewProfile }) {
                     {user.clashTag && !user.clashVerified && ' (unverified)'}
                     {user.createdAt && ` · joined ${new Date(user.createdAt).toLocaleDateString()}`}
                   </div>
+                  <div className="text-xs text-gray-300 flex items-center gap-1">
+                    <img src="/gold.png" alt="Gold" className="w-3.5 h-3.5 object-contain" />
+                    {user.gold == null ? 'Never used Gold' : user.gold.toLocaleString('en-US')}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <button onClick={() => toggleGold(user)} disabled={removing !== null} className={SMALL_BUTTON}>
                     {hasGoldName(goldNames, user.username) ? 'Remove gold name' : 'Gold name'}
+                  </button>
+                  <button onClick={() => setGold(user)} disabled={removing !== null} className={SMALL_BUTTON}>
+                    Set Gold
                   </button>
                   <button onClick={() => rename(user)} disabled={removing !== null} className={SMALL_BUTTON}>
                     {removing === user.id ? 'Working...' : 'Rename'}

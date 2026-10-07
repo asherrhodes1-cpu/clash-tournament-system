@@ -1,4 +1,4 @@
-import { matchesSearch, sortUsers } from '../staff/UserManager';
+import { matchesSearch, sortUsers, parseGold } from '../staff/UserManager';
 
 // Only the search and sort helpers are under test - no Firebase needed.
 jest.mock('../api/nameStyles', () => ({ subscribeToGoldNames: () => () => {}, setGoldName: async () => {} }));
@@ -28,4 +28,24 @@ test('newest accounts come first by default, or A to Z', () => {
   expect(sortUsers(users, 'name').map((u) => u.username)).toEqual(['asher', 'BuilderBoss', 'xX_badWord_Xx']);
   // An account with no join date sorts last, not first.
   expect(sortUsers([...users, { id: '4', username: 'old' }], 'newest').at(-1).username).toBe('old');
+});
+
+test('richest first puts players who have never used Gold last', () => {
+  const list = [
+    { id: '1', username: 'poor', gold: 0 },
+    { id: '2', username: 'never', gold: null },
+    { id: '3', username: 'rich', gold: 5000000 },
+    { id: '4', username: 'debt', gold: -200 },
+  ];
+  expect(sortUsers(list, 'gold').map((u) => u.username)).toEqual(['rich', 'poor', 'debt', 'never']);
+});
+
+test('a Gold amount can be typed with commas, but must be a whole number of 0 or more', () => {
+  expect(parseGold('0')).toBe(0);
+  expect(parseGold('1,000,000')).toBe(1000000);
+  expect(parseGold(' 2 500 ')).toBe(2500);
+  expect(parseGold('')).toBeNull();
+  expect(parseGold('-5')).toBeNull();
+  expect(parseGold('12.5')).toBeNull();
+  expect(parseGold('lots')).toBeNull();
 });
