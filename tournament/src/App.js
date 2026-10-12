@@ -796,7 +796,13 @@ function StaffDashboard({ flags, onUpdateFlagStatus, onAddResponse }) {
   return (
     <div className="space-y-6">
       <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-        <h1 className="text-3xl font-bold mb-4">Staff Dashboard</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h1 className="text-3xl font-bold">Staff Dashboard</h1>
+          {/* A real link, not a page switch: the control page loads on its own outside this app. */}
+          <a href="/overlay-control" className="px-4 py-2 rounded border border-white bg-neutral-800 hover:bg-neutral-700 font-bold">
+            Stream overlays
+          </a>
+        </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-gray-700 rounded p-4">
@@ -1349,6 +1355,15 @@ export default function TournamentApp() {
                     Staff Dashboard
                   </button>
                 )}
+                {/* A real link: the overlay controls are a staff-only page of their own. */}
+                {user.isStaff && (
+                  <a
+                    href="/overlay-control"
+                    className="border border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded text-sm transition"
+                  >
+                    Overlays
+                  </a>
+                )}
                 <JoinDiscordButton className="px-2.5 py-1.5">Discord</JoinDiscordButton>
                 {currentUser ? (
                   <>
@@ -1454,6 +1469,14 @@ export default function TournamentApp() {
                       >
                         Staff Dashboard
                       </button>
+                    )}
+                    {user.isStaff && (
+                      <a
+                        href="/overlay-control"
+                        className="block w-full text-left border-2 border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded"
+                      >
+                        Overlays
+                      </a>
                     )}
                     {currentUser ? (
                       <>
@@ -1733,12 +1756,20 @@ function LandingPage({ onEnter, onPlayLadder, onWatchLive, onStaffDashboard }) {
         </button>
       </div>
       {onStaffDashboard && (
-        <button
-          onClick={onStaffDashboard}
-          className="mt-6 border border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition"
-        >
-          Staff Dashboard
-        </button>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <button
+            onClick={onStaffDashboard}
+            className="border border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition"
+          >
+            Staff Dashboard
+          </button>
+          <a
+            href="/overlay-control"
+            className="border border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition"
+          >
+            Overlays
+          </a>
+        </div>
       )}
     </div>
   );

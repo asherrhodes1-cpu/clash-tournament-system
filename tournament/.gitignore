@@ -31,3 +31,6 @@ Thumbs.db
 .idea
 *.swp
 *.swo
+
+# Written at build time: which Firebase project the stream overlays read
+/public/overlays/config.js
