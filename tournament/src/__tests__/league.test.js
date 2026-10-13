@@ -96,7 +96,7 @@ test('a quiz answer is given once, and the result shows when it is revealed', as
   // Their answer is already in, so the buttons are off and the result is shown.
   act(() => api.subscribeToMyAnswer.mock.calls.at(-1)[2](1));
   expect(button('6').disabled).toBe(true);
-  expect(host.textContent).toMatch(/Correct! \+250 points/);
+  expect(host.textContent).toMatch(/Correct! \+250 trophies/);
   expect(button('6').textContent).toMatch(/75% picked this · correct/);
 });
 
@@ -153,6 +153,29 @@ test('staff open voting for the match on the overlays, then lock it as it starts
   expect(api.saveLeague.mock.calls.at(-1)[0].voting.status).toBe('locked');
 });
 
+test('when the match ends staff say who won, and those who picked them get trophies once', async () => {
+  mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true, voteReward: 150, voting: { ...vote('locked'), reward: 150 } });
+  act(() => api.subscribeToVotes.mock.calls.at(-1)[1]([{ uid: 'a', username: 'Ann', side: 'r' }, { uid: 'b', username: 'Bo', side: 'b' }, { uid: 'c', username: 'Cy', side: 'b' }]));
+  await click('J3fri won');
+  expect(api.awardPoints).toHaveBeenCalledWith([{ uid: 'b', username: 'Bo' }, { uid: 'c', username: 'Cy' }], 150);
+  expect(api.saveLeague.mock.calls.at(-1)[0].voting).toMatchObject({ status: 'locked', winner: 'b' });
+  act(() => root.unmount());
+  host.remove();
+
+  // Once it has been paid there is nothing left to press but clearing it.
+  mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true, voting: { ...vote('locked'), winner: 'b' } });
+  expect(button('J3fri won')).toBeUndefined();
+  expect(host.textContent).toMatch(/J3fri won, and those who picked them were given 100 trophies/);
+});
+
+test('a viewer sees who won and what their pick earned', () => {
+  mount(() => <LeaguePage user={viewer} onLogin={() => {}} onHome={() => {}} />, { active: true, voting: { ...vote('locked'), winner: 'b', reward: 150 } });
+  act(() => api.subscribeToMyVote.mock.calls.at(-1)[2]('b'));
+  const result = host.querySelector('[aria-label="Match result"]');
+  expect(result.textContent).toMatch(/J3fri won the match/);
+  expect(result.textContent).toMatch(/You picked right: \+150/);
+});
+
 test('vote totals are counted from the votes and passed to the overlays', async () => {
   jest.useFakeTimers();
   const onVotes = jest.fn();
@@ -179,7 +202,7 @@ test('a prepared question goes up without its answer, which is revealed with poi
   mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true, quiz: { ...up, status: 'closed' } });
   act(() => api.subscribeToQuestions.mock.calls.at(-1)[0]({ questions: [prepared], up: { quizId: up.id, correct: 1 } }));
   act(() => api.subscribeToAnswers.mock.calls.at(-1)[1]([{ uid: 'a', username: 'Ann', choice: 1 }, { uid: 'b', username: 'Bo', choice: 0 }, { uid: 'c', username: 'Cy', choice: 1 }]));
-  await click('Reveal the answer and give points');
+  await click('Reveal the answer and give trophies');
   expect(api.awardPoints).toHaveBeenCalledWith([{ uid: 'a', username: 'Ann' }, { uid: 'c', username: 'Cy' }], 250);
   expect(api.saveLeague.mock.calls.at(-1)[0].quiz).toMatchObject({ status: 'revealed', correct: 1, counts: [1, 2, 0] });
 });

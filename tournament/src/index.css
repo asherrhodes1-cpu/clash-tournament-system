@@ -223,9 +223,9 @@ nav.bg-gray-800 {
 /* The points, on a tab of the frame's own stone. */
 .league-tab {
   display: inline-block;
-  padding: 2px 12px 3px;
-  border-radius: 10px;
-  font-size: 0.8rem;
+  padding: 4px 16px 5px;
+  border-radius: 12px;
+  font-size: 1.15rem;
   letter-spacing: 0.04em;
   color: #fff;
   background: linear-gradient(180deg, #7d8fd0, #56669f 45%, #404c80);

@@ -3,43 +3,24 @@ import PlayerName from '../PlayerName';
 import {
   answerQuiz, castVote, subscribeToLeague, subscribeToLeagueScores, subscribeToMyAnswer, subscribeToMyScore, subscribeToMyVote,
 } from '../api/league';
-import { parseYouTubeId } from '../live/liveUtils';
+import StreamLayout from '../live/StreamLayout';
 import { voteShares } from './leagueState';
 
 // The page wears the stream overlays' look (see index.css): the caster cams'
 // stone frame around each part, over the sky the whole site sits on.
 const FRAME = 'league-stone';
 const INSET = 'league-inset p-4 sm:p-5';
-const LOGIN = 'border-2 border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded-lg font-bold transition';
+// An amount of trophies - what the finals section pays out for picking a
+// match's winner and for a right quiz answer - with the trophy in front:
+// the blue hammer, or the purple one for someone in the leaderboard's top ten.
+const Trophies = ({ amount, top = false }) => (
+  <span className="inline-flex items-center gap-1 whitespace-nowrap align-middle">
+    <img src={top ? '/badges/trophy-top.png' : '/badges/trophy.png'} alt={top ? 'Top ten trophies' : 'Trophies'} className="w-[1.25em] h-[1.25em] object-contain" />
+    {amount.toLocaleString('en-US')}
+  </span>
+);
 
-// The broadcast itself, so the finals can be watched from the site. The
-// questions are asked on it, by the stream's own overlay.
-function Stream({ videoUrl }) {
-  const videoId = parseYouTubeId(videoUrl);
-  if (!videoId) {
-    return (
-      <div className={FRAME}>
-        <div className="league-inset p-10 text-center">
-          <p className="text-xl font-bold mb-2">The stream will show here</p>
-          <p className="league-note">It appears as soon as the broadcast starts.</p>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className={FRAME}>
-      <div className="league-inset overflow-hidden" style={{ paddingTop: '56.25%' }}>
-        <iframe
-          className="absolute inset-0 w-full h-full"
-          src={`https://www.youtube.com/embed/${videoId}?rel=0&playsinline=1`}
-          title="Builder League finals stream"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
-    </div>
-  );
-}
+const LOGIN = 'border-2 border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded-lg font-bold transition';
 
 // The top of a set of answer buttons, as on the overlay: what it is on a
 // stone tab in the corner, and what has become of the viewer's go in the middle.
@@ -76,7 +57,7 @@ function VoteBar({ voting, user, onLogin }) {
   return (
     <section className={`league-pop ${FRAME}`} aria-label="Match vote">
       <div className={INSET}>
-      <Prompt label="Who wins?" note={error || (user.isGuest ? '' : mine ? 'Your pick is in. You can change it until the match starts.' : 'Pick a side before the match starts.')}>
+      <Prompt label={<>Who wins? · <Trophies amount={voting.reward} /></>} note={error || (user.isGuest ? '' : mine ? 'Your pick is in. You can change it until the match starts.' : 'Pick the winner before the match starts to win trophies.')}>
         {user.isGuest && <button type="button" onClick={onLogin} className={LOGIN}>Log in to vote</button>}
       </Prompt>
       <div className="grid grid-cols-2 gap-3">
@@ -94,6 +75,28 @@ function VoteBar({ voting, user, onLogin }) {
           </button>
         ))}
       </div>
+      </div>
+    </section>
+  );
+}
+
+// Who won the match that was voted on, once staff have said, and what it
+// earned this viewer. There until staff clear the vote.
+function VoteResult({ voting, user }) {
+  const [mine, setMine] = useState(null);
+  useEffect(() => {
+    setMine(null);
+    if (!user.uid) return undefined;
+    return subscribeToMyVote(voting.matchId, user.uid, setMine);
+  }, [voting.matchId, user.uid]);
+  const winner = voting.winner === 'r' ? voting.red : voting.blue;
+  return (
+    <section className={`league-pop ${FRAME}`} aria-label="Match result">
+      <div className={`${INSET} text-center`}>
+        <p className="text-xl sm:text-2xl font-bold break-words">{winner} won the match</p>
+        <p className="league-note mt-1" role="status">
+          {mine == null ? 'Vote on the next match to win trophies.' : mine === voting.winner ? <>You picked right: +<Trophies amount={voting.reward} /></> : 'Not your pick this time.'}
+        </p>
       </div>
     </section>
   );
@@ -123,7 +126,7 @@ function QuizBar({ quiz, user, onLogin }) {
     }
   };
   const note = error
-    || (revealed ? (answered ? (mine === quiz.correct ? `Correct! +${quiz.points} points.` : 'Not this time.') : 'The answer is in.')
+    || (revealed ? (answered ? (mine === quiz.correct ? `Correct! +${quiz.points} trophies.` : 'Not this time.') : 'The answer is in.')
       : answered ? 'Locked in. The answer is coming up.'
         : open ? (user.isGuest ? '' : 'One answer each, and it can\'t be changed.')
           : 'Answers are closed. The answer is coming up.');
@@ -131,7 +134,7 @@ function QuizBar({ quiz, user, onLogin }) {
   return (
     <section className={`league-pop ${FRAME}`} aria-label="Quiz question">
       <div className={INSET}>
-      <Prompt label={`${quiz.points} points`} note={note}>
+      <Prompt label={<Trophies amount={quiz.points} />} note={note}>
         {user.isGuest && open && <button type="button" onClick={onLogin} className={LOGIN}>Log in to answer</button>}
       </Prompt>
       {/* Also asked on the stream, which runs a little behind these buttons. */}
@@ -170,15 +173,15 @@ function Leaderboard({ user }) {
     <section className={FRAME}>
       <div className={INSET}>
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-        <h2 className="text-2xl font-bold">Quiz leaderboard</h2>
-        {!user.isGuest && <span className="league-tab">Your points: {mine}</span>}
+        <h2 className="text-2xl font-bold">Most trophies</h2>
+        {!user.isGuest && <span className="league-tab">Yours: <Trophies amount={mine} top={top.some((row) => row.uid === user.uid)} /></span>}
       </div>
-      {top.length === 0 ? <p className="league-note">No points yet. Answer a quiz question to get on the board.</p> : (
+      {top.length === 0 ? <p className="league-note">No trophies yet. Pick a match's winner or answer a quiz question to get on the board.</p> : (
         <ol className="space-y-1">
           {top.map((row, i) => (
             <li key={row.uid} className={`league-answer ${row.uid === user.uid ? 'is-picked' : ''} flex justify-between gap-3 px-3 py-2`}>
               <span className="min-w-0 truncate"><b className="mr-2">{i + 1}.</b><PlayerName name={row.username} /></span>
-              <b>{row.points}</b>
+              <b><Trophies amount={row.points} top /></b>
             </li>
           ))}
         </ol>
@@ -191,7 +194,8 @@ function Leaderboard({ user }) {
 // /league: the Builder League finals section. Only there while staff have
 // switched it on for a broadcast. The stream plays on the page and asks the
 // questions; the buttons to answer them come up under it when staff put a
-// vote or a quiz question up, and go again afterwards.
+// vote or a quiz question up, and go again afterwards. Both win trophies;
+// chat and the trophy leaderboard sit to the stream's right.
 export default function LeaguePage({ user, onLogin, onHome }) {
   // undefined until it has loaded.
   const [league, setLeague] = useState(undefined);
@@ -210,7 +214,7 @@ export default function LeaguePage({ user, onLogin, onHome }) {
 
   const { voting, quiz } = league;
   return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="space-y-6">
       <header className="flex flex-col items-center gap-2 text-center">
         <div className="flex items-center justify-center gap-3 sm:gap-4">
           <img src="/badges/builder-league.png" alt="" className="w-10 h-10 sm:w-20 sm:h-20 object-contain shrink-0" />
@@ -218,12 +222,19 @@ export default function LeaguePage({ user, onLogin, onHome }) {
         </div>
         {league.stage && <p className="league-round">{league.stage}</p>}
       </header>
-      <div className="space-y-4">
-        <Stream videoUrl={league.videoUrl} />
-        {quiz && <QuizBar quiz={quiz} user={user} onLogin={onLogin} />}
-        {voting?.status === 'open' && <VoteBar voting={voting} user={user} onLogin={onLogin} />}
-      </div>
-      <Leaderboard user={user} />
+      <StreamLayout
+        videoUrl={league.videoUrl}
+        title="Builder League finals stream"
+        empty={<><p className="text-xl font-bold mb-2">The stream will show here</p><p className="league-note">It appears as soon as the broadcast starts.</p></>}
+        below={(
+          <>
+            {quiz && <QuizBar quiz={quiz} user={user} onLogin={onLogin} />}
+            {voting?.status === 'open' && <VoteBar voting={voting} user={user} onLogin={onLogin} />}
+            {voting?.winner && <VoteResult voting={voting} user={user} />}
+          </>
+        )}
+        side={<Leaderboard user={user} />}
+      />
     </div>
   );
 }

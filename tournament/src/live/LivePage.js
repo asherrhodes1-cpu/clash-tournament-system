@@ -18,6 +18,7 @@ import {
 } from '../api/live';
 import {
   parseYouTubeId,
+  runningFeature,
   tallyBets,
   percentOf,
   formatGems,
@@ -33,6 +34,7 @@ import {
 import { Gems, Countdown, useNow, useHeldGems, Section } from './shared';
 import { useChallengeGoal, ChallengeGoalCard, StaffChallengePanel } from './ChallengeGoal';
 import Roulette from './Roulette';
+import StreamLayout from './StreamLayout';
 import { useGemDrop, GemDropCard, StaffGemDropPanel } from './GemDrop';
 import { useLifeRun, ExtraLivesCard, StaffLivesPanel } from './ExtraLives';
 
@@ -659,14 +661,41 @@ function StaffLivePanel({ state, user, children }) {
   );
 }
 
+// How long a result stays up after what it belongs to has finished.
+const RESULT_MS = 20000;
+
+// The one feature that is running, in the place under the video. When it
+// finishes it stays a little longer, so the result - the bet won, the
+// challenge picked - can be read, and then goes.
+function Running({ drop, round, lifeRun, goal, features }) {
+  const now = useNow(!!(drop || round || lifeRun || goal));
+  const running = runningFeature({ drop, round, lifeRun, goal }, now);
+  const [last, setLast] = useState(null);
+  useEffect(() => {
+    if (running) {
+      setLast(running);
+      return undefined;
+    }
+    const timer = setTimeout(() => setLast(null), RESULT_MS);
+    return () => clearTimeout(timer);
+  }, [running]);
+  const shown = running || last;
+  return shown && features[shown] ? <div key={shown} className="league-pop">{features[shown]}</div> : null;
+}
+
 export default function LivePage({ user, onLogin }) {
   const { state, round, bets } = useFeaturedRound();
   const { goal, donations } = useChallengeGoal(state.goalId);
   const { drop, claims } = useGemDrop(state.dropId);
   const { run: lifeRun, donors: lifeDonors } = useLifeRun(state.lifeRunId);
   const gems = useMyGems(user.uid);
-  const videoId = parseYouTubeId(state.videoUrl);
   const [tab, setTab] = useState('stream');
+  const features = {
+    drop: drop && <GemDropCard drop={drop} claims={claims} user={user} onLogin={onLogin} />,
+    bet: round && <BetCard round={round} bets={bets} user={user} gems={gems} onLogin={onLogin} />,
+    lives: lifeRun && <ExtraLivesCard run={lifeRun} donors={lifeDonors} user={user} gems={gems} onLogin={onLogin} />,
+    goal: goal && <ChallengeGoalCard goal={goal} donations={donations} user={user} gems={gems} onLogin={onLogin} />,
+  };
 
   const tabClass = (key) => `px-4 py-2 rounded font-bold transition ${
     tab === key ? 'bg-white text-black' : 'border border-gray-600 hover:border-white'
@@ -692,40 +721,15 @@ export default function LivePage({ user, onLogin }) {
 
       {tab === 'stream' && (
       <>
-      <div className="grid lg:grid-cols-3 gap-6 items-start">
-        <div className="lg:col-span-2">
-          {videoId ? (
-            <div className="relative w-full overflow-hidden rounded-lg border border-gray-700 bg-gray-900" style={{ paddingTop: '56.25%' }}>
-              <iframe
-                className="absolute inset-0 w-full h-full"
-                src={`https://www.youtube.com/embed/${videoId}?rel=0`}
-                title="Live stream"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          ) : (
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-10 text-center">
-              <p className="text-xl font-bold mb-2">We're not live right now</p>
-              <p className="text-gray-400">Check back during the next stream - betting opens here while we're on.</p>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          {drop && <GemDropCard drop={drop} claims={claims} user={user} onLogin={onLogin} />}
-          {round ? (
-            <BetCard round={round} bets={bets} user={user} gems={gems} onLogin={onLogin} />
-          ) : (
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 text-center text-gray-400">
-              No bet running. When an attack starts during the stream, bet your Gold on how it goes.
-            </div>
-          )}
-          {lifeRun && <ExtraLivesCard run={lifeRun} donors={lifeDonors} user={user} gems={gems} onLogin={onLogin} />}
-          {goal && <ChallengeGoalCard goal={goal} donations={donations} user={user} gems={gems} onLogin={onLogin} />}
-          <Leaderboard user={user} />
-        </div>
-      </div>
+      {/* What can be clicked comes up under the video, as the vote does on
+          the finals page: one thing at a time, and only while it is running. */}
+      <StreamLayout
+        videoUrl={state.videoUrl}
+        title="Live stream"
+        empty={<><p className="text-xl font-bold mb-2">We're not live right now</p><p className="league-note">Check back during the next stream - betting opens here while we're on.</p></>}
+        below={<Running drop={drop} round={round} lifeRun={lifeRun} goal={goal} features={features} />}
+        side={<Leaderboard user={user} />}
+      />
 
       {user.isStaff && (
         <StaffLivePanel state={state} user={user}>

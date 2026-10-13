@@ -4,7 +4,7 @@ import {
 } from '../api/league';
 import { parseYouTubeId } from '../live/liveUtils';
 import {
-  DEFAULT_POINTS, MAX_OPTIONS, asked, isReady, newId, quizWinners, soundQuestion, tallyAnswers, tallyVotes, voteShares,
+  DEFAULT_POINTS, DEFAULT_VOTE_REWARD, MAX_OPTIONS, asked, isReady, newId, quizWinners, soundQuestion, tallyAnswers, tallyVotes, voteShares, voteWinners,
 } from './leagueState';
 
 const CARD = 'bg-gray-800 rounded-lg border border-gray-700 p-5';
@@ -91,7 +91,18 @@ export function useLeagueControl(match, onVotes) {
 
   const openVoting = () => {
     onVotes(0, 0);
-    update({ voting: { matchId: newId(), red: match.red.name, blue: match.blue.name, status: 'open', redVotes: 0, blueVotes: 0 } }, 'Voting is open.');
+    update({ voting: { matchId: newId(), red: match.red.name, blue: match.blue.name, status: 'open', redVotes: 0, blueVotes: 0, reward: league.voteReward, winner: null } }, 'Voting is open.');
+  };
+  // Says who won the match: everyone who picked them is given the trophies, once.
+  const payVote = async (side) => {
+    if (!voting || voting.winner || busy) return;
+    setBusy(true);
+    const winners = voteWinners(votes, side);
+    await run(async () => {
+      await awardPoints(winners, voting.reward);
+      await saveLeague({ ...league, voting: { ...voting, status: 'locked', redVotes: tally.r, blueVotes: tally.b, winner: side } });
+    }, `${side === 'r' ? voting.red : voting.blue} won. ${winners.length} picked them and were given ${voting.reward} trophies.`);
+    setBusy(false);
   };
   const putUp = (question) => run(async () => {
     const up = asked(question);
@@ -106,7 +117,7 @@ export function useLeagueControl(match, onVotes) {
     await run(async () => {
       await awardPoints(winners, quiz.points);
       await saveLeague({ ...league, quiz: { ...quiz, status: 'revealed', correct, counts } });
-    }, `Revealed. ${winners.length} got it right and were given ${quiz.points} points.`);
+    }, `Revealed. ${winners.length} got it right and were given ${quiz.points} trophies.`);
     setBusy(false);
   };
   const saveBank = (questions) => run(() => saveQuestions({ questions, up: bank.up }), 'Questions saved.');
@@ -130,17 +141,25 @@ export function useLeagueControl(match, onVotes) {
 
         <section className={CARD}>
           <h2 className="text-xl font-bold mb-1">Match vote</h2>
-          <p className="text-sm text-gray-400 mb-3">Opening it asks "Who wins?" on the caster desk's vote bar and puts the two buttons under the stream. Lock it as the match starts and both go. The totals fill the overlays' audience vote bar by themselves.</p>
+          <p className="text-sm text-gray-400 mb-3">Opening it asks "Who wins?" on the caster desk's vote bar and puts the two buttons under the stream. Lock it as the match starts and both go. When the match ends, say who won: everyone who picked them gets trophies. The totals fill the overlays' audience vote bar by themselves.</p>
           {voting ? (
             <>
               <p className="font-bold text-lg mb-2">
                 {voting.red} {shares.r}% ({tally.r}) · {voting.blue} {shares.b}% ({tally.b})
               </p>
-              <p className="text-sm text-gray-300 mb-3">{voting.status === 'open' ? 'Voting is open.' : 'Voting is locked.'}</p>
+              <p className="text-sm text-gray-300 mb-3">
+                {voting.winner ? `${voting.winner === 'r' ? voting.red : voting.blue} won, and those who picked them were given ${voting.reward} trophies. Clear the vote before the next match.`
+                  : voting.status === 'open' ? `Voting is open. Picking the winner pays ${voting.reward} trophies.` : 'Voting is locked. When the match ends, say who won.'}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {voting.status === 'open'
-                  ? <button type="button" className={`${BIG} border-red-500`} onClick={() => update({ voting: { ...voting, status: 'locked' } }, 'Voting is locked.')}>Lock voting: the match has started</button>
-                  : <button type="button" className={BIG} onClick={() => update({ voting: { ...voting, status: 'open' } }, 'Voting is open again.')}>Reopen voting</button>}
+                {voting.status === 'open' && <button type="button" className={`${BIG} border-red-500`} onClick={() => update({ voting: { ...voting, status: 'locked' } }, 'Voting is locked.')}>Lock voting: the match has started</button>}
+                {voting.status !== 'open' && !voting.winner && (
+                  <>
+                    <button type="button" className={`${BIG} border-red-500`} disabled={busy} onClick={() => payVote('r')}>{voting.red} won: give {voting.reward} trophies</button>
+                    <button type="button" className={`${BIG} border-sky-400`} disabled={busy} onClick={() => payVote('b')}>{voting.blue} won: give {voting.reward} trophies</button>
+                    <button type="button" className={BIG} onClick={() => update({ voting: { ...voting, status: 'open' } }, 'Voting is open again.')}>Reopen voting</button>
+                  </>
+                )}
                 <button type="button" className={BIG} onClick={() => update({ voting: null }, 'The vote is cleared.')}>Clear the vote</button>
               </div>
             </>
@@ -166,11 +185,11 @@ export function useLeagueControl(match, onVotes) {
                 ))}
               </ul>
               <p className="text-sm text-gray-300 mb-3">
-                {quiz.status === 'open' ? `Taking answers. ${answers.length} in so far.` : quiz.status === 'closed' ? `Answers are closed. ${answers.length} came in.` : 'Revealed, and points given.'}
+                {quiz.status === 'open' ? `Taking answers. ${answers.length} in so far.` : quiz.status === 'closed' ? `Answers are closed. ${answers.length} came in.` : 'Revealed, and trophies given.'}
               </p>
               <div className="flex flex-wrap gap-2">
                 {quiz.status === 'open' && <button type="button" className={`${BIG} border-red-500`} onClick={() => update({ quiz: { ...quiz, status: 'closed' } }, 'Answers are closed.')}>Close answers</button>}
-                {quiz.status !== 'revealed' && <button type="button" className={`${BIG} border-white`} disabled={correct == null || busy} onClick={reveal}>Reveal the answer and give points</button>}
+                {quiz.status !== 'revealed' && <button type="button" className={`${BIG} border-white`} disabled={correct == null || busy} onClick={reveal}>Reveal the answer and give trophies</button>}
                 <button type="button" className={BIG} onClick={() => update({ quiz: null }, 'The question is down.')}>Take the question down</button>
               </div>
               {correct == null && quiz.status !== 'revealed' && <p className="text-sm text-amber-300 mt-3">The right answer for this question wasn't found, so it can't be revealed. Take it down and put it up again.</p>}
@@ -182,7 +201,7 @@ export function useLeagueControl(match, onVotes) {
               <div className="flex flex-col gap-2">
                 {bank.questions.map((question) => (
                   <button key={question.id} type="button" className={`${BIG} text-left`} disabled={!isReady(question)} onClick={() => putUp(question)}>
-                    {question.question || 'Untitled question'} <span className="font-normal text-gray-300">· {question.points} points</span>
+                    {question.question || 'Untitled question'} <span className="font-normal text-gray-300">· {question.points} trophies</span>
                   </button>
                 ))}
               </div>
@@ -229,7 +248,7 @@ export function useLeagueControl(match, onVotes) {
                 </div>
               </div>
               <label className="block">
-                <span className={LABEL}>Points for a right answer</span>
+                <span className={LABEL}>Trophies for a right answer</span>
                 <input className={INPUT} inputMode="numeric" value={editing.points} onChange={(e) => setEditing({ ...editing, points: e.target.value.replace(/\D/g, '') })} placeholder={String(DEFAULT_POINTS)} />
               </label>
               <div className="flex flex-wrap gap-2">
@@ -282,8 +301,12 @@ export function useLeagueControl(match, onVotes) {
             />
             <span className="block text-sm text-gray-400 mt-1">The stream plays on the finals page, with the answer buttons under it.</span>
           </label>
-          <p className="text-sm text-gray-400 mb-3">Quiz points carry on through the broadcast. Clear them before a new one.</p>
-          <button type="button" className={`${BUTTON} border-red-500`} onClick={() => { if (window.confirm('Clear everyone\'s quiz points?')) run(resetLeagueScores, 'The leaderboard is cleared.'); }}>Clear the leaderboard</button>
+          <label className="block mb-4">
+            <span className={LABEL}>Trophies for picking a match's winner</span>
+            <input className={INPUT} inputMode="numeric" defaultValue={league.voteReward} placeholder={String(DEFAULT_VOTE_REWARD)} onBlur={(e) => { const voteReward = Number(e.target.value.replace(/\D/g, '')) || DEFAULT_VOTE_REWARD; if (voteReward !== league.voteReward) update({ voteReward }, 'Saved. It applies from the next vote you open.'); }} />
+          </label>
+          <p className="text-sm text-gray-400 mb-3">Trophies carry on through the broadcast. Clear them before a new one.</p>
+          <button type="button" className={`${BUTTON} border-red-500`} onClick={() => { if (window.confirm('Clear everyone\'s trophies?')) run(resetLeagueScores, 'The leaderboard is cleared.'); }}>Clear the leaderboard</button>
         </section>
     </>
   );

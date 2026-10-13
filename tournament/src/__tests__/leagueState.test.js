@@ -1,7 +1,7 @@
-import { asked, isReady, quizWinners, soundLeague, soundQuestion, tallyAnswers, tallyVotes, voteShares } from '../league/leagueState';
+import { voteWinners, asked, isReady, quizWinners, soundLeague, soundQuestion, tallyAnswers, tallyVotes, voteShares } from '../league/leagueState';
 
 test('with nothing saved the section is off, with no vote and no question', () => {
-  expect(soundLeague(undefined)).toEqual({ active: false, title: 'BUILDER LEAGUE', stage: 'FINAL 8', videoUrl: '', voting: null, quiz: null });
+  expect(soundLeague(undefined)).toEqual({ active: false, title: 'BUILDER LEAGUE', stage: 'FINAL 8', videoUrl: '', voteReward: 100, voting: null, quiz: null });
 });
 
 test('votes are counted by side and shown as shares that add up to 100', () => {
@@ -14,7 +14,11 @@ test('votes are counted by side and shown as shares that add up to 100', () => {
 
 test('a vote is open or locked, never anything else', () => {
   expect(soundLeague({ voting: { matchId: 'm1', red: 'MrSixStar', blue: 'J3fri', status: 'open', redVotes: 3, blueVotes: '2' } }).voting)
-    .toEqual({ matchId: 'm1', red: 'MrSixStar', blue: 'J3fri', status: 'open', redVotes: 3, blueVotes: 2 });
+    .toEqual({ matchId: 'm1', red: 'MrSixStar', blue: 'J3fri', status: 'open', redVotes: 3, blueVotes: 2, reward: 100, winner: null });
+  // A winner is only named once voting is locked, and those who picked them are found.
+  expect(soundLeague({ voting: { matchId: 'm1', status: 'open', winner: 'r' } }).voting.winner).toBeNull();
+  expect(soundLeague({ voteReward: 300, voting: { matchId: 'm1', status: 'locked', winner: 'b' } }).voting).toMatchObject({ winner: 'b', reward: 300 });
+  expect(voteWinners([{ uid: 'a', username: 'Ann', side: 'r' }, { uid: 'b', username: 'Bo', side: 'b' }], 'b')).toEqual([{ uid: 'b', username: 'Bo' }]);
   expect(soundLeague({ voting: { matchId: 'm1', status: 'whatever' } }).voting.status).toBe('locked');
   expect(soundLeague({ voting: { red: 'no id' } }).voting).toBeNull();
 });

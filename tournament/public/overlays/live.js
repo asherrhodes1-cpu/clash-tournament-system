@@ -46,8 +46,9 @@
       '#prompt{position:absolute;left:110px;width:1700px;top:780px;bottom:22px;z-index:9000;pointer-events:none;box-sizing:border-box;border-radius:34px;padding:16px;display:flex;animation:pqIn .45s cubic-bezier(.2,1.3,.4,1)}',
       '@keyframes pqIn{from{opacity:0;transform:translateY(40px) scale(.96)}to{opacity:1;transform:none}}',
       '.pq{position:relative;flex:1;min-width:0;box-sizing:border-box;border-radius:12px;background:linear-gradient(180deg,#1b2566,#10163f);box-shadow:0 0 0 5px var(--stoneEdge),inset 0 12px 16px rgba(0,0,0,.55),inset 0 0 0 2px rgba(0,0,0,.4);padding:10px 24px 14px;display:flex;flex-direction:column;justify-content:center;text-align:center}',
-      /* The points, on a tab of the frame's own stone. */
-      '.pq .tag{position:absolute;left:14px;top:12px;font-size:18px;line-height:1.3;color:#fff;padding:3px 16px 4px;border-radius:12px;background:linear-gradient(180deg,#7d8fd0,#56669f 45%,#404c80);border:3px solid var(--stoneEdge);box-shadow:inset 0 3px 0 rgba(255,255,255,.3),inset 0 -4px 0 rgba(12,16,48,.45);text-shadow:0 2px 0 var(--ink)}',
+      /* The trophies a right answer wins, on a tab of the frame's own stone. */
+      '.pq .tag img{width:38px;height:38px;object-fit:contain}',
+      '.pq .tag{display:flex;align-items:center;gap:10px;position:absolute;left:14px;top:12px;font-size:28px;line-height:1.3;color:#fff;padding:4px 20px 6px;border-radius:14px;background:linear-gradient(180deg,#7d8fd0,#56669f 45%,#404c80);border:3px solid var(--stoneEdge);box-shadow:inset 0 3px 0 rgba(255,255,255,.3),inset 0 -4px 0 rgba(12,16,48,.45);-webkit-text-stroke:4px var(--ink);paint-order:stroke fill;text-shadow:0 4px 0 var(--ink)}',
       '.pq .foot{font-size:24px;line-height:1.2;color:#9fe8ff;margin-bottom:6px}',
       '.pq .foot b{font-weight:inherit;color:#ffd34d}',
       '.pq .q{font-size:calc(38px*var(--fit,1));line-height:1.15;overflow-wrap:anywhere;-webkit-text-stroke:4px var(--ink);paint-order:stroke fill;text-shadow:0 4px 0 var(--ink)}',
@@ -83,7 +84,7 @@
     var now = JSON.stringify([quiz && [quiz.id, quiz.status, quiz.question, quiz.options, quiz.correct, quiz.counts], voting]);
     if (now === shown) return;
     shown = now;
-    var where = (location.host + '/league').toUpperCase();
+    var where = (location.host.replace(/^www\./, '') + '/league').toUpperCase();
 
     var vote = document.getElementById('vote');
     var label = document.getElementById('vlabel');
@@ -102,7 +103,13 @@
     box.id = 'prompt';
     var panel = el('div', 'pq');
     box.appendChild(panel);
-    panel.appendChild(el('div', 'tag', (Number(quiz.points) || 100) + ' POINTS'));
+    var tag = el('div', 'tag');
+    var drop = el('img');
+    drop.src = '/badges/trophy.png';
+    drop.alt = '';
+    tag.appendChild(drop);
+    tag.appendChild(el('span', '', String(Number(quiz.points) || 100)));
+    panel.appendChild(tag);
     var foot = el('div', 'foot', revealed ? 'THE ANSWER IS IN' : quiz.status === 'open' ? 'ANSWER ON THE WEBSITE! ' : 'ANSWERS ARE CLOSED');
     if (quiz.status === 'open') foot.appendChild(el('b', '', where));
     panel.appendChild(foot);

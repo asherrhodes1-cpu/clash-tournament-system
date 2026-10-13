@@ -94,6 +94,21 @@ export function goalPhase(goal, now) {
   return now < goal.votingOpenedAtMs + goal.votingMs ? 'voting' : 'decided';
 }
 
+// Which of the stream's features is running, for the one place under the
+// video: 'drop' while a Gold drop can be claimed, 'bet' from when betting
+// opens until the result is in, 'lives' while a goal for an extra life is
+// open, 'goal' while a challenge is collecting Gold or being voted on. With
+// more than one running it is whichever started last. null when none is.
+export function runningFeature({ drop, round, lifeRun, goal }, now) {
+  const running = [];
+  if (drop && drop.openedAtMs != null && now < drop.openedAtMs + drop.durationMs) running.push(['drop', drop.openedAtMs]);
+  if (round && !['settled', 'cancelled'].includes(round.status)) running.push(['bet', round.openedAtMs ?? round.createdAt ?? 0]);
+  if (lifeRun && lifeRun.status === 'active' && lifeRun.window) running.push(['lives', lifeRun.window.openedAtMs ?? now]);
+  if (goal && ['collecting', 'voting'].includes(goalPhase(goal, now))) running.push(['goal', goal.votingOpenedAtMs ?? goal.createdAt ?? 0]);
+  running.sort((a, b) => b[1] - a[1]);
+  return running.length ? running[0][0] : null;
+}
+
 // Votes per option.
 export function tallyChallengeVotes(options, donations) {
   const counts = options.map(() => 0);

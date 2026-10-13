@@ -1,9 +1,12 @@
 // The Builder League finals section: what staff switch on while they stream
 // the final eight. The audience votes on who wins each match, until staff
-// lock it as the match starts, and answers quiz questions for points.
+// lock it as the match starts, and answers quiz questions. Picking the
+// winner and answering right both win trophies, the section's own currency,
+// which the leaderboard ranks by. (They are saved as `points`, their first name.)
 
 export const MAX_OPTIONS = 4;
 export const DEFAULT_POINTS = 100;
+export const DEFAULT_VOTE_REWARD = 100;
 
 const text = (value, fallback = '') => (typeof value === 'string' ? value : value == null ? fallback : String(value));
 const count = (value) => Math.max(0, Math.round(Number(value)) || 0);
@@ -13,12 +16,16 @@ export const newId = () => `${Date.now().toString(36)}${Math.random().toString(3
 //   stage:  which part of the finals is on - 'Quarterfinal', 'Grand Final' -
 //           shown under the title on the finals page
 //   videoUrl: the YouTube link of the broadcast, shown on the finals page
+//   voteReward: the trophies for picking a match's winner, for the next vote
 //   voting: the match being voted on - { matchId, red, blue, status: 'open' |
-//           'locked', redVotes, blueVotes } - or null
+//           'locked', redVotes, blueVotes, reward, winner } - or null.
+//           `winner` is 'r' or 'b' once staff have said who won and the
+//           trophies have been given, null until then.
 //   quiz:   the question that is up - { id, question, options, points,
 //           status: 'open' | 'closed' | 'revealed', correct, counts } - or
 //           null. `correct` and `counts` are only there once it is revealed.
 export function soundLeague(saved) {
+  const voteReward = count(saved?.voteReward) || DEFAULT_VOTE_REWARD;
   const voting = saved?.voting?.matchId ? {
     matchId: text(saved.voting.matchId),
     red: text(saved.voting.red, 'Red'),
@@ -26,6 +33,8 @@ export function soundLeague(saved) {
     status: saved.voting.status === 'open' ? 'open' : 'locked',
     redVotes: count(saved.voting.redVotes),
     blueVotes: count(saved.voting.blueVotes),
+    reward: count(saved.voting.reward) || voteReward,
+    winner: saved.voting.status !== 'open' && ['r', 'b'].includes(saved.voting.winner) ? saved.voting.winner : null,
   } : null;
   const options = (Array.isArray(saved?.quiz?.options) ? saved.quiz.options : []).map((o) => text(o)).slice(0, MAX_OPTIONS);
   const status = ['open', 'closed', 'revealed'].includes(saved?.quiz?.status) ? saved.quiz.status : 'closed';
@@ -38,7 +47,7 @@ export function soundLeague(saved) {
     correct: status === 'revealed' && Number.isInteger(saved.quiz.correct) ? saved.quiz.correct : null,
     counts: status === 'revealed' && Array.isArray(saved.quiz.counts) ? options.map((_, i) => count(saved.quiz.counts[i])) : null,
   } : null;
-  return { active: saved?.active === true, title: text(saved?.title, 'BUILDER LEAGUE'), stage: text(saved?.stage, 'FINAL 8').trim(), videoUrl: text(saved?.videoUrl).trim(), voting, quiz };
+  return { active: saved?.active === true, title: text(saved?.title, 'BUILDER LEAGUE'), stage: text(saved?.stage, 'FINAL 8').trim(), videoUrl: text(saved?.videoUrl).trim(), voteReward, voting, quiz };
 }
 
 // Votes counted by side: [{ side }] -> { r, b }.
@@ -56,6 +65,10 @@ export function voteShares(red, blue) {
   const r = Math.round((red / total) * 100);
   return { r, b: 100 - r };
 }
+
+// Who picked the side that won a match: [{ uid, username, side }] -> those
+// who voted for `winner`.
+export const voteWinners = (votes, winner) => votes.filter((vote) => vote.side === winner).map(({ uid, username }) => ({ uid, username }));
 
 // How many picked each option: [{ choice }] -> a count per option.
 export function tallyAnswers(answers, optionCount) {

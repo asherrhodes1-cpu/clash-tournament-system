@@ -1,4 +1,4 @@
-import { parseYouTubeId, tallyBets, percentOf, formatGems, effectiveStatus, secondsLeft, goalPhase, tallyChallengeVotes, challengeResult, ROUND_KINDS, roundKind, POCKETS, POCKET_DEGREES, ROULETTE_BETS, spinTarget } from '../live/liveUtils';
+import { parseYouTubeId, tallyBets, percentOf, formatGems, effectiveStatus, secondsLeft, goalPhase, tallyChallengeVotes, challengeResult, runningFeature, ROUND_KINDS, roundKind, POCKETS, POCKET_DEGREES, ROULETTE_BETS, spinTarget } from '../live/liveUtils';
 
 test('reads the video ID from every common YouTube link', () => {
   const id = 'dQw4w9WgXcQ';
@@ -110,4 +110,19 @@ test('a spin always turns forward and stops inside the landed pocket', () => {
       }
     }
   }
+});
+
+test('only what is running takes the place under the stream, the newest first', () => {
+  const now = 100_000;
+  const drop = { openedAtMs: 90_000, durationMs: 60_000 };
+  const round = { status: 'open', openedAtMs: 95_000 };
+  const lifeRun = { status: 'active', window: { openedAtMs: 80_000 } };
+  const goal = { status: 'collecting', createdAt: 70_000 };
+  expect(runningFeature({}, now)).toBeNull();
+  expect(runningFeature({ drop, round, lifeRun, goal }, now)).toBe('bet');
+  expect(runningFeature({ drop, lifeRun, goal }, now)).toBe('drop');
+  // Over: a drop past its time, a bet with its result in, a run with no goal open, a challenge picked.
+  expect(runningFeature({ drop, round: { ...round, status: 'settled' }, lifeRun: { status: 'active', window: null }, goal: { status: 'decided' } }, 200_000)).toBeNull();
+  // A bet stays up between betting closing and the result.
+  expect(runningFeature({ round: { ...round, status: 'closed' } }, now)).toBe('bet');
 });
