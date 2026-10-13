@@ -311,6 +311,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The family board game at /risk. Nobody playing needs an account: a
+    // game's id is a long random string, so having the link is what lets you
+    // in. That is why a single game can be read and moved in by anyone, but
+    // games can never be listed, and only staff can start or remove one.
+    // Each move must be exactly one step on from the saved game, so two
+    // screens can't overwrite each other.
+    match /riskGames/{gameId} {
+      allow get: if true;
+      allow list: if false;
+      allow create, delete: if isStaff();
+      allow update: if request.resource.data.rev == resource.data.rev + 1;
+    }
+
     // The Builder League finals section (/league), open while staff are
     // streaming them. live/league (public, staff-written, covered by the
     // `live` rule above) says whether it is on, which match is being voted
