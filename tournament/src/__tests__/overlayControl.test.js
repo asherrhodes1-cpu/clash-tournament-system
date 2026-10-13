@@ -10,7 +10,7 @@ jest.mock('../api/overlays', () => ({
 }));
 
 // The finals section's controls have tests of their own.
-jest.mock('../league/LeagueControl', () => ({ useLeagueControl: () => ({ live: null, prepare: null }) }));
+jest.mock('../league/LeagueControl', () => ({ useLeagueControl: () => ({ live: null, prepare: null, prepareQuiz: null, prepareSection: null }) }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 

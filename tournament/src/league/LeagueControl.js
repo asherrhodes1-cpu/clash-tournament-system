@@ -29,7 +29,8 @@ const TOTALS_AFTER_MS = 1200;
 //
 // Returns two sets of cards: `live`, the buttons pressed during a broadcast
 // (the section's switch, the match vote, the quiz), and `prepare`, what is
-// set up beforehand (the quiz questions, the title, the leaderboard). It
+// set up beforehand (the quiz questions, the title, the leaderboard) - also
+// given apart, as `prepareQuiz` and `prepareSection`. It
 // counts the votes for as long as the page it is used on is open, whichever
 // of the two is showing.
 export function useLeagueControl(match, onVotes) {
@@ -206,8 +207,8 @@ export function useLeagueControl(match, onVotes) {
     </section>
   );
 
-  const prepare = (
-    <>
+  // What is set up beforehand, in two parts so the page can place them apart.
+  const prepareQuiz = (
         <Fold id="quiz" title="Quiz questions" action={<button type="button" className={BUTTON} onClick={() => setEditing(soundQuestion({ options: ['', '', '', ''] }))}>Add a question</button>}>
           <p className="text-sm text-gray-400 mb-3">Write these before the broadcast. Viewers can't see them, or the right answers, until you put one up and reveal it.</p>
           <div className="flex flex-col gap-2 mb-3">
@@ -266,7 +267,9 @@ export function useLeagueControl(match, onVotes) {
             </div>
           )}
         </Fold>
+  );
 
+  const prepareSection = (
         <Fold id="finals" title="Final 8 section">
           <label className="block mb-4">
             <span className={LABEL}>Title on the pop-up and page</span>
@@ -298,10 +301,9 @@ export function useLeagueControl(match, onVotes) {
           <p className="text-sm text-gray-400 mb-3">Trophies carry on through the broadcast. Clear them before a new one.</p>
           <button type="button" className={`${BUTTON} border-red-500`} onClick={() => { if (window.confirm('Clear everyone\'s trophies?')) run(resetLeagueScores, 'The leaderboard is cleared.'); }}>Clear the leaderboard</button>
         </Fold>
-    </>
   );
 
-  return { live, prepare };
+  return { live, prepare: <>{prepareQuiz}{prepareSection}</>, prepareQuiz, prepareSection };
 }
 
 // Both sets of cards together, one after the other.

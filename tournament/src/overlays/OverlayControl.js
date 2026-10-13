@@ -246,7 +246,7 @@ export default function OverlayControl() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+      <div className="max-w-[100rem] mx-auto p-4 md:p-6 space-y-4">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold">Stream overlays</h1>
@@ -327,9 +327,11 @@ export default function OverlayControl() {
         )}
 
         {/* ---- Prepare: the typing, done before the broadcast ---- */}
+        {/* Three columns of about the same height on a wide screen; on a
+            narrower one, two, with the two players side by side beneath. */}
         {tab === 'prepare' && (
-          <div className="grid lg:grid-cols-2 gap-6 items-start">
-            <div className="space-y-6">
+          <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+            <div className="space-y-4">
               <Fold id="players" title="Players" action={<button type="button" className={BUTTON} onClick={() => setEditing({ ...blankPlayer(), id: '', fresh: true })}>Add a player</button>}>
                 <p className="text-sm text-gray-400 mb-3">Everyone who might appear. Each one becomes a button on the Live tab.</p>
                 <div className="flex flex-wrap gap-2 mb-3">
@@ -363,7 +365,7 @@ export default function OverlayControl() {
               </Fold>
 
               <Fold id="matches" title="Saved matches">
-                <p className="text-sm text-gray-400 mb-3">Set the match up on the right, then save it here. Each one becomes a button on the Live tab.</p>
+                <p className="text-sm text-gray-400 mb-3">Set the match up under "The match on screen", then save it here. Each one becomes a button on the Live tab.</p>
                 <div className="flex flex-wrap gap-2 mb-3">
                   <input className={`${INPUT} flex-1 min-w-[12rem]`} aria-label="Name for this match" value={saveAs} placeholder={matchLabel(match)} onChange={(e) => setSaveAs(e.target.value)} />
                   <button type="button" className={`${BUTTON} border-white`} onClick={() => { setLibrary(withSavedMatch(library, match, saveAs)); setSaveAs(''); }}>Save this match</button>
@@ -380,9 +382,11 @@ export default function OverlayControl() {
                   ))}
                 </ul>
               </Fold>
+
+              {finals.prepareSection}
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               <Fold id="on-screen" title="The match on screen">
                 <p className="text-sm text-gray-400 mb-3">Typing here changes the overlays as you go.</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -411,15 +415,18 @@ export default function OverlayControl() {
                 </div>
               </Fold>
 
+              {finals.prepareQuiz}
+
+              <button type="button" className={`${BUTTON} border-red-500`} onClick={() => { if (window.confirm('Clear the match on screen? Prepared players and matches are kept.')) setMatch(blankMatch()); }}>Clear the match on screen</button>
+            </div>
+
+            <div className="grid gap-4 items-start lg:col-span-2 lg:grid-cols-2 xl:col-span-1 xl:grid-cols-1">
               {[['r', 'Red player', 'red', RED], ['b', 'Blue player', 'blue', BLUE]].map(([side, title, key, colour]) => (
                 <Fold key={side} id={`${key}-player`} title={title} className={`border-2 ${colour}`} action={<button type="button" className={BUTTON} onClick={() => setLibrary(withSavedPlayer(library, { ...match[key], id: library.players.find((p) => p.name === match[key].name)?.id ?? '' }))}>Save to players</button>}>
                   <PlayerFields player={match[key]} onChange={set(key)} />
                 </Fold>
               ))}
 
-              {finals.prepare}
-
-              <button type="button" className={`${BUTTON} border-red-500`} onClick={() => { if (window.confirm('Clear the match on screen? Prepared players and matches are kept.')) setMatch(blankMatch()); }}>Clear the match on screen</button>
             </div>
           </div>
         )}
