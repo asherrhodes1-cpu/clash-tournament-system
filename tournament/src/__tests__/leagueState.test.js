@@ -29,6 +29,8 @@ test('the right answer only reaches the audience once it is revealed', () => {
   const up = asked(prepared);
   expect(up).toMatchObject({ question: 'How many stars in a perfect attack?', options: ['3', '6', '9'], points: 250, status: 'open', correct: null, counts: null });
   expect(up.id).not.toBe(prepared.id);
+  // It takes answers for 45 seconds from when it goes up.
+  expect(asked(prepared, 1000).endsAt).toBe(46000);
   // Even if a right answer were saved while it is still open, it is not passed on.
   expect(soundLeague({ quiz: { ...up, correct: 1, counts: [1, 5, 0] } }).quiz).toMatchObject({ status: 'open', correct: null, counts: null });
   expect(soundLeague({ quiz: { ...up, status: 'revealed', correct: 1, counts: [1, 5, 0] } }).quiz).toMatchObject({ status: 'revealed', correct: 1, counts: [1, 5, 0] });

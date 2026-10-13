@@ -7,6 +7,8 @@
 export const MAX_OPTIONS = 4;
 export const DEFAULT_POINTS = 100;
 export const DEFAULT_VOTE_REWARD = 100;
+// How long a quiz question takes answers for, from when it goes up.
+export const QUIZ_SECONDS = 45;
 
 const text = (value, fallback = '') => (typeof value === 'string' ? value : value == null ? fallback : String(value));
 const count = (value) => Math.max(0, Math.round(Number(value)) || 0);
@@ -24,6 +26,8 @@ export const newId = () => `${Date.now().toString(36)}${Math.random().toString(3
 //   quiz:   the question that is up - { id, question, options, points,
 //           status: 'open' | 'closed' | 'revealed', correct, counts } - or
 //           null. `correct` and `counts` are only there once it is revealed.
+//           `endsAt` is when its time to answer runs out (ms), counted
+//           down on the page and the overlay.
 export function soundLeague(saved) {
   const voteReward = count(saved?.voteReward) || DEFAULT_VOTE_REWARD;
   const voting = saved?.voting?.matchId ? {
@@ -44,6 +48,7 @@ export function soundLeague(saved) {
     options,
     points: count(saved.quiz.points) || DEFAULT_POINTS,
     status,
+    endsAt: count(saved.quiz.endsAt) || null,
     correct: status === 'revealed' && Number.isInteger(saved.quiz.correct) ? saved.quiz.correct : null,
     counts: status === 'revealed' && Array.isArray(saved.quiz.counts) ? options.map((_, i) => count(saved.quiz.counts[i])) : null,
   } : null;
@@ -97,4 +102,8 @@ export const soundQuestions = (list) => (Array.isArray(list) ? list : []).map(so
 export const isReady = (question) => question.question.trim() !== '' && question.options.length >= 2 && question.options.every((o) => o.trim() !== '');
 
 // A prepared question as the audience is shown it: without the right answer.
-export const asked = (question) => ({ id: newId(), question: question.question, options: question.options, points: question.points, status: 'open', correct: null, counts: null });
+// `now` is when it goes up: it takes answers for QUIZ_SECONDS from then.
+export const asked = (question, now = Date.now()) => ({ id: newId(), question: question.question, options: question.options, points: question.points, status: 'open', endsAt: now + QUIZ_SECONDS * 1000, correct: null, counts: null });
+
+// Whole seconds left to answer a question, or null if it has no time limit.
+export const quizSecondsLeft = (quiz, now) => (quiz?.endsAt ? Math.max(0, Math.ceil((quiz.endsAt - now) / 1000)) : null);

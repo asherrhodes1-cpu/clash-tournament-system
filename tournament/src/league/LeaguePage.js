@@ -4,7 +4,8 @@ import {
   answerQuiz, castVote, subscribeToLeague, subscribeToLeagueScores, subscribeToMyAnswer, subscribeToMyScore, subscribeToMyVote,
 } from '../api/league';
 import StreamLayout from '../live/StreamLayout';
-import { voteShares } from './leagueState';
+import { useNow } from '../live/shared';
+import { QUIZ_SECONDS, quizSecondsLeft, voteShares } from './leagueState';
 
 // The page wears the stream overlays' look (see index.css): the caster cams'
 // stone frame around each part, over the sky the whole site sits on.
@@ -113,7 +114,10 @@ function QuizBar({ quiz, user, onLogin }) {
     return subscribeToMyAnswer(quiz.id, user.uid, setMine);
   }, [quiz.id, user.uid]);
 
-  const open = quiz.status === 'open';
+  // Answers are taken until the question's time runs out, or staff close it.
+  const now = useNow(quiz.status === 'open' && quiz.endsAt != null);
+  const left = quiz.status === 'open' ? quizSecondsLeft(quiz, now) : null;
+  const open = quiz.status === 'open' && left !== 0;
   const revealed = quiz.status === 'revealed';
   const answered = mine != null;
   const total = revealed ? quiz.counts.reduce((sum, n) => sum + n, 0) : 0;
@@ -129,14 +133,20 @@ function QuizBar({ quiz, user, onLogin }) {
     || (revealed ? (answered ? (mine === quiz.correct ? `Correct! +${quiz.points} trophies.` : 'Not this time.') : 'The answer is in.')
       : answered ? 'Locked in. The answer is coming up.'
         : open ? (user.isGuest ? '' : 'One answer each, and it can\'t be changed.')
-          : 'Answers are closed. The answer is coming up.');
+          : left === 0 ? 'Time\'s up. The answer is coming up.' : 'Answers are closed. The answer is coming up.');
 
   return (
     <section className={`league-pop ${FRAME}`} aria-label="Quiz question">
       <div className={INSET}>
       <Prompt label={<Trophies amount={quiz.points} />} note={note}>
-        {user.isGuest && open && <button type="button" onClick={onLogin} className={LOGIN}>Log in to answer</button>}
+        <span className="flex items-center gap-2">
+          {user.isGuest && open && <button type="button" onClick={onLogin} className={LOGIN}>Log in to answer</button>}
+          {left != null && <span className={`league-tab tabular-nums ${left <= 10 ? 'is-ending' : ''}`} aria-label={`${left} seconds left`}>{left}s</span>}
+        </span>
       </Prompt>
+      {left != null && (
+        <div className="league-timer mb-3" aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, ((quiz.endsAt - now) / (QUIZ_SECONDS * 1000)) * 100))}%` }} /></div>
+      )}
       {/* Also asked on the stream, which runs a little behind these buttons. */}
       <p className="text-xl sm:text-3xl font-bold text-center mb-4 break-words">{quiz.question}</p>
       <div className={`grid grid-cols-2 gap-3 ${quiz.options.length === 3 ? 'md:grid-cols-3' : quiz.options.length === 4 ? 'md:grid-cols-4' : ''}`}>

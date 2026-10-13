@@ -3,9 +3,10 @@ import {
   awardPoints, resetLeagueScores, saveLeague, saveQuestions, subscribeToAnswers, subscribeToLeague, subscribeToQuestions, subscribeToVotes,
 } from '../api/league';
 import { parseYouTubeId } from '../live/liveUtils';
+import { useNow } from '../live/shared';
 import Fold from '../overlays/Fold';
 import {
-  DEFAULT_POINTS, DEFAULT_VOTE_REWARD, MAX_OPTIONS, asked, isReady, newId, quizWinners, soundQuestion, tallyAnswers, tallyVotes, voteShares, voteWinners,
+  DEFAULT_POINTS, DEFAULT_VOTE_REWARD, MAX_OPTIONS, QUIZ_SECONDS, asked, isReady, newId, quizWinners, soundQuestion, tallyAnswers, tallyVotes, quizSecondsLeft, voteShares, voteWinners,
 } from './leagueState';
 
 const CARD = 'bg-gray-800 rounded-lg border border-gray-700 p-5';
@@ -85,6 +86,22 @@ export function useLeagueControl(match, onVotes) {
     }, TOTALS_AFTER_MS);
     return () => clearTimeout(timer);
   }, [matchId, tally.r, tally.b]);
+
+  // A question takes answers for QUIZ_SECONDS. When that runs out it is
+  // closed from here, like the vote totals: this page is open all broadcast.
+  const quizOpen = league?.quiz?.status === 'open' ? league.quiz : null;
+  const quizEndsAt = quizOpen?.endsAt ?? null;
+  const openQuizId = quizOpen?.id ?? null;
+  const now = useNow(quizEndsAt != null);
+  useEffect(() => {
+    if (!openQuizId || quizEndsAt == null) return undefined;
+    const timer = setTimeout(() => {
+      const current = latest.current.league;
+      if (current?.quiz?.id !== openQuizId || current.quiz.status !== 'open') return;
+      saveLeague({ ...current, quiz: { ...current.quiz, status: 'closed' } }).catch(() => {});
+    }, Math.max(0, quizEndsAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [openQuizId, quizEndsAt]);
 
   if (!league) return { live: <div className={CARD}>{status || 'Loading…'}</div>, prepare: null };
 
@@ -169,7 +186,7 @@ export function useLeagueControl(match, onVotes) {
       <div className="border-t border-gray-700 mt-3 pt-3" role="group" aria-label="Quiz">
         <span className={LABEL}>
           {!quiz ? 'Quiz'
-            : quiz.status === 'open' ? `Quiz: taking answers · ${answers.length} in`
+            : quiz.status === 'open' ? `Quiz: taking answers · ${answers.length} in${quiz.endsAt ? ` · ${quizSecondsLeft(quiz, now)}s left` : ''}`
               : quiz.status === 'closed' ? `Quiz: answers closed · ${answers.length} in`
                 : 'Quiz: revealed, trophies given'}
         </span>
@@ -194,6 +211,7 @@ export function useLeagueControl(match, onVotes) {
         ) : (
           <>
             {bank.questions.length === 0 && <p className="text-sm text-gray-400">None prepared (Prepare tab).</p>}
+            {bank.questions.length > 0 && <p className="text-xs text-gray-400 mb-2">Each takes answers for {QUIZ_SECONDS} seconds.</p>}
             <div className="flex flex-col gap-2">
               {bank.questions.map((question) => (
                 <button key={question.id} type="button" className={`${BUTTON} text-left`} disabled={!isReady(question)} onClick={() => putUp(question)}>

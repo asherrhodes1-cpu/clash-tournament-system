@@ -45,11 +45,15 @@
          stone, around a dark inset. */
       '#prompt{position:absolute;left:110px;width:1700px;top:780px;bottom:22px;z-index:9000;pointer-events:none;box-sizing:border-box;border-radius:34px;padding:16px;display:flex;animation:pqIn .45s cubic-bezier(.2,1.3,.4,1)}',
       '@keyframes pqIn{from{opacity:0;transform:translateY(40px) scale(.96)}to{opacity:1;transform:none}}',
-      '.pq{position:relative;flex:1;min-width:0;box-sizing:border-box;border-radius:12px;background:linear-gradient(180deg,#1b2566,#10163f);box-shadow:0 0 0 5px var(--stoneEdge),inset 0 12px 16px rgba(0,0,0,.55),inset 0 0 0 2px rgba(0,0,0,.4);padding:10px 24px 14px;display:flex;flex-direction:column;justify-content:center;text-align:center}',
+      '.pq{position:relative;flex:1;min-width:0;box-sizing:border-box;border-radius:12px;background:linear-gradient(180deg,#1b2566,#10163f);box-shadow:0 0 0 5px var(--stoneEdge),inset 0 12px 16px rgba(0,0,0,.55),inset 0 0 0 2px rgba(0,0,0,.4);padding:10px 16px 14px;display:flex;flex-direction:column;justify-content:center;text-align:center}',
       /* The trophies a right answer wins, on a tab of the frame's own stone. */
+      /* Along the top: the trophies, the prompt, and the time left to answer. */
+      '.pq .top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:20px;margin-bottom:6px}',
       '.pq .tag img{width:38px;height:38px;object-fit:contain}',
-      '.pq .tag{display:flex;align-items:center;gap:10px;position:absolute;left:14px;top:12px;font-size:28px;line-height:1.3;color:#fff;padding:4px 20px 6px;border-radius:14px;background:linear-gradient(180deg,#7d8fd0,#56669f 45%,#404c80);border:3px solid var(--stoneEdge);box-shadow:inset 0 3px 0 rgba(255,255,255,.3),inset 0 -4px 0 rgba(12,16,48,.45);-webkit-text-stroke:4px var(--ink);paint-order:stroke fill;text-shadow:0 4px 0 var(--ink)}',
-      '.pq .foot{font-size:24px;line-height:1.2;color:#9fe8ff;margin-bottom:6px}',
+      '.pq .tag.time{justify-self:end;min-width:86px;justify-content:center;font-variant-numeric:tabular-nums}',
+      '.pq .tag.time.ending{background:linear-gradient(180deg,#ff7a86,#ef3448 50%,#b8142f)}',
+      '.pq .tag{display:flex;align-items:center;gap:10px;justify-self:start;font-size:28px;line-height:1.3;color:#fff;padding:4px 20px 6px;border-radius:14px;background:linear-gradient(180deg,#7d8fd0,#56669f 45%,#404c80);border:3px solid var(--stoneEdge);box-shadow:inset 0 3px 0 rgba(255,255,255,.3),inset 0 -4px 0 rgba(12,16,48,.45);-webkit-text-stroke:4px var(--ink);paint-order:stroke fill;text-shadow:0 4px 0 var(--ink)}',
+      '.pq .foot{font-size:24px;line-height:1.2;color:#9fe8ff}',
       '.pq .foot b{font-weight:inherit;color:#ffd34d}',
       '.pq .q{font-size:calc(38px*var(--fit,1));line-height:1.15;overflow-wrap:anywhere;-webkit-text-stroke:4px var(--ink);paint-order:stroke fill;text-shadow:0 4px 0 var(--ink)}',
       '.pq .opts{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:14px;margin-top:14px}',
@@ -67,6 +71,7 @@
 
   var MAX_OPTIONS = 4;
   var shown = '';
+  var ticking = 0;
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -81,7 +86,7 @@
     var voting = on && !!league.voting && !!league.voting.matchId && league.voting.status === 'open';
     /* Vote totals arrive every second or so while people vote: only what
        is drawn here counts as a change, so the question doesn't flicker. */
-    var now = JSON.stringify([quiz && [quiz.id, quiz.status, quiz.question, quiz.options, quiz.correct, quiz.counts], voting]);
+    var now = JSON.stringify([quiz && [quiz.id, quiz.status, quiz.question, quiz.options, quiz.correct, quiz.counts, quiz.endsAt], voting]);
     if (now === shown) return;
     shown = now;
     var where = (location.host.replace(/^www\./, '') + '/league').toUpperCase();
@@ -95,6 +100,7 @@
 
     var box = document.getElementById('prompt');
     if (box) box.remove();
+    clearInterval(ticking);
     if (!quiz) return;
     var revealed = quiz.status === 'revealed';
     var counts = revealed && Array.isArray(quiz.counts) ? quiz.counts : [];
@@ -109,10 +115,31 @@
     drop.alt = '';
     tag.appendChild(drop);
     tag.appendChild(el('span', '', String(Number(quiz.points) || 100)));
-    panel.appendChild(tag);
-    var foot = el('div', 'foot', revealed ? 'THE ANSWER IS IN' : quiz.status === 'open' ? 'ANSWER ON THE WEBSITE! ' : 'ANSWERS ARE CLOSED');
-    if (quiz.status === 'open') foot.appendChild(el('b', '', where));
-    panel.appendChild(foot);
+    var top = el('div', 'top');
+    top.appendChild(tag);
+    var foot = el('div', 'foot');
+    top.appendChild(foot);
+    /* The time left to answer, counted down while the question is open. */
+    var endsAt = quiz.status === 'open' ? Number(quiz.endsAt) || 0 : 0;
+    var time = el('div', 'tag time');
+    if (endsAt) top.appendChild(time); else top.appendChild(el('div'));
+    panel.appendChild(top);
+    function prompt() {
+      var left = endsAt ? Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)) : null;
+      var open = quiz.status === 'open' && left !== 0;
+      var say = revealed ? 'THE ANSWER IS IN' : open ? 'ANSWER ON THE WEBSITE! ' : left === 0 ? 'TIME\'S UP' : 'ANSWERS ARE CLOSED';
+      if (foot.getAttribute('data-say') !== say) {
+        foot.setAttribute('data-say', say);
+        foot.textContent = say;
+        if (open) foot.appendChild(el('b', '', where));
+      }
+      if (endsAt) {
+        time.textContent = left + 's';
+        time.classList.toggle('ending', left <= 10);
+      }
+    }
+    prompt();
+    if (endsAt) ticking = setInterval(prompt, 250);
     panel.appendChild(el('div', 'q', quiz.question));
     var opts = el('div', 'opts');
     quiz.options.slice(0, MAX_OPTIONS).forEach(function (option, i) {

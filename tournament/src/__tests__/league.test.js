@@ -128,6 +128,26 @@ test('a section of the Prepare tab closes down to its title, and stays closed', 
   window.localStorage.clear();
 });
 
+test('a question takes answers for 45 seconds, then closes by itself', async () => {
+  jest.useFakeTimers();
+  const endsAt = Date.now() + 45000;
+  mount(() => <LeaguePage user={viewer} onLogin={() => {}} onHome={() => {}} />, { active: true, quiz: question('open', { endsAt }) });
+  expect(host.querySelector('[aria-label="45 seconds left"]')).not.toBeNull();
+  expect(button('6').disabled).toBe(false);
+  await act(async () => { jest.advanceTimersByTime(46000); });
+  expect(button('6').disabled).toBe(true);
+  expect(host.textContent).toMatch(/Time's up/);
+  act(() => root.unmount());
+  host.remove();
+
+  // The staff page, open all broadcast, is what closes it for everyone.
+  mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true, quiz: question('open', { endsAt: Date.now() + 45000 }) });
+  expect(api.saveLeague).not.toHaveBeenCalled();
+  await act(async () => { jest.advanceTimersByTime(46000); });
+  expect(api.saveLeague.mock.calls.at(-1)[0].quiz.status).toBe('closed');
+  jest.useRealTimers();
+});
+
 test('staff set the stream link ahead of the broadcast', async () => {
   mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true });
   expect(host.textContent).toMatch(/No stream link set/);
