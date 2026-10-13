@@ -111,9 +111,26 @@ test('the stream plays on the finals page, with answer buttons under it only whi
   expect(button('6')).toBeDefined();
 });
 
+test('a section of the Prepare tab closes down to its title, and stays closed', async () => {
+  window.localStorage.clear();
+  mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true });
+  expect(button('Add a question')).toBeDefined();
+  await act(async () => { host.querySelector('[aria-label="Close Quiz questions"]').click(); });
+  expect(button('Add a question')).toBeUndefined();
+  expect(host.textContent).toMatch(/Quiz questions/);
+  act(() => root.unmount());
+  host.remove();
+
+  mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true });
+  expect(button('Add a question')).toBeUndefined();
+  await act(async () => { host.querySelector('[aria-label="Open Quiz questions"]').click(); });
+  expect(button('Add a question')).toBeDefined();
+  window.localStorage.clear();
+});
+
 test('staff set the stream link ahead of the broadcast', async () => {
   mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true });
-  expect(host.textContent).toMatch(/No stream link is set/);
+  expect(host.textContent).toMatch(/No stream link set/);
   const input = host.querySelector('input[placeholder*="youtube.com/live"]');
   const leave = (value) => act(async () => { input.value = value; input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
   await leave('not a link');
@@ -165,7 +182,7 @@ test('when the match ends staff say who won, and those who picked them get troph
   // Once it has been paid there is nothing left to press but clearing it.
   mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true, voting: { ...vote('locked'), winner: 'b' } });
   expect(button('J3fri won')).toBeUndefined();
-  expect(host.textContent).toMatch(/J3fri won, and those who picked them were given 100 trophies/);
+  expect(host.textContent).toMatch(/J3fri won · 100 trophies paid/);
 });
 
 test('a viewer sees who won and what their pick earned', () => {
@@ -202,7 +219,7 @@ test('a prepared question goes up without its answer, which is revealed with poi
   mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true, quiz: { ...up, status: 'closed' } });
   act(() => api.subscribeToQuestions.mock.calls.at(-1)[0]({ questions: [prepared], up: { quizId: up.id, correct: 1 } }));
   act(() => api.subscribeToAnswers.mock.calls.at(-1)[1]([{ uid: 'a', username: 'Ann', choice: 1 }, { uid: 'b', username: 'Bo', choice: 0 }, { uid: 'c', username: 'Cy', choice: 1 }]));
-  await click('Reveal the answer and give trophies');
+  await click('Reveal answer');
   expect(api.awardPoints).toHaveBeenCalledWith([{ uid: 'a', username: 'Ann' }, { uid: 'c', username: 'Cy' }], 250);
   expect(api.saveLeague.mock.calls.at(-1)[0].quiz).toMatchObject({ status: 'revealed', correct: 1, counts: [1, 2, 0] });
 });

@@ -3,14 +3,17 @@ import {
   awardPoints, resetLeagueScores, saveLeague, saveQuestions, subscribeToAnswers, subscribeToLeague, subscribeToQuestions, subscribeToVotes,
 } from '../api/league';
 import { parseYouTubeId } from '../live/liveUtils';
+import Fold from '../overlays/Fold';
 import {
   DEFAULT_POINTS, DEFAULT_VOTE_REWARD, MAX_OPTIONS, asked, isReady, newId, quizWinners, soundQuestion, tallyAnswers, tallyVotes, voteShares, voteWinners,
 } from './leagueState';
 
 const CARD = 'bg-gray-800 rounded-lg border border-gray-700 p-5';
+// On the Live tab everything is packed tighter, to fit beside a broadcast.
+const LIVE_CARD = 'bg-gray-800 rounded-lg border border-gray-700 p-3';
 const INPUT = 'w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white focus:border-white focus:outline-none';
 const BUTTON = 'px-3 py-2 rounded border border-gray-500 bg-gray-700 hover:bg-gray-600 text-sm font-bold disabled:opacity-40 disabled:hover:bg-gray-700';
-const BIG = 'px-4 py-3 rounded-lg border-2 border-gray-500 bg-gray-700 hover:bg-gray-600 font-bold text-base disabled:opacity-40 disabled:hover:bg-gray-700';
+const BIG = 'px-3 py-2 rounded-lg border-2 border-gray-500 bg-gray-700 hover:bg-gray-600 font-bold text-base disabled:opacity-40 disabled:hover:bg-gray-700';
 const ON = 'bg-white text-black hover:bg-white';
 const LABEL = 'block text-xs uppercase tracking-wide text-gray-400 mb-1';
 const LETTERS = ['A', 'B', 'C', 'D'];
@@ -122,102 +125,90 @@ export function useLeagueControl(match, onVotes) {
   };
   const saveBank = (questions) => run(() => saveQuestions({ questions, up: bank.up }), 'Questions saved.');
 
+  // One small card, with as little on it as running it mid-cast needs: a
+  // label and the buttons for whatever comes next.
+  const winnerName = voting?.winner ? (voting.winner === 'r' ? voting.red : voting.blue) : null;
   const live = (
-    <>
-        <section className={CARD}>
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-            <h2 className="text-xl font-bold">Final 8 section</h2>
-            <span className="text-sm text-gray-400" role="status">{status}</span>
-          </div>
-          <p className="text-sm text-gray-400 mb-3">While this is on, everyone on the site gets a large pop-up sending them to the finals page, where they watch the stream and answer under it. Votes and quiz questions are asked on the caster desk overlay, and the answer buttons come up under the video. Turn it off when the broadcast ends.</p>
-          {!parseYouTubeId(league.videoUrl) && <p className="text-sm text-amber-300 mb-3">No stream link is set, so the finals page has no video. Add it on the Prepare tab.</p>}
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="button" aria-pressed={league.active} className={`${BIG} ${league.active ? ON : ''}`} onClick={() => update({ active: !league.active }, league.active ? 'The section is off.' : 'The section is live.')}>
-              {league.active ? 'Live: turn the section off' : 'Turn the section on'}
-            </button>
-            <a className={BUTTON} href="/league" target="_blank" rel="noreferrer">Open the viewers' page</a>
-          </div>
-        </section>
+    <section className={LIVE_CARD}>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h2 className="text-base font-bold">Finals</h2>
+        <span className="text-sm text-gray-400" role="status">{status}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" aria-pressed={league.active} className={`${BIG} ${league.active ? ON : ''}`} onClick={() => update({ active: !league.active }, league.active ? 'The section is off.' : 'The section is live.')}>
+          {league.active ? 'Section is on: turn off' : 'Turn the section on'}
+        </button>
+        <a className={BUTTON} href="/league" target="_blank" rel="noreferrer">Viewers' page</a>
+      </div>
+      {!parseYouTubeId(league.videoUrl) && <p className="text-sm text-amber-300 mt-2">No stream link set (Prepare tab).</p>}
 
-        <section className={CARD}>
-          <h2 className="text-xl font-bold mb-1">Match vote</h2>
-          <p className="text-sm text-gray-400 mb-3">Opening it asks "Who wins?" on the caster desk's vote bar and puts the two buttons under the stream. Lock it as the match starts and both go. When the match ends, say who won: everyone who picked them gets trophies. The totals fill the overlays' audience vote bar by themselves.</p>
-          {voting ? (
+      <div className="border-t border-gray-700 mt-3 pt-3" role="group" aria-label="Match vote">
+        <span className={LABEL}>
+          {!voting ? 'Vote'
+            : winnerName ? `Vote: ${winnerName} won · ${voting.reward} trophies paid`
+              : `Vote ${voting.status === 'open' ? 'open' : 'locked'}: ${voting.red} ${shares.r}% (${tally.r}) · ${voting.blue} ${shares.b}% (${tally.b})`}
+        </span>
+        <div className="flex flex-wrap gap-2">
+          {!voting && <button type="button" className={`${BIG} border-white`} onClick={openVoting}>Open voting: {match.red.name} vs {match.blue.name}</button>}
+          {voting?.status === 'open' && <button type="button" className={`${BIG} border-red-500`} onClick={() => update({ voting: { ...voting, status: 'locked' } }, 'Voting is locked.')}>Lock voting</button>}
+          {voting && voting.status !== 'open' && !voting.winner && (
             <>
-              <p className="font-bold text-lg mb-2">
-                {voting.red} {shares.r}% ({tally.r}) · {voting.blue} {shares.b}% ({tally.b})
-              </p>
-              <p className="text-sm text-gray-300 mb-3">
-                {voting.winner ? `${voting.winner === 'r' ? voting.red : voting.blue} won, and those who picked them were given ${voting.reward} trophies. Clear the vote before the next match.`
-                  : voting.status === 'open' ? `Voting is open. Picking the winner pays ${voting.reward} trophies.` : 'Voting is locked. When the match ends, say who won.'}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {voting.status === 'open' && <button type="button" className={`${BIG} border-red-500`} onClick={() => update({ voting: { ...voting, status: 'locked' } }, 'Voting is locked.')}>Lock voting: the match has started</button>}
-                {voting.status !== 'open' && !voting.winner && (
-                  <>
-                    <button type="button" className={`${BIG} border-red-500`} disabled={busy} onClick={() => payVote('r')}>{voting.red} won: give {voting.reward} trophies</button>
-                    <button type="button" className={`${BIG} border-sky-400`} disabled={busy} onClick={() => payVote('b')}>{voting.blue} won: give {voting.reward} trophies</button>
-                    <button type="button" className={BIG} onClick={() => update({ voting: { ...voting, status: 'open' } }, 'Voting is open again.')}>Reopen voting</button>
-                  </>
-                )}
-                <button type="button" className={BIG} onClick={() => update({ voting: null }, 'The vote is cleared.')}>Clear the vote</button>
-              </div>
+              <button type="button" className={`${BIG} border-red-500`} disabled={busy} onClick={() => payVote('r')}>{voting.red} won</button>
+              <button type="button" className={`${BIG} border-sky-400`} disabled={busy} onClick={() => payVote('b')}>{voting.blue} won</button>
+              <button type="button" className={BUTTON} onClick={() => update({ voting: { ...voting, status: 'open' } }, 'Voting is open again.')}>Reopen</button>
             </>
-          ) : (
-            <button type="button" className={`${BIG} border-white`} onClick={openVoting}>Open voting: {match.red.name} vs {match.blue.name}</button>
           )}
-          {voting && (voting.red !== match.red.name || voting.blue !== match.blue.name) && (
-            <p className="text-sm text-amber-300 mt-3">This vote is for {voting.red} vs {voting.blue}, but the overlays now show {match.red.name} vs {match.blue.name}. Clear it and open a new one for the next match.</p>
-          )}
-        </section>
+          {voting && <button type="button" className={voting.winner ? `${BIG} border-white` : BUTTON} onClick={() => update({ voting: null }, 'The vote is cleared.')}>Clear vote</button>}
+        </div>
+        {voting && !voting.winner && (voting.red !== match.red.name || voting.blue !== match.blue.name) && (
+          <p className="text-sm text-amber-300 mt-2">This vote is for {voting.red} vs {voting.blue}, not the match on the overlays.</p>
+        )}
+      </div>
 
-        <section className={CARD}>
-          <h2 className="text-xl font-bold mb-1">Quiz</h2>
-          {quiz ? (
-            <>
-              <p className="font-bold text-lg break-words">{quiz.question}</p>
-              <ul className="my-3 space-y-1">
-                {quiz.options.map((option, i) => (
-                  <li key={i} className={`flex justify-between gap-3 px-3 py-2 rounded ${correct === i ? 'bg-green-900 border border-green-500' : 'bg-gray-900'}`}>
-                    <span className="break-words"><b className="mr-2">{LETTERS[i]}.</b>{option}{correct === i && ' (right answer)'}</span>
-                    <b>{counts[i]}</b>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-sm text-gray-300 mb-3">
-                {quiz.status === 'open' ? `Taking answers. ${answers.length} in so far.` : quiz.status === 'closed' ? `Answers are closed. ${answers.length} came in.` : 'Revealed, and trophies given.'}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {quiz.status === 'open' && <button type="button" className={`${BIG} border-red-500`} onClick={() => update({ quiz: { ...quiz, status: 'closed' } }, 'Answers are closed.')}>Close answers</button>}
-                {quiz.status !== 'revealed' && <button type="button" className={`${BIG} border-white`} disabled={correct == null || busy} onClick={reveal}>Reveal the answer and give trophies</button>}
-                <button type="button" className={BIG} onClick={() => update({ quiz: null }, 'The question is down.')}>Take the question down</button>
-              </div>
-              {correct == null && quiz.status !== 'revealed' && <p className="text-sm text-amber-300 mt-3">The right answer for this question wasn't found, so it can't be revealed. Take it down and put it up again.</p>}
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-gray-400 mb-3">Put a prepared question up with one click: it shows on the caster desk overlay, with the answer buttons under the stream. Viewers get one answer each.</p>
-              {bank.questions.length === 0 && <p className="text-sm text-gray-400">None prepared yet. Add some on the Prepare tab.</p>}
-              <div className="flex flex-col gap-2">
-                {bank.questions.map((question) => (
-                  <button key={question.id} type="button" className={`${BIG} text-left`} disabled={!isReady(question)} onClick={() => putUp(question)}>
-                    {question.question || 'Untitled question'} <span className="font-normal text-gray-300">· {question.points} trophies</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
-    </>
+      <div className="border-t border-gray-700 mt-3 pt-3" role="group" aria-label="Quiz">
+        <span className={LABEL}>
+          {!quiz ? 'Quiz'
+            : quiz.status === 'open' ? `Quiz: taking answers · ${answers.length} in`
+              : quiz.status === 'closed' ? `Quiz: answers closed · ${answers.length} in`
+                : 'Quiz: revealed, trophies given'}
+        </span>
+        {quiz ? (
+          <>
+            <p className="font-bold break-words mb-2">{quiz.question}</p>
+            <ul className="mb-2 grid grid-cols-2 gap-1 text-sm">
+              {quiz.options.map((option, i) => (
+                <li key={i} className={`flex justify-between gap-2 px-2 py-1 rounded ${correct === i ? 'bg-green-900 border border-green-500' : 'bg-gray-900'}`}>
+                  <span className="break-words min-w-0">{option}{correct === i && ' ✓'}</span>
+                  <b>{counts[i]}</b>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              {quiz.status === 'open' && <button type="button" className={`${BIG} border-red-500`} onClick={() => update({ quiz: { ...quiz, status: 'closed' } }, 'Answers are closed.')}>Close answers</button>}
+              {quiz.status !== 'revealed' && <button type="button" className={`${BIG} border-white`} disabled={correct == null || busy} onClick={reveal}>Reveal answer</button>}
+              <button type="button" className={quiz.status === 'revealed' ? `${BIG} border-white` : BUTTON} onClick={() => update({ quiz: null }, 'The question is down.')}>Take down</button>
+            </div>
+            {correct == null && quiz.status !== 'revealed' && <p className="text-sm text-amber-300 mt-2">The right answer wasn't found. Take it down and put it up again.</p>}
+          </>
+        ) : (
+          <>
+            {bank.questions.length === 0 && <p className="text-sm text-gray-400">None prepared (Prepare tab).</p>}
+            <div className="flex flex-col gap-2">
+              {bank.questions.map((question) => (
+                <button key={question.id} type="button" className={`${BUTTON} text-left`} disabled={!isReady(question)} onClick={() => putUp(question)}>
+                  {question.question || 'Untitled question'} <span className="font-normal text-gray-300">· {question.points}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 
   const prepare = (
     <>
-        <section className={CARD}>
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-            <h2 className="text-xl font-bold">Quiz questions</h2>
-            <button type="button" className={BUTTON} onClick={() => setEditing(soundQuestion({ options: ['', '', '', ''] }))}>Add a question</button>
-          </div>
+        <Fold id="quiz" title="Quiz questions" action={<button type="button" className={BUTTON} onClick={() => setEditing(soundQuestion({ options: ['', '', '', ''] }))}>Add a question</button>}>
           <p className="text-sm text-gray-400 mb-3">Write these before the broadcast. Viewers can't see them, or the right answers, until you put one up and reveal it.</p>
           <div className="flex flex-col gap-2 mb-3">
             {bank.questions.map((question) => (
@@ -274,10 +265,9 @@ export function useLeagueControl(match, onVotes) {
               </div>
             </div>
           )}
-        </section>
+        </Fold>
 
-        <section className={CARD}>
-          <h2 className="text-xl font-bold mb-1">Final 8 section</h2>
+        <Fold id="finals" title="Final 8 section">
           <label className="block mb-4">
             <span className={LABEL}>Title on the pop-up and page</span>
             <input className={INPUT} defaultValue={league.title} onBlur={(e) => { if (e.target.value !== league.title) update({ title: e.target.value }, 'Title saved.'); }} />
@@ -307,7 +297,7 @@ export function useLeagueControl(match, onVotes) {
           </label>
           <p className="text-sm text-gray-400 mb-3">Trophies carry on through the broadcast. Clear them before a new one.</p>
           <button type="button" className={`${BUTTON} border-red-500`} onClick={() => { if (window.confirm('Clear everyone\'s trophies?')) run(resetLeagueScores, 'The leaderboard is cleared.'); }}>Clear the leaderboard</button>
-        </section>
+        </Fold>
     </>
   );
 

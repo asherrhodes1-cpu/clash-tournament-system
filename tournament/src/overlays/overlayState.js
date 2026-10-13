@@ -148,7 +148,7 @@ export function overlayStates(given) {
 export const OVERLAYS = [
   { file: 'in-game', label: 'In-game', about: 'Game capture on the left, player panel on the right', under: ['Game capture: x 0, y 0, 1446 × 1080'] },
   { file: 'caster-desk', label: 'Caster desk', about: 'Two caster cams, the matchup and the audience vote', under: ['Caster 1: x 120, y 206, 760 × 428', 'Caster 2: x 1040, y 206, 760 × 428'] },
-  { file: 'attack-overview', label: 'Attack overview', about: 'Stars, destruction, time and troops used', under: [] },
+  { file: 'attack-overview', label: 'Attack overview', about: 'Stars, destruction and troops used', under: [] },
   { file: 'player-red', label: 'Player overview: red', about: 'Red player stats and favorite army, with caster cams', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'] },
   { file: 'player-blue', label: 'Player overview: blue', about: 'Blue player stats and favorite army, with caster cams', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'] },
 ];

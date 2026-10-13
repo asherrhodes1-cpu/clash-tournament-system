@@ -67,7 +67,9 @@ html,body{margin:0;min-height:100%;width:100%;background:#05071f;overflow:hidden
 #atk .tag{top:-24px}
 
 /* ---- stat tiles ---- */
-#stats{left:190px;width:1540px;top:372px;display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
+/* Two tiles, stars and destruction, centred: the time tile is no longer shown. */
+#stats{left:450px;width:1020px;top:372px;display:grid;grid-template-columns:repeat(2,1fr);gap:40px}
+#stats .st:nth-child(3){display:none}
 .st{height:196px;box-sizing:border-box;position:relative}
 .stIn{height:100%;box-sizing:border-box;border-radius:18px;display:flex;align-items:center;gap:20px;padding:0 26px 6px}
 .stIn>img{width:104px;height:104px;object-fit:contain;flex:none;filter:drop-shadow(0 6px 0 rgba(10,11,38,.55))}

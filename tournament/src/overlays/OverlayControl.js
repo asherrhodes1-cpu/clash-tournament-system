@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { saveOverlays, subscribeToOverlays } from '../api/overlays';
+import Fold from './Fold';
 import { useLeagueControl } from '../league/LeagueControl';
 import {
   MAX_GAMES, MAX_STARS, OVERLAYS, TROOPS, blankAttack, blankMatch, blankPlayer, isOnSide, matchLabel, seriesWinner, soundLibrary, soundMatch,
@@ -10,10 +11,13 @@ import {
 const SAVE_AFTER_MS = 400;
 
 const CARD = 'bg-gray-800 rounded-lg border border-gray-700 p-5';
+// On the Live tab everything is packed tighter, to fit beside a broadcast.
+const LIVE_CARD = 'bg-gray-800 rounded-lg border border-gray-700 p-3';
+const LIVE_TITLE = 'text-base font-bold mb-2';
 const INPUT = 'w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white focus:border-white focus:outline-none';
 const BUTTON = 'px-3 py-2 rounded border border-gray-500 bg-gray-700 hover:bg-gray-600 text-sm font-bold disabled:opacity-40 disabled:hover:bg-gray-700';
 // The buttons pressed mid-broadcast: big enough to hit without looking twice.
-const BIG = 'px-4 py-3 rounded-lg border-2 bg-gray-700 hover:bg-gray-600 font-bold text-base disabled:opacity-40 disabled:hover:bg-gray-700';
+const BIG = 'px-3 py-2 rounded-lg border-2 bg-gray-700 hover:bg-gray-600 font-bold text-base disabled:opacity-40 disabled:hover:bg-gray-700';
 const ON = 'bg-white text-black hover:bg-white';
 const RED = 'border-red-500';
 const BLUE = 'border-sky-400';
@@ -125,8 +129,8 @@ function Preview({ file }) {
 // Which overlay is being looked at, and the overlay itself.
 function Overlays({ shown, onShow }) {
   return (
-    <section className={CARD}>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <section className={LIVE_CARD}>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Overlay shown below">
           {OVERLAYS.map((overlay) => (
             <button key={overlay.file} type="button" aria-pressed={shown === overlay.file} className={`${BUTTON} ${shown === overlay.file ? ON : ''}`} onClick={() => onShow(overlay.file)}>{overlay.label}</button>
@@ -262,11 +266,10 @@ export default function OverlayControl() {
 
         {/* ---- Live: everything here is one click, nothing to type ---- */}
         {tab === 'live' && (
-          <div className="grid lg:grid-cols-2 gap-6 items-start">
-            <div className="space-y-6">
-              <section className={CARD}>
-                <h2 className="text-xl font-bold mb-1">Matches</h2>
-                <p className="text-sm text-gray-400 mb-3">Puts a whole prepared match on every overlay.</p>
+          <div className="grid lg:grid-cols-2 gap-4 items-start">
+            <div className="space-y-4">
+              <section className={LIVE_CARD}>
+                <h2 className={LIVE_TITLE}>Matches</h2>
                 {library.matches.length === 0 && <p className="text-sm text-gray-400">None prepared yet. Save some on the Prepare tab.</p>}
                 <div className="flex flex-wrap gap-2">
                   {library.matches.map((entry) => (
@@ -275,12 +278,11 @@ export default function OverlayControl() {
                 </div>
               </section>
 
-              <section className={CARD}>
-                <h2 className="text-xl font-bold mb-1">Players</h2>
-                <p className="text-sm text-gray-400 mb-3">Puts a prepared player on a side: the player overview, in-game panel and caster desk all follow.</p>
+              <section className={LIVE_CARD}>
+                <h2 className={LIVE_TITLE}>Players</h2>
                 {library.players.length === 0 && <p className="text-sm text-gray-400">None prepared yet. Add some on the Prepare tab.</p>}
                 {[['r', 'Red', RED], ['b', 'Blue', BLUE]].map(([side, name, colour]) => library.players.length > 0 && (
-                  <div key={side} className="mb-3" role="group" aria-label={`${name} player`}>
+                  <div key={side} className="mb-2 last:mb-0" role="group" aria-label={`${name} player`}>
                     <span className={LABEL}>{name}: {(side === 'b' ? match.blue : match.red).name}</span>
                     <div className="flex flex-wrap gap-2">
                       {library.players.map((player) => (
@@ -291,14 +293,14 @@ export default function OverlayControl() {
                 ))}
               </section>
 
-              <section className={CARD}>
-                <h2 className="text-xl font-bold mb-3">Score</h2>
+              <section className={LIVE_CARD}>
+                <h2 className={LIVE_TITLE}>Score</h2>
                 {score}
               </section>
 
-              <section className={CARD}>
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                  <h2 className="text-xl font-bold">Attack overview</h2>
+              <section className={LIVE_CARD}>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <h2 className="text-base font-bold">Attack overview</h2>
                   <button type="button" className={BUTTON} onClick={() => press({ ...match, attack: { ...blankAttack(), side: match.attack.side } })}>Clear for the next attack</button>
                 </div>
                 <span className={LABEL}>Attacker: {attacker.name}</span>
@@ -312,15 +314,12 @@ export default function OverlayControl() {
                     <button key={n} type="button" aria-pressed={match.attack.stars === n} className={`${BIG} border-gray-500 ${match.attack.stars === n ? ON : ''}`} onClick={() => setAttack('stars', true)(n)}>{n}</button>
                   ))}
                 </div>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <Field label="Destruction % (out of 200)" value={match.attack.percent} onChange={setAttack('percent')} placeholder="187.5" />
-                  <Field label="Time (m:ss)" value={match.attack.time} onChange={setAttack('time')} placeholder="2:41" />
-                </div>
+                <Field className="mb-3" label="Destruction % (out of 200)" value={match.attack.percent} onChange={setAttack('percent')} placeholder="187.5" />
                 <TroopSlots label="Troops used" slots={match.attack.troops} onChange={setAttack('troops', true)} />
               </section>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {finals.live}
               <Overlays shown={shown} onShow={setShown} />
             </div>
@@ -331,11 +330,7 @@ export default function OverlayControl() {
         {tab === 'prepare' && (
           <div className="grid lg:grid-cols-2 gap-6 items-start">
             <div className="space-y-6">
-              <section className={CARD}>
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                  <h2 className="text-xl font-bold">Players</h2>
-                  <button type="button" className={BUTTON} onClick={() => setEditing({ ...blankPlayer(), id: '', fresh: true })}>Add a player</button>
-                </div>
+              <Fold id="players" title="Players" action={<button type="button" className={BUTTON} onClick={() => setEditing({ ...blankPlayer(), id: '', fresh: true })}>Add a player</button>}>
                 <p className="text-sm text-gray-400 mb-3">Everyone who might appear. Each one becomes a button on the Live tab.</p>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {library.players.map((player) => (
@@ -365,10 +360,9 @@ export default function OverlayControl() {
                     </div>
                   </div>
                 )}
-              </section>
+              </Fold>
 
-              <section className={CARD}>
-                <h2 className="text-xl font-bold mb-1">Saved matches</h2>
+              <Fold id="matches" title="Saved matches">
                 <p className="text-sm text-gray-400 mb-3">Set the match up on the right, then save it here. Each one becomes a button on the Live tab.</p>
                 <div className="flex flex-wrap gap-2 mb-3">
                   <input className={`${INPUT} flex-1 min-w-[12rem]`} aria-label="Name for this match" value={saveAs} placeholder={matchLabel(match)} onChange={(e) => setSaveAs(e.target.value)} />
@@ -385,12 +379,11 @@ export default function OverlayControl() {
                     </li>
                   ))}
                 </ul>
-              </section>
+              </Fold>
             </div>
 
             <div className="space-y-6">
-              <section className={CARD}>
-                <h2 className="text-xl font-bold mb-1">The match on screen</h2>
+              <Fold id="on-screen" title="The match on screen">
                 <p className="text-sm text-gray-400 mb-3">Typing here changes the overlays as you go.</p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Event title" value={match.title} onChange={set('title')} />
@@ -416,16 +409,12 @@ export default function OverlayControl() {
                     </React.Fragment>
                   ))}
                 </div>
-              </section>
+              </Fold>
 
               {[['r', 'Red player', 'red', RED], ['b', 'Blue player', 'blue', BLUE]].map(([side, title, key, colour]) => (
-                <section key={side} className={`${CARD} border-2 ${colour}`}>
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <h2 className="text-xl font-bold">{title}</h2>
-                    <button type="button" className={BUTTON} onClick={() => setLibrary(withSavedPlayer(library, { ...match[key], id: library.players.find((p) => p.name === match[key].name)?.id ?? '' }))}>Save to players</button>
-                  </div>
+                <Fold key={side} id={`${key}-player`} title={title} className={`border-2 ${colour}`} action={<button type="button" className={BUTTON} onClick={() => setLibrary(withSavedPlayer(library, { ...match[key], id: library.players.find((p) => p.name === match[key].name)?.id ?? '' }))}>Save to players</button>}>
                   <PlayerFields player={match[key]} onChange={set(key)} />
-                </section>
+                </Fold>
               ))}
 
               {finals.prepare}
