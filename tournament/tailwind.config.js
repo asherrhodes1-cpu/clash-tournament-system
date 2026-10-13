@@ -14,6 +14,11 @@ module.exports = {
       colors: {
         amber: { 100: '#ffffff', 200: '#f5f5f5', 300: '#ffffff', 400: '#ffffff' },
         yellow: { 400: '#f5f5f5', 500: '#d4d4d4' },
+        // The stream overlays' night blues in place of the grays every panel,
+        // field and border is written in, so the whole site takes their look
+        // the same way. `neutral` is used for the same things as `gray`.
+        gray: { 950: '#050720', 900: '#080c28', 800: '#121945', 700: '#101746', 600: '#2a3780', 500: '#5a69ad' },
+        neutral: { 900: '#080c28', 800: '#121945', 700: '#101746', 600: '#2a3780' },
       },
     },
   },

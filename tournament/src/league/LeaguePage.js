@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import PlayerName from '../PlayerName';
 import {
   answerQuiz, castVote, subscribeToLeague, subscribeToLeagueScores, subscribeToMyAnswer, subscribeToMyScore, subscribeToMyVote,
@@ -6,33 +6,11 @@ import {
 import { parseYouTubeId } from '../live/liveUtils';
 import { voteShares } from './leagueState';
 
-// The page wears the stream overlays' look (see index.css): their night sky
-// and glimmer behind it, and the caster cams' stone frame around each part.
+// The page wears the stream overlays' look (see index.css): the caster cams'
+// stone frame around each part, over the sky the whole site sits on.
 const FRAME = 'league-stone';
 const INSET = 'league-inset p-4 sm:p-5';
 const LOGIN = 'border-2 border-white text-white hover:bg-white hover:text-black px-3 py-1 rounded-lg font-bold transition';
-
-// The overlays' background: the sky, with glints, dust and sparks scattered
-// over it once, each on its own beat.
-function Sky() {
-  const specks = useMemo(() => {
-    const scatter = (kind, count, style) => Array.from({ length: count }, (_, i) => ({
-      key: `${kind}${i}`,
-      kind,
-      style: { left: `${(Math.random() * 100).toFixed(2)}%`, top: `${(Math.random() * 100).toFixed(2)}%`, animationDelay: `${(Math.random() * 5).toFixed(2)}s`, ...style() },
-    }));
-    return [
-      ...scatter('glint', 22, () => { const size = 26 * (0.5 + Math.random() * 1.1); return { width: size, height: size, margin: -size / 2, animationDuration: `${(2.2 + Math.random() * 2.6).toFixed(2)}s` }; }),
-      ...scatter('dust', 90, () => { const size = 1 + Math.random() * 2.2; return { width: size, height: size, animationDuration: `${(3 + Math.random() * 4).toFixed(2)}s` }; }),
-      ...scatter('spark', 30, () => ({ animationDuration: `${(3 + Math.random() * 3).toFixed(2)}s` })),
-    ];
-  }, []);
-  return (
-    <div className="league-sky" aria-hidden="true">
-      {specks.map(({ key, kind, style }) => <span key={key} className={`league-${kind}`} style={style}>{kind === 'glint' && <i />}</span>)}
-    </div>
-  );
-}
 
 // The broadcast itself, so the finals can be watched from the site. The
 // questions are asked on it, by the stream's own overlay.
@@ -232,9 +210,7 @@ export default function LeaguePage({ user, onLogin, onHome }) {
 
   const { voting, quiz } = league;
   return (
-    <>
-    <Sky />
-    <div className="relative z-10 max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
       <header className="flex flex-col items-center gap-2 text-center">
         <div className="flex items-center justify-center gap-3 sm:gap-4">
           <img src="/badges/builder-league.png" alt="" className="w-10 h-10 sm:w-20 sm:h-20 object-contain shrink-0" />
@@ -249,6 +225,5 @@ export default function LeaguePage({ user, onLogin, onHome }) {
       </div>
       <Leaderboard user={user} />
     </div>
-    </>
   );
 }

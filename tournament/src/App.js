@@ -42,6 +42,7 @@ import UserManager from './staff/UserManager';
 import { LADDER_ID, LADDER_TOURNAMENT, joinLadderQueue } from './api/ladder';
 import LiveHeader from './live/LiveHeader';
 import LeaguePage from './league/LeaguePage';
+import Sky from './Sky';
 import LeaguePopup from './league/LeaguePopup';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
 import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, parseRewardLinks, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
@@ -1271,7 +1272,8 @@ export default function TournamentApp() {
 
   if (authInitializing) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="isolate min-h-screen text-white flex items-center justify-center">
+        <Sky />
         <p className="text-neutral-400">Loading…</p>
       </div>
     );
@@ -1287,7 +1289,8 @@ export default function TournamentApp() {
   const inLiveSection = liveSectionPages.includes(currentPage) || (currentPage === 'login' && liveSectionPages.includes(loginReturnPage));
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="isolate min-h-screen text-white">
+      <Sky />
       {currentPage === 'landing' ? null : inLiveSection ? (
         <LiveHeader
           user={user}
@@ -1748,34 +1751,22 @@ export default function TournamentApp() {
 
 function LandingPage({ onEnter, onPlayLadder, onWatchLive, onStaffDashboard }) {
   return (
-    <div className="text-center max-w-3xl mx-auto mt-20">
+    <div className="text-center max-w-3xl mx-auto mt-12 sm:mt-20">
       <img
-        src="/logo.png"
-        alt="MercifulAj Logo"
-        className="w-64 h-64 sm:w-72 sm:h-72 mx-auto mb-12 object-contain"
+        src="/badges/builder-league.png"
+        alt="Builder League"
+        className="w-44 h-44 sm:w-52 sm:h-52 mx-auto mb-10 object-contain"
       />
-      <div className="flex flex-col sm:flex-row justify-center gap-4">
-        <button
-          onClick={onEnter}
-          className="sm:w-56 bg-white text-black px-8 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
-        >
-          TOURNAMENTS
-        </button>
-        <button
-          onClick={onPlayLadder}
-          className="sm:w-56 bg-white text-black px-8 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
-        >
-          1V1
-        </button>
-        <button
-          onClick={onWatchLive}
-          className="sm:w-56 bg-white text-black px-8 py-4 rounded font-bold text-lg tracking-wide border-2 border-white hover:bg-black hover:text-white transition"
-        >
-          LIVE
-        </button>
+      {/* The quiz panel from the stream, with the sections as its answers. */}
+      <div className="league-stone">
+        <div className="league-inset p-4 sm:p-5 grid sm:grid-cols-3 gap-3 sm:gap-4">
+          <button onClick={onEnter} className="league-answer px-6 py-4 text-lg sm:text-xl font-bold tracking-wide">TOURNAMENTS</button>
+          <button onClick={onPlayLadder} className="league-answer px-6 py-4 text-lg sm:text-xl font-bold tracking-wide">1V1</button>
+          <button onClick={onWatchLive} className="league-answer px-6 py-4 text-lg sm:text-xl font-bold tracking-wide">LIVE</button>
+        </div>
       </div>
       {onStaffDashboard && (
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
           <button
             onClick={onStaffDashboard}
             className="border border-white text-white hover:bg-white hover:text-black px-4 py-2 rounded text-sm transition"
@@ -2035,7 +2026,7 @@ function LoginPage({ section = 'tournaments', onAccountCreated }) {
     <div className="max-w-md mx-auto mt-20">
       <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
         <div className="flex justify-center mb-8">
-          <img src="/logo.png" alt="MercifulAj" className="w-24 h-24 object-contain" />
+          <img src="/badges/builder-league.png" alt="Builder League" className="w-24 h-24 object-contain" />
         </div>
 
         {error && (
