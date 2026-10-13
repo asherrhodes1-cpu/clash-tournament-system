@@ -10,6 +10,9 @@ const count = (value) => Math.max(0, Math.round(Number(value)) || 0);
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
 // The section as saved in live/league, with anything missing put right.
+//   stage:  which part of the finals is on - 'Quarterfinal', 'Grand Final' -
+//           shown under the title on the finals page
+//   videoUrl: the YouTube link of the broadcast, shown on the finals page
 //   voting: the match being voted on - { matchId, red, blue, status: 'open' |
 //           'locked', redVotes, blueVotes } - or null
 //   quiz:   the question that is up - { id, question, options, points,
@@ -35,7 +38,7 @@ export function soundLeague(saved) {
     correct: status === 'revealed' && Number.isInteger(saved.quiz.correct) ? saved.quiz.correct : null,
     counts: status === 'revealed' && Array.isArray(saved.quiz.counts) ? options.map((_, i) => count(saved.quiz.counts[i])) : null,
   } : null;
-  return { active: saved?.active === true, title: text(saved?.title, 'BUILDER LEAGUE: FINAL 8'), voting, quiz };
+  return { active: saved?.active === true, title: text(saved?.title, 'BUILDER LEAGUE'), stage: text(saved?.stage, 'FINAL 8').trim(), videoUrl: text(saved?.videoUrl).trim(), voting, quiz };
 }
 
 // Votes counted by side: [{ side }] -> { r, b }.

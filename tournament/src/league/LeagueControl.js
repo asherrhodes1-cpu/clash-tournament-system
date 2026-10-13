@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   awardPoints, resetLeagueScores, saveLeague, saveQuestions, subscribeToAnswers, subscribeToLeague, subscribeToQuestions, subscribeToVotes,
 } from '../api/league';
+import { parseYouTubeId } from '../live/liveUtils';
 import {
   DEFAULT_POINTS, MAX_OPTIONS, asked, isReady, newId, quizWinners, soundQuestion, tallyAnswers, tallyVotes, voteShares,
 } from './leagueState';
@@ -117,7 +118,8 @@ export function useLeagueControl(match, onVotes) {
             <h2 className="text-xl font-bold">Final 8 section</h2>
             <span className="text-sm text-gray-400" role="status">{status}</span>
           </div>
-          <p className="text-sm text-gray-400 mb-3">While this is on, everyone on the site gets a large pop-up sending them to the finals page, where they vote and play the quiz. Turn it off when the broadcast ends.</p>
+          <p className="text-sm text-gray-400 mb-3">While this is on, everyone on the site gets a large pop-up sending them to the finals page, where they watch the stream and answer under it. Votes and quiz questions are asked on the caster desk overlay, and the answer buttons come up under the video. Turn it off when the broadcast ends.</p>
+          {!parseYouTubeId(league.videoUrl) && <p className="text-sm text-amber-300 mb-3">No stream link is set, so the finals page has no video. Add it on the Prepare tab.</p>}
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" aria-pressed={league.active} className={`${BIG} ${league.active ? ON : ''}`} onClick={() => update({ active: !league.active }, league.active ? 'The section is off.' : 'The section is live.')}>
               {league.active ? 'Live: turn the section off' : 'Turn the section on'}
@@ -128,7 +130,7 @@ export function useLeagueControl(match, onVotes) {
 
         <section className={CARD}>
           <h2 className="text-xl font-bold mb-1">Match vote</h2>
-          <p className="text-sm text-gray-400 mb-3">Viewers pick who wins. Lock it as the match starts. The totals fill the overlays' audience vote bar by themselves.</p>
+          <p className="text-sm text-gray-400 mb-3">Opening it asks "Who wins?" on the caster desk's vote bar and puts the two buttons under the stream. Lock it as the match starts and both go. The totals fill the overlays' audience vote bar by themselves.</p>
           {voting ? (
             <>
               <p className="font-bold text-lg mb-2">
@@ -175,7 +177,7 @@ export function useLeagueControl(match, onVotes) {
             </>
           ) : (
             <>
-              <p className="text-sm text-gray-400 mb-3">Put a prepared question up with one click. Viewers get one answer each.</p>
+              <p className="text-sm text-gray-400 mb-3">Put a prepared question up with one click: it shows on the caster desk overlay, with the answer buttons under the stream. Viewers get one answer each.</p>
               {bank.questions.length === 0 && <p className="text-sm text-gray-400">None prepared yet. Add some on the Prepare tab.</p>}
               <div className="flex flex-col gap-2">
                 {bank.questions.map((question) => (
@@ -260,6 +262,25 @@ export function useLeagueControl(match, onVotes) {
           <label className="block mb-4">
             <span className={LABEL}>Title on the pop-up and page</span>
             <input className={INPUT} defaultValue={league.title} onBlur={(e) => { if (e.target.value !== league.title) update({ title: e.target.value }, 'Title saved.'); }} />
+          </label>
+          <label className="block mb-4">
+            <span className={LABEL}>Under the title on the page</span>
+            <input className={INPUT} defaultValue={league.stage} placeholder="Quarterfinals, Grand Final…" onBlur={(e) => { const stage = e.target.value.trim(); if (stage !== league.stage) update({ stage }, stage ? 'Saved.' : 'Removed.'); }} />
+            <span className="block text-sm text-gray-400 mt-1">Which part of the finals is on. Leave it empty to show only the title.</span>
+          </label>
+          <label className="block mb-4">
+            <span className={LABEL}>YouTube stream link</span>
+            <input
+              className={INPUT}
+              defaultValue={league.videoUrl}
+              placeholder="https://www.youtube.com/live/..."
+              onBlur={(e) => {
+                const videoUrl = e.target.value.trim();
+                if (videoUrl && !parseYouTubeId(videoUrl)) setStatus('That doesn\'t look like a YouTube video or live link.');
+                else if (videoUrl !== league.videoUrl) update({ videoUrl }, videoUrl ? 'Stream link saved.' : 'Stream link removed.');
+              }}
+            />
+            <span className="block text-sm text-gray-400 mt-1">The stream plays on the finals page, with the answer buttons under it.</span>
           </label>
           <p className="text-sm text-gray-400 mb-3">Quiz points carry on through the broadcast. Clear them before a new one.</p>
           <button type="button" className={`${BUTTON} border-red-500`} onClick={() => { if (window.confirm('Clear everyone\'s quiz points?')) run(resetLeagueScores, 'The leaderboard is cleared.'); }}>Clear the leaderboard</button>

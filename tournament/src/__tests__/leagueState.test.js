@@ -1,7 +1,7 @@
 import { asked, isReady, quizWinners, soundLeague, soundQuestion, tallyAnswers, tallyVotes, voteShares } from '../league/leagueState';
 
 test('with nothing saved the section is off, with no vote and no question', () => {
-  expect(soundLeague(undefined)).toEqual({ active: false, title: 'BUILDER LEAGUE: FINAL 8', voting: null, quiz: null });
+  expect(soundLeague(undefined)).toEqual({ active: false, title: 'BUILDER LEAGUE', stage: 'FINAL 8', videoUrl: '', voting: null, quiz: null });
 });
 
 test('votes are counted by side and shown as shares that add up to 100', () => {

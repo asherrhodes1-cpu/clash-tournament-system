@@ -70,10 +70,10 @@ test('a viewer votes for a side while voting is open, and sees the split', async
   expect(api.castVote).toHaveBeenCalledWith('m1', viewer, 'b');
 });
 
-test('once the match has started the vote is locked', () => {
+test('once the match has started the vote buttons go', () => {
   mount(() => <LeaguePage user={viewer} onLogin={() => {}} onHome={() => {}} />, { active: true, voting: vote('locked') });
-  expect(button('MrSixStar').disabled).toBe(true);
-  expect(host.textContent).toMatch(/Voting is locked/);
+  expect(button('MrSixStar')).toBeUndefined();
+  expect(host.querySelector('[aria-label="Match vote"]')).toBeNull();
 });
 
 test('someone not signed in is asked to log in instead', async () => {
@@ -87,7 +87,7 @@ test('someone not signed in is asked to log in instead', async () => {
 
 test('a quiz answer is given once, and the result shows when it is revealed', async () => {
   mount(() => <LeaguePage user={viewer} onLogin={() => {}} onHome={() => {}} />, { active: true, quiz: question() });
-  await click('B.');
+  await click('6');
   expect(api.answerQuiz).toHaveBeenCalledWith('q1', viewer, 1);
   act(() => root.unmount());
   host.remove();
@@ -95,9 +95,31 @@ test('a quiz answer is given once, and the result shows when it is revealed', as
   mount(() => <LeaguePage user={viewer} onLogin={() => {}} onHome={() => {}} />, { active: true, quiz: question('revealed', { correct: 1, counts: [1, 3, 0] }) });
   // Their answer is already in, so the buttons are off and the result is shown.
   act(() => api.subscribeToMyAnswer.mock.calls.at(-1)[2](1));
-  expect(button('B.').disabled).toBe(true);
+  expect(button('6').disabled).toBe(true);
   expect(host.textContent).toMatch(/Correct! \+250 points/);
-  expect(button('B.').textContent).toMatch(/75% picked this · correct/);
+  expect(button('6').textContent).toMatch(/75% picked this · correct/);
+});
+
+test('the stream plays on the finals page, with answer buttons under it only while something is up', () => {
+  mount(() => <LeaguePage user={viewer} onLogin={() => {}} onHome={() => {}} />, { active: true, videoUrl: 'https://www.youtube.com/live/abcdefghijk' });
+  expect(host.querySelector('iframe').src).toContain('youtube.com/embed/abcdefghijk');
+  expect(host.querySelector('[aria-label="Match vote"]')).toBeNull();
+  expect(host.querySelector('[aria-label="Quiz question"]')).toBeNull();
+  act(() => api.subscribeToLeague.mock.calls.at(-1)[0](soundLeague({ active: true, voting: vote(), quiz: question() })));
+  expect(host.textContent).toMatch(/The stream will show here/);
+  expect(button('MrSixStar')).toBeDefined();
+  expect(button('6')).toBeDefined();
+});
+
+test('staff set the stream link ahead of the broadcast', async () => {
+  mount(() => <LeagueControl match={match} onVotes={() => {}} />, { active: true });
+  expect(host.textContent).toMatch(/No stream link is set/);
+  const input = host.querySelector('input[placeholder*="youtube.com/live"]');
+  const leave = (value) => act(async () => { input.value = value; input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+  await leave('not a link');
+  expect(api.saveLeague).not.toHaveBeenCalled();
+  await leave('https://youtu.be/abcdefghijk');
+  expect(api.saveLeague.mock.calls.at(-1)[0].videoUrl).toBe('https://youtu.be/abcdefghijk');
 });
 
 test('the pop-up shows only while the section is on, and closing it lasts the visit', async () => {

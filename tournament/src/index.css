@@ -141,3 +141,94 @@ body .gold-name {
     background-position: 45% center;
   }
 }
+
+/* ---- The finals page (/league), in the look of the stream overlays ---- */
+
+/* The answer buttons coming up under the finals stream. */
+@keyframes league-pop {
+  from { opacity: 0; transform: translateY(-0.75rem); }
+  to { opacity: 1; transform: none; }
+}
+.league-pop { animation: league-pop 0.3s ease-out; }
+
+/* The overlays' night sky behind the whole page, with their glimmer over it:
+   glints that flash, dust that fades in and out, sparks that drift up. */
+.league-sky { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: #05071f url('./league/league-bg.jpg') center / cover no-repeat; }
+.league-sky span { position: absolute; opacity: 0; will-change: transform, opacity; }
+.league-glint { width: 26px; height: 26px; margin: -13px; animation: league-glint 3.2s ease-in-out infinite; }
+.league-glint::before, .league-glint::after { content: ''; position: absolute; left: 50%; top: 50%; border-radius: 50%; background: radial-gradient(ellipse at center, #ffffff 0%, rgba(190, 225, 255, 0.9) 30%, rgba(120, 180, 255, 0) 70%); }
+.league-glint::before { width: 100%; height: 3px; margin: -1.5px 0 0 -50%; }
+.league-glint::after { width: 3px; height: 100%; margin: -50% 0 0 -1.5px; }
+.league-glint i { position: absolute; left: 50%; top: 50%; width: 30%; height: 30%; margin: -15%; border-radius: 50%; background: #fff; box-shadow: 0 0 10px #bfe0ff, 0 0 22px #6fa8ff; }
+@keyframes league-glint { 0%, 100% { opacity: 0; transform: scale(0.2) rotate(0deg); } 45% { opacity: 1; transform: scale(1) rotate(45deg); } 60% { opacity: 0.85; transform: scale(0.8) rotate(60deg); } }
+.league-dust { width: 3px; height: 3px; border-radius: 50%; background: #dbeaff; animation: league-dust 5s ease-in-out infinite; }
+@keyframes league-dust { 0%, 100% { opacity: 0; } 50% { opacity: 0.75; } }
+.league-spark { width: 6px; height: 6px; border-radius: 50%; background: #dffcff; box-shadow: 0 0 10px #6ff3ff, 0 0 20px #46e3ff; animation: league-spark 4s ease-in-out infinite; }
+@keyframes league-spark { 0%, 100% { opacity: 0; transform: translateY(0) scale(0.6); } 50% { opacity: 0.95; transform: translateY(-22px) scale(1); } }
+
+/* The caster cams' frame: blue stone around a dark inset. */
+.league-stone {
+  border-radius: 22px;
+  padding: 10px;
+  border: 4px solid #141a3e;
+  background:
+    radial-gradient(ellipse 60% 45% at 22% 18%, rgba(255, 255, 255, 0.16), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 80% 85%, rgba(10, 14, 50, 0.22), transparent 70%),
+    linear-gradient(180deg, #7d8fd0 0%, #56669f 45%, #404c80 100%);
+  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.32), inset 0 -7px 0 rgba(12, 16, 48, 0.45), 0 6px 0 #141a3e, 0 14px 20px rgba(0, 0, 0, 0.5);
+}
+.league-inset {
+  position: relative;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #1b2566, #10163f);
+  box-shadow: 0 0 0 4px #141a3e, inset 0 10px 14px rgba(0, 0, 0, 0.55), inset 0 0 0 2px rgba(0, 0, 0, 0.4);
+}
+/* Which part of the finals is on: the overlays' gold plate, under the title. */
+.league-round {
+  padding: 2px 20px 4px;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #3b2100;
+  /* Dark letters on gold: the site's dark outline would only blur them. */
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  background: linear-gradient(180deg, #fff4b0, #ffd23f 40%, #e39a12);
+  border: 3px solid #0a0b26;
+  box-shadow: 0 4px 0 #0a0b26, inset 0 2px 0 rgba(255, 255, 255, 0.7);
+}
+/* The points, on a tab of the frame's own stone. */
+.league-tab {
+  display: inline-block;
+  padding: 2px 12px 3px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: linear-gradient(180deg, #7d8fd0, #56669f 45%, #404c80);
+  border: 3px solid #141a3e;
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.3), inset 0 -4px 0 rgba(12, 16, 48, 0.45);
+}
+.league-note { color: #9fe8ff; }
+/* An answer box, and the two sides of a vote. */
+.league-answer {
+  border-radius: 14px;
+  border: 3px solid #0a0b26;
+  background: rgba(5, 7, 31, 0.78);
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.league-answer:not(:disabled):hover { background: #2a3a94; transform: translateY(-1px); }
+.league-answer.is-picked { background: #3a4fb8; box-shadow: 0 0 0 3px #9fe8ff; }
+.league-answer.is-right { background: linear-gradient(180deg, #3fd16a, #1c8f3f); }
+.league-side { border-radius: 14px; border: 3px solid #0a0b26; transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
+.league-side.is-red { background: linear-gradient(180deg, #ff7a86, #ef3448 50%, #b8142f); box-shadow: inset 0 -6px 0 #7a0a1e; }
+.league-side.is-blue { background: linear-gradient(180deg, #7ccaff, #2f8bf0 50%, #1658c4); box-shadow: inset 0 -6px 0 #0c357e; }
+.league-side:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.1); }
+.league-side.is-picked { box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.35), 0 0 0 3px #ffd23f, 0 0 22px rgba(255, 210, 63, 0.6); }
+.league-side.is-passed { filter: saturate(0.55) brightness(0.8); }
+
+@media (prefers-reduced-motion: reduce) {
+  .league-pop { animation: none; }
+  .league-sky span { animation: none; opacity: 0.5; }
+}
