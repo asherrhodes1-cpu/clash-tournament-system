@@ -9,6 +9,9 @@ jest.mock('../api/overlays', () => ({
   saveOverlays: jest.fn(() => Promise.resolve()),
 }));
 
+// The finals section's controls have tests of their own.
+jest.mock('../league/LeagueControl', () => ({ useLeagueControl: () => ({ live: null, prepare: null }) }));
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const player = (id, name, seed) => ({ ...blankPlayer(name, seed), id, best: `${name}'s best`, army: ['12', '', '', '', '', ''] });

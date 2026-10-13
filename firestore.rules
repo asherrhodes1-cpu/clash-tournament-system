@@ -311,6 +311,59 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The Builder League finals section (/league), open while staff are
+    // streaming them. live/league (public, staff-written, covered by the
+    // `live` rule above) says whether it is on, which match is being voted
+    // on and which quiz question is up.
+    function league() {
+      return get(/databases/$(database)/documents/live/league).data;
+    }
+
+    // One vote per account per match: who will win. It can be changed until
+    // staff lock voting as the match starts. Staff read them all to keep the
+    // totals in live/league; a voter reads only their own.
+    match /leagueVotes/{matchId}/votes/{uid} {
+      allow read: if isStaff() || (isSignedIn() && request.auth.uid == uid);
+      allow create, update: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly(['side', 'username'])
+                    && request.resource.data.side in ['r', 'b']
+                    && request.resource.data.username == myUsername()
+                    && league().get('voting', null) != null
+                    && league().voting.matchId == matchId
+                    && league().voting.status == 'open';
+      allow delete: if isStaff();
+    }
+
+    // One answer per account per quiz question, and no changing it. Nobody
+    // but staff sees what others picked, so the popular answer can't be copied.
+    match /leagueQuiz/{quizId}/answers/{uid} {
+      allow read: if isStaff() || (isSignedIn() && request.auth.uid == uid);
+      allow create: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.keys().hasOnly(['choice', 'username'])
+                    && request.resource.data.choice is int
+                    && request.resource.data.choice >= 0
+                    && request.resource.data.choice < 4
+                    && request.resource.data.username == myUsername()
+                    && league().get('quiz', null) != null
+                    && league().quiz.id == quizId
+                    && league().quiz.status == 'open';
+      allow update: if false;
+      allow delete: if isStaff();
+    }
+
+    // Quiz points, public for the leaderboard. Staff award them when they
+    // reveal an answer.
+    match /leagueScores/{uid} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // What only staff may see: the prepared quiz questions, which include
+    // the right answers.
+    match /leagueStaff/{docId} {
+      allow read, write: if isStaff();
+    }
+
     match /flags/{flagId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.createdBy == myUsername()

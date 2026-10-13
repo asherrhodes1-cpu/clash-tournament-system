@@ -73,6 +73,16 @@
   }
   outlineWithShadows();
 
+  /* The glimmer - sparks, glints and dust - is dozens of specks a few pixels
+     across, drifting a pixel or so a frame. Left to the page, each is redrawn
+     on whole pixels, so it moves in little jumps. Given a layer of its own,
+     the graphics card slides it between pixels instead, which is smooth. */
+  (function smoothGlimmer() {
+    var style = document.createElement('style');
+    style.textContent = '.spark,.glint,.dust{will-change:transform,opacity;backface-visibility:hidden}';
+    document.head.appendChild(style);
+  })();
+
   var overlay = window.__overlay;
   var config = window.OVERLAY_FIREBASE;
   if (!overlay || !config || !config.projectId) return;

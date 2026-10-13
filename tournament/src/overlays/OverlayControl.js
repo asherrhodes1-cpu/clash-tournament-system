@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { saveOverlays, subscribeToOverlays } from '../api/overlays';
+import { useLeagueControl } from '../league/LeagueControl';
 import {
   MAX_GAMES, MAX_STARS, OVERLAYS, TROOPS, blankAttack, blankMatch, blankPlayer, isOnSide, matchLabel, seriesWinner, soundLibrary, soundMatch,
   wins, withPlayer, withSavedMatch, withSavedPlayer, withoutMatch, withoutPlayer,
@@ -196,6 +197,17 @@ export default function OverlayControl() {
     sendRef.current();
   }, []);
 
+  // The finals section's controls sit on the same tabs as the overlays':
+  // its buttons on Live, its preparation on Prepare. The overlays' vote bar
+  // follows the real vote totals.
+  const sideNames = { red: { name: data?.match.red.name ?? '' }, blue: { name: data?.match.blue.name ?? '' } };
+  const followVotes = (red, blue) => {
+    const now = pending.current ?? data;
+    if (!now || (now.match.redVotes === String(red) && now.match.blueVotes === String(blue))) return;
+    change({ match: { ...now.match, redVotes: String(red), blueVotes: String(blue) }, library: now.library }, true);
+  };
+  const finals = useLeagueControl(sideNames, followVotes);
+
   if (!data) return <div className="min-h-screen bg-gray-900 text-white p-8">{status || 'Loading…'}</div>;
 
   const { match, library } = data;
@@ -308,7 +320,8 @@ export default function OverlayControl() {
               </section>
             </div>
 
-            <div className="lg:sticky lg:top-4">
+            <div className="space-y-6">
+              {finals.live}
               <Overlays shown={shown} onShow={setShown} />
             </div>
           </div>
@@ -415,6 +428,8 @@ export default function OverlayControl() {
                 </section>
               ))}
 
+              {finals.prepare}
+
               <button type="button" className={`${BUTTON} border-red-500`} onClick={() => { if (window.confirm('Clear the match on screen? Prepared players and matches are kept.')) setMatch(blankMatch()); }}>Clear the match on screen</button>
             </div>
           </div>
@@ -427,6 +442,7 @@ export default function OverlayControl() {
             <section className={CARD}>
               <h2 className="text-xl font-bold mb-1">Adding them to OBS</h2>
               <p className="text-sm text-gray-400 mb-3">Sources → + → Browser, then paste a link. You only do this once: after that the overlays follow this page.</p>
+              <p className="text-sm text-gray-300 mb-3">For smooth sparkle: in the same Properties, tick <b>Use custom frame rate</b> and set FPS to match your stream (usually 60). OBS runs Browser sources at 30 otherwise.</p>
               <p className="text-sm font-bold text-white bg-red-900 border border-red-500 rounded p-3 mb-3">Set Width to 1920 and Height to 1080 in the source's Properties. OBS starts every Browser source at 800 × 600, which makes the overlay blurry and its small text unreadable.</p>
               <ul className="space-y-3">
                 {OVERLAYS.map((overlay) => (

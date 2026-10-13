@@ -41,6 +41,8 @@ import LadderPage from './ladder/LadderPage';
 import UserManager from './staff/UserManager';
 import { LADDER_ID, LADDER_TOURNAMENT, joinLadderQueue } from './api/ladder';
 import LiveHeader from './live/LiveHeader';
+import LeaguePage from './league/LeaguePage';
+import LeaguePopup from './league/LeaguePopup';
 import { verifyClashAccount, fetchClashPlayerData, fetchLocalRanking } from './api/clash';
 import { getTimeRemainingDisplay, getRoundUnlockTime, formatCountdown, estimateTournamentDays, getGuaranteedDays, dayEndsAt, matchPosition, winChance, trophiesFor, rankPredictionScores, parseRewardLinks, getPlayersRemaining, rankFinishers, COUNTRIES, getLeagueIconUrl } from './utils';
 
@@ -939,7 +941,8 @@ function StaffDashboard({ flags, onUpdateFlagStatus, onAddResponse }) {
 // a player in this match".
 const GUEST_USER = { uid: null, username: null, isStaff: false, discordId: '', clashTag: '', clashVerified: false, isGuest: true };
 
-const PAGE_FOR_PATH = { '/live': 'live', '/1v1': 'ladder' };
+// /league is the Builder League finals section, open while they are streamed.
+const PAGE_FOR_PATH = { '/live': 'live', '/1v1': 'ladder', '/league': 'league' };
 
 // ============================================================================
 // MAIN APP COMPONENT
@@ -1003,7 +1006,7 @@ export default function TournamentApp() {
   const [loginReturnPage, setLoginReturnPage] = useState('dashboard');
 
   useEffect(() => {
-    if (!['login', 'live', 'ladder'].includes(currentPage)) setLoginReturnPage('dashboard');
+    if (!['login', 'live', 'ladder', 'league'].includes(currentPage)) setLoginReturnPage('dashboard');
   }, [currentPage]);
 
   // The landing page is the hub for picking a section (Tournaments or Live),
@@ -1279,7 +1282,9 @@ export default function TournamentApp() {
   const user = currentUser || GUEST_USER;
 
   // Live is its own section off the landing page, with its own header.
-  const inLiveSection = currentPage === 'live' || (currentPage === 'login' && loginReturnPage === 'live');
+  // The finals section sits under the same header, and logging in from it comes back to it.
+  const liveSectionPages = ['live', 'league'];
+  const inLiveSection = liveSectionPages.includes(currentPage) || (currentPage === 'login' && liveSectionPages.includes(loginReturnPage));
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -1288,7 +1293,7 @@ export default function TournamentApp() {
           user={user}
           onHome={() => setCurrentPage('landing')}
           onLogin={() => {
-            setLoginReturnPage('live');
+            setLoginReturnPage(currentPage === 'league' ? 'league' : 'live');
             setCurrentPage('login');
           }}
           onLogout={handleLogout}
@@ -1666,6 +1671,17 @@ export default function TournamentApp() {
           />
         )}
 
+        {currentPage === 'league' && (
+          <LeaguePage
+            user={user}
+            onHome={() => setCurrentPage('landing')}
+            onLogin={() => {
+              setLoginReturnPage('league');
+              setCurrentPage('login');
+            }}
+          />
+        )}
+
         {currentPage === 'live' && (
           <LivePage
             user={user}
@@ -1676,6 +1692,9 @@ export default function TournamentApp() {
           />
         )}
       </div>
+
+      {/* While the finals are being streamed, everyone is pointed at them. */}
+      <LeaguePopup hidden={currentPage === 'league' || currentPage === 'login'} onJoin={() => setCurrentPage('league')} />
 
       {flagModalOpen && (
         <FlagReportModal
