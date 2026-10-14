@@ -144,11 +144,12 @@ export function overlayStates(given) {
 }
 
 // The overlay pages, for the list of OBS sources. `under` is what goes
-// beneath each in OBS, on a 1920 by 1080 canvas.
+// beneath each in OBS, on a 1920 by 1080 canvas; `underTall` is the same
+// for its vertical layout (?layout=vertical), on a 1080 by 1920 canvas.
 export const OVERLAYS = [
-  { file: 'in-game', label: 'In-game', about: 'Game capture on the left, player panel on the right', under: ['Game capture: x 0, y 0, 1446 × 1080'] },
-  { file: 'caster-desk', label: 'Caster desk', about: 'Two caster cams, the matchup and the audience vote', under: ['Caster 1: x 120, y 206, 760 × 428', 'Caster 2: x 1040, y 206, 760 × 428'] },
-  { file: 'attack-overview', label: 'Attack overview', about: 'Stars, destruction and troops used', under: [] },
-  { file: 'player-red', label: 'Player overview: red', about: 'Red player stats and favorite army, with caster cams', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'] },
-  { file: 'player-blue', label: 'Player overview: blue', about: 'Blue player stats and favorite army, with caster cams', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'] },
+  { file: 'in-game', label: 'In-game', about: 'Game capture on the left, player panel on the right', under: ['Game capture: x 0, y 0, 1446 × 1080'], underTall: ['Game capture: x 0, y 124, 1080 × 1023'] },
+  { file: 'caster-desk', label: 'Caster desk', about: 'Two caster cams, the matchup and the audience vote', under: ['Caster 1: x 120, y 206, 760 × 428', 'Caster 2: x 1040, y 206, 760 × 428'], underTall: ['Caster 1: x 100, y 228, 880 × 495', 'Caster 2: x 100, y 896, 880 × 495'] },
+  { file: 'attack-overview', label: 'Attack overview', about: 'Stars, destruction and troops used', under: [], underTall: [] },
+  { file: 'player-red', label: 'Player overview: red', about: 'Red player stats and favorite army, with caster cams', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'], underTall: [] },
+  { file: 'player-blue', label: 'Player overview: blue', about: 'Blue player stats and favorite army, with caster cams', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'], underTall: [] },
 ];

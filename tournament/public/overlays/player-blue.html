@@ -133,6 +133,22 @@ body.preview .camph{display:grid}
 #pickBtns button.red{background:linear-gradient(180deg,var(--r1),var(--r2) 45%,var(--r3))}
 .hidden{display:none!important}
 #help{position:absolute;left:24px;top:24px;font:16px/1.45 system-ui,sans-serif;background:rgba(5,7,31,.92);padding:12px 16px;border-radius:10px;color:#fff;max-width:560px;z-index:9}
+
+/* ---- vertical: ?layout=vertical, for a 1080 x 1920 canvas ----
+   The player's card alone, with no caster cams: the three stats in a row
+   and the favorite army in two rows of three. */
+body.vertical #stage{width:1080px;height:1920px}
+body.vertical #bg{clip-path:none}
+body.vertical .camph,body.vertical .camshadow,body.vertical .camf,body.vertical .camhole,body.vertical .cplate{display:none}
+body.vertical #title{left:0;width:1080px;top:120px}
+body.vertical .pc{left:40px;top:250px;width:1000px;height:1390px}
+body.vertical .pname{font-size:46px}
+body.vertical .tiles{gap:14px}
+body.vertical .tile{padding:0 14px}
+body.vertical .tile .lbl{font-size:15px}
+body.vertical .tile .v{font-size:38px;text-overflow:clip}
+body.vertical .army{grid-template-columns:repeat(3,250px);gap:30px}
+body.vertical .slot{width:250px;height:345px}
 </style>
 </head>
 <body>
@@ -199,16 +215,21 @@ body.preview .camph{display:grid}
   var stage=document.getElementById('stage');
   var params=new URLSearchParams(location.search);
   if(!window.obsstudio && params.get('bg')!=='0') document.body.classList.add('preview');
+  /* ?layout=vertical: the same overlay laid out for a 1080 x 1920 canvas. */
+  var vertical=params.get('layout')==='vertical';
+  var W=vertical?1080:1920,H=vertical?1920:1080;
+  if(vertical)document.body.classList.add('vertical');
+
   function fit(){
     var de=document.documentElement;
     var w=de.clientWidth||innerWidth, h=de.clientHeight||innerHeight;
     if(!w)return;
-    var s=w/1920;
-    if(h>40&&h<1080*s)s=h/1080;
+    var s=w/W;
+    if(h>40&&h<H*s)s=h/H;
     stage.style.transform='scale('+s+')';
-    stage.style.left=Math.max(0,(w-1920*s)/2)+'px';
-    stage.style.top=(h>40?Math.max(0,(h-1080*s)/2):0)+'px';
-    document.body.style.minHeight=(1080*s)+'px';
+    stage.style.left=Math.max(0,(w-W*s)/2)+'px';
+    stage.style.top=(h>40?Math.max(0,(h-H*s)/2):0)+'px';
+    document.body.style.minHeight=(H*s)+'px';
   }
   addEventListener('resize',fit);addEventListener('load',fit);fit();
   if(window.ResizeObserver)new ResizeObserver(fit).observe(document.documentElement);
@@ -292,8 +313,8 @@ body.preview .camph{display:grid}
   });
 
   /* glimmer — kept out of the webcam windows */
-  var CAMS=[[1460,120,1924,500],[1460,570,1924,950]];
-  function freeSpot(pad){for(var n=0;n<200;n++){var x=Math.random()*1920,y=Math.random()*1080,ok=true;
+  var CAMS=vertical?[]:[[1460,120,1924,500],[1460,570,1924,950]];
+  function freeSpot(pad){for(var n=0;n<200;n++){var x=Math.random()*W,y=Math.random()*H,ok=true;
       for(var c=0;c<CAMS.length;c++){var r=CAMS[c];if(x>r[0]-pad&&x<r[2]+pad&&y>r[1]-pad&&y<r[3]+pad+30){ok=false;break;}}
       if(ok)return[x,y];}return[20,20];}
   for(var g=0;g<34;g++){var gl=document.createElement('span');gl.className='glint';gl.innerHTML='<i></i>';

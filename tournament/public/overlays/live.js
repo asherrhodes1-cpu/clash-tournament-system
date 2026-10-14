@@ -13,7 +13,11 @@
      the overlay itself until the source is the right size. */
   function checkSize() {
     var note = document.getElementById('sizeNote');
-    var wrong = !!window.obsstudio && (window.innerWidth < 1900 || window.innerHeight < 1060);
+    /* With ?layout=vertical it is drawn for 1080 by 1920 instead. */
+    var tall = new URLSearchParams(location.search).get('layout') === 'vertical';
+    var wide = tall ? 1080 : 1920;
+    var high = tall ? 1920 : 1080;
+    var wrong = !!window.obsstudio && (window.innerWidth < wide - 20 || window.innerHeight < high - 20);
     if (!wrong) {
       if (note) note.remove();
       return;
@@ -24,7 +28,7 @@
       note.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#c81e1e;color:#fff;font:bold 20px/1.3 system-ui,sans-serif;padding:10px 14px;text-align:center';
       document.body.appendChild(note);
     }
-    note.textContent = 'This Browser source is ' + window.innerWidth + ' x ' + window.innerHeight + '. In OBS, open its Properties and set Width 1920, Height 1080 - then this overlay will be sharp.';
+    note.textContent = 'This Browser source is ' + window.innerWidth + ' x ' + window.innerHeight + '. In OBS, open its Properties and set Width ' + wide + ', Height ' + high + ' - then this overlay will be sharp.';
   }
   window.addEventListener('resize', checkSize);
   window.addEventListener('load', checkSize);
@@ -62,6 +66,12 @@
       '.pq .opt em{font-style:normal;color:#9fe8ff}',
       '.pq .opt.right{background:linear-gradient(180deg,#3fd16a,#1c8f3f)}',
       '.pq .opt.right em{color:#fff}',
+      /* Vertical (?layout=vertical): over the matchup and vote bar there,
+         with the answers two by two and the prompt on a line of its own. */
+      'body.vertical #prompt{left:20px;width:1040px;top:1522px;bottom:18px;padding:14px}',
+      'body.vertical .pq .top{grid-template-columns:1fr 1fr;gap:6px 20px}',
+      'body.vertical .pq .foot{grid-area:2/1/3/3;font-size:23px}',
+      'body.vertical .pq .opts{grid-auto-flow:row;grid-template-columns:1fr 1fr;gap:10px 12px;margin-top:10px}',
       /* The vote bar while the vote is open. */
       '#vote.asking #vwrap{animation:voteAsk 1.6s ease-in-out infinite}',
       '@keyframes voteAsk{0%,100%{box-shadow:0 0 0 rgba(255,211,77,0)}50%{box-shadow:0 0 34px rgba(255,211,77,.9)}}',

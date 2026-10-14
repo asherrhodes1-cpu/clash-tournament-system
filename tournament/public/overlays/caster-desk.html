@@ -137,6 +137,35 @@ body.preview{background:#05071f}
 @keyframes dust{0%,100%{opacity:0}50%{opacity:.75}}
 .hidden{display:none!important}
 #help{position:absolute;left:24px;top:24px;font:16px/1.45 system-ui,sans-serif;background:rgba(5,7,31,.92);padding:12px 16px;border-radius:10px;color:#fff;max-width:540px;z-index:9}
+
+/* ---- vertical: ?layout=vertical, for a 1080 x 1920 canvas ----
+   The two caster cams one above the other, each 880 x 495 (at 100, 228 and
+   100, 896), then the matchup with the games won beneath the names, and the
+   audience vote. */
+body.vertical #stage{width:1080px;height:1920px}
+body.vertical #bg{clip-path:path(evenodd,"M0 0H1080V1920H0Z M112 228H968Q980 228 980 240V711Q980 723 968 723H112Q100 723 100 711V240Q100 228 112 228Z M112 896H968Q980 896 980 908V1379Q980 1391 968 1391H112Q100 1391 100 1379V908Q100 896 112 896Z")}
+body.vertical #head{top:14px;height:178px;display:grid;grid-template-columns:auto auto;justify-content:center;align-items:center;gap:2px 18px}
+body.vertical #logo{height:96px}
+body.vertical #title{font-size:50px;max-width:820px;overflow:hidden;-webkit-text-stroke:7px var(--ink)}
+body.vertical #roundwrap{grid-column:1/3;justify-self:center;margin:0}
+body.vertical #round{height:50px;font-size:23px}
+body.vertical .camf,body.vertical .camshadow{left:72px;width:936px;height:551px}
+body.vertical #f1,body.vertical #sh1{left:72px;top:200px}
+body.vertical #f2,body.vertical #sh2{left:72px;top:868px}
+body.vertical .camhole,body.vertical .camph{left:100px;width:880px;height:495px}
+body.vertical #h1,body.vertical #p1{left:100px;top:228px}
+body.vertical #h2,body.vertical #p2{left:100px;top:896px}
+body.vertical #cp1{left:280px;top:739px}
+body.vertical #cp2{left:280px;top:1407px}
+body.vertical #match{left:30px;width:1020px;top:1540px;height:216px}
+body.vertical #mi{grid-template-columns:1fr 1fr;grid-template-rows:104px 1fr}
+body.vertical #sideR{grid-area:1/1}
+body.vertical #sideB{grid-area:1/2}
+body.vertical #pips{grid-area:2/1/3/3;justify-content:center;padding:0 20px;border-left:0;border-right:0;border-top:4px solid var(--ink)}
+body.vertical .side{gap:12px;padding:0 16px}
+body.vertical .side img{width:84px;height:84px}
+body.vertical .pname{font-size:34px}
+body.vertical #vote{left:60px;width:960px;top:1806px}
 </style>
 </head>
 <body>
@@ -252,16 +281,21 @@ body.preview{background:#05071f}
   var params=new URLSearchParams(location.search);
   if(!window.obsstudio && params.get('bg')!=='0') document.body.classList.add('preview');
 
+  /* ?layout=vertical: the same overlay laid out for a 1080 x 1920 canvas. */
+  var vertical=params.get('layout')==='vertical';
+  var W=vertical?1080:1920,H=vertical?1920:1080;
+  if(vertical)document.body.classList.add('vertical');
+
   function fit(){
     var de=document.documentElement;
     var w=de.clientWidth||innerWidth, h=de.clientHeight||innerHeight;
     if(!w)return;
-    var s=w/1920;
-    if(h>40&&h<1080*s)s=h/1080;            /* fit inside the frame both ways */
+    var s=w/W;
+    if(h>40&&h<H*s)s=h/H;            /* fit inside the frame both ways */
     stage.style.transform='scale('+s+')';
-    stage.style.left=Math.max(0,(w-1920*s)/2)+'px';
-    stage.style.top=(h>40?Math.max(0,(h-1080*s)/2):0)+'px';
-    document.body.style.minHeight=(1080*s)+'px';
+    stage.style.left=Math.max(0,(w-W*s)/2)+'px';
+    stage.style.top=(h>40?Math.max(0,(h-H*s)/2):0)+'px';
+    document.body.style.minHeight=(H*s)+'px';
   }
   addEventListener('resize',fit);addEventListener('load',fit);fit();
   if(window.ResizeObserver)new ResizeObserver(fit).observe(document.documentElement);
@@ -291,7 +325,7 @@ body.preview{background:#05071f}
 
   function renderPips(){
     var box=$('pips');box.innerHTML='';
-    var n=state.bo,size=Math.min(100,Math.floor((560-(n-1)*16)/n));
+    var n=state.bo,size=vertical?Math.min(76,Math.floor((940-(n-1)*16)/n)):Math.min(100,Math.floor((560-(n-1)*16)/n));
     for(var i=0;i<n;i++){
       var g=state.games[i]||'';
       var d=document.createElement('div');d.className='pip '+(g||'none');
@@ -348,8 +382,8 @@ body.preview{background:#05071f}
   });
 
   /* keep every effect out of the webcam windows (plus a margin) */
-  var CAMS=[[100,186,900,656],[1020,186,1820,656]];
-  function freeSpot(pad){for(var n=0;n<200;n++){var x=Math.random()*1920,y=Math.random()*1080,ok=true;
+  var CAMS=vertical?[[60,190,1020,770],[60,858,1020,1438]]:[[100,186,900,656],[1020,186,1820,656]];
+  function freeSpot(pad){for(var n=0;n<200;n++){var x=Math.random()*W,y=Math.random()*H,ok=true;
       for(var c=0;c<CAMS.length;c++){var r=CAMS[c];if(x>r[0]-pad&&x<r[2]+pad&&y>r[1]-pad&&y<r[3]+pad+30){ok=false;break;}}
       if(ok)return[x,y];}return[20,20];}
   for(var g=0;g<34;g++){var gl=document.createElement('span');gl.className='glint';gl.innerHTML='<i></i>';

@@ -123,6 +123,18 @@ body.preview .slot:not(.full) .add{display:grid}
 #pickBtns button.red{background:linear-gradient(180deg,var(--r1),var(--r2) 45%,var(--r3))}
 .hidden{display:none!important}
 #help{position:absolute;left:24px;top:24px;font:16px/1.45 system-ui,sans-serif;background:rgba(5,7,31,.92);padding:12px 16px;border-radius:10px;color:#fff;max-width:560px;z-index:9}
+
+/* ---- vertical: ?layout=vertical, for a 1080 x 1920 canvas ----
+   One column: the attacker, the stars over the destruction, and the troops
+   in two rows of four. */
+body.vertical #stage{width:1080px;height:1920px}
+body.vertical #title{top:150px;font-size:62px}
+body.vertical #atk{left:60px;width:960px;top:310px;height:130px}
+body.vertical #who{max-width:700px}
+body.vertical #stats{left:60px;width:960px;top:516px;grid-template-columns:1fr;gap:44px}
+body.vertical .stIn{justify-content:center;padding:0 60px 6px}
+body.vertical #troops{left:60px;width:960px;top:1036px;height:676px}
+body.vertical #trIn{grid-template-columns:repeat(4,1fr);gap:20px 18px;padding:28px 32px;align-content:center}
 </style>
 </head>
 <body>
@@ -194,16 +206,21 @@ body.preview .slot:not(.full) .add{display:grid}
   var stage=document.getElementById('stage');
   var params=new URLSearchParams(location.search);
   if(!window.obsstudio && params.get('bg')!=='0') document.body.classList.add('preview');
+  /* ?layout=vertical: the same overlay laid out for a 1080 x 1920 canvas. */
+  var vertical=params.get('layout')==='vertical';
+  var W=vertical?1080:1920,H=vertical?1920:1080;
+  if(vertical)document.body.classList.add('vertical');
+
   function fit(){
     var de=document.documentElement;
     var w=de.clientWidth||innerWidth, h=de.clientHeight||innerHeight;
     if(!w)return;
-    var s=w/1920;
-    if(h>40&&h<1080*s)s=h/1080;            /* fit inside the frame both ways */
+    var s=w/W;
+    if(h>40&&h<H*s)s=h/H;            /* fit inside the frame both ways */
     stage.style.transform='scale('+s+')';
-    stage.style.left=Math.max(0,(w-1920*s)/2)+'px';
-    stage.style.top=(h>40?Math.max(0,(h-1080*s)/2):0)+'px';
-    document.body.style.minHeight=(1080*s)+'px';
+    stage.style.left=Math.max(0,(w-W*s)/2)+'px';
+    stage.style.top=(h>40?Math.max(0,(h-H*s)/2):0)+'px';
+    document.body.style.minHeight=(H*s)+'px';
   }
   addEventListener('resize',fit);addEventListener('load',fit);fit();
   if(window.ResizeObserver)new ResizeObserver(fit).observe(document.documentElement);

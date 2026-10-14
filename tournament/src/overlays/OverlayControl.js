@@ -91,7 +91,7 @@ function PlayerFields({ player, onChange }) {
 }
 
 // The address OBS should be given for an overlay, on whatever site this is.
-const overlayUrl = (file) => `${window.location.origin}/overlays/${file}.html`;
+const overlayUrl = (file, tall = false) => `${window.location.origin}/overlays/${file}.html${tall ? '?layout=vertical' : ''}`;
 
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
@@ -439,17 +439,22 @@ export default function OverlayControl() {
               <h2 className="text-xl font-bold mb-1">Adding them to OBS</h2>
               <p className="text-sm text-gray-400 mb-3">Sources → + → Browser, then paste a link. You only do this once: after that the overlays follow this page.</p>
               <p className="text-sm text-gray-300 mb-3">For smooth sparkle: in the same Properties, tick <b>Use custom frame rate</b> and set FPS to match your stream (usually 60). OBS runs Browser sources at 30 otherwise.</p>
-              <p className="text-sm font-bold text-white bg-red-900 border border-red-500 rounded p-3 mb-3">Set Width to 1920 and Height to 1080 in the source's Properties. OBS starts every Browser source at 800 × 600, which makes the overlay blurry and its small text unreadable.</p>
+              <p className="text-sm font-bold text-white bg-red-900 border border-red-500 rounded p-3 mb-3">Set Width to 1920 and Height to 1080 in the source's Properties (1080 and 1920 for a vertical one). OBS starts every Browser source at 800 × 600, which makes the overlay blurry and its small text unreadable.</p>
+              <p className="text-sm text-gray-300 mb-3">Each overlay also has a <b>vertical</b> layout for a 1080 × 1920 canvas (a second, vertical output). It is the same overlay, filled in from this page the same way: set that source's Width to 1080 and Height to 1920. The vertical player and attack overviews have no caster cams.</p>
               <ul className="space-y-3">
                 {OVERLAYS.map((overlay) => (
-                  <li key={overlay.file} className="flex flex-wrap items-start justify-between gap-2 border-t border-gray-700 pt-3">
-                    <div className="min-w-0">
-                      <p className="font-bold">{overlay.label}</p>
-                      <p className="text-sm text-gray-400">{overlay.about}</p>
-                      <p className="text-xs text-gray-400 break-all">{overlayUrl(overlay.file)}</p>
-                      {overlay.under.map((line) => <p key={line} className="text-xs text-gray-300">Under it: {line}</p>)}
-                    </div>
-                    <CopyButton text={overlayUrl(overlay.file)} />
+                  <li key={overlay.file} className="border-t border-gray-700 pt-3 space-y-2">
+                    <p className="font-bold">{overlay.label} <span className="text-sm font-normal text-gray-400">· {overlay.about}</span></p>
+                    {[[false, 'Wide · 1920 × 1080', overlay.under], [true, 'Vertical · 1080 × 1920', overlay.underTall]].map(([tall, size, under]) => (
+                      <div key={size} className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm text-gray-300">{size}</p>
+                          <p className="text-xs text-gray-400 break-all">{overlayUrl(overlay.file, tall)}</p>
+                          {under.map((line) => <p key={line} className="text-xs text-gray-300">Under it: {line}</p>)}
+                        </div>
+                        <CopyButton text={overlayUrl(overlay.file, tall)} />
+                      </div>
+                    ))}
                   </li>
                 ))}
                 <li className="flex flex-wrap items-start justify-between gap-2 border-t border-gray-700 pt-3">
