@@ -460,9 +460,12 @@ export default function OverlayControl() {
                 <li className="flex flex-wrap items-start justify-between gap-2 border-t border-gray-700 pt-3">
                   <div>
                     <p className="font-bold">Stinger transition</p>
-                    <p className="text-sm text-gray-400">Scene Transitions → + → Stinger. Transition Point Type: Time (milliseconds). Transition Point: 720. Tick Preload Video to RAM.</p>
+                    <p className="text-sm text-gray-400">Scene Transitions → + → Stinger. Transition Point Type: Time (milliseconds). Transition Point: 720. Tick Preload Video to RAM. The vertical one (1080 × 1920) takes the same settings.</p>
                   </div>
-                  <a className={BUTTON} href="/overlays/transition.webm" download>Download</a>
+                  <span className="flex flex-wrap gap-2">
+                    <a className={BUTTON} href="/overlays/transition.webm" download>Download wide</a>
+                    <a className={BUTTON} href="/overlays/transition-vertical.webm" download>Download vertical</a>
+                  </span>
                 </li>
               </ul>
             </section>
