@@ -18,7 +18,8 @@ export const blankAttack = () => ({ side: 'r', stars: 0, percent: '0', time: '0:
 export const blankMatch = () => ({
   title: 'BUILDER LEAGUE',
   round: 'Quarterfinal',
-  // Best of this many games, and who won each so far: 'r' or 'b', in order.
+  // Best of this many games, and how each so far went: 'r' or 'b' for who
+  // won it, 't' for a tie, in order.
   bestOf: 3,
   games: [],
   redVotes: '0',
@@ -31,6 +32,19 @@ export const blankMatch = () => ({
 
 const text = (value, fallback) => (typeof value === 'string' ? value : value == null ? fallback : String(value));
 const slots = (list, count) => Array.from({ length: count }, (_, i) => text(list?.[i], ''));
+
+// The games of a series, in order: 'r', 'b' or 't'. Each tie makes room for
+// one more game, so no more are kept than the series length plus its ties.
+function keepGames(given, bestOf) {
+  const kept = [];
+  for (const game of Array.isArray(given) ? given : []) {
+    if (game !== 'r' && game !== 'b' && game !== 't') continue;
+    const tied = kept.filter((g) => g === 't').length + (game === 't' ? 1 : 0);
+    if (kept.length + 1 > bestOf + tied) break;
+    kept.push(game);
+  }
+  return kept;
+}
 
 // A match with anything missing or out of range put right, so one saved by
 // an older version of the page, or half-filled, still draws.
@@ -51,7 +65,7 @@ export function soundMatch(saved) {
     title: text(from.title, blank.title),
     round: text(from.round, blank.round),
     bestOf,
-    games: (Array.isArray(from.games) ? from.games : []).filter((g) => g === 'r' || g === 'b').slice(0, bestOf),
+    games: keepGames(from.games, bestOf),
     redVotes: text(from.redVotes, blank.redVotes),
     blueVotes: text(from.blueVotes, blank.blueVotes),
     red: player(from.red, blank.red),
@@ -119,14 +133,24 @@ export const withoutMatch = (library, id) => ({ ...library, matches: library.mat
 
 // Games won by a side, and whether that has won it the series.
 export const wins = (match, side) => match.games.filter((g) => g === side).length;
+export const ties = (match) => match.games.filter((g) => g === 't').length;
 export const seriesWinner = (match) => ['r', 'b'].find((side) => wins(match, side) > match.bestOf / 2) ?? null;
+
+// How many game badges the series shows: its length, and once that many have
+// been played with nobody through, one more for the game that decides it -
+// which only happens when there have been ties.
+export function seriesSlots(match) {
+  const played = match.games.length;
+  if (seriesWinner(match) || played < match.bestOf) return Math.max(match.bestOf, played);
+  return played + 1;
+}
 
 // The settings each overlay page takes, by the page's name. The names inside
 // are the overlay pages' own.
 export function overlayStates(given) {
   const match = soundMatch(given);
   const [first, second] = match.casters;
-  const series = { title: match.title, round: match.round, rVote: match.redVotes, bVote: match.blueVotes, bo: match.bestOf, games: match.games };
+  const series = { title: match.title, round: match.round, rVote: match.redVotes, bVote: match.blueVotes, bo: match.bestOf, slots: seriesSlots(match), games: match.games };
   const casters = { c1Name: first.name, c1Chan: first.channel, c2Name: second.name, c2Chan: second.channel };
   const overview = (player) => ({ name: player.name, seed: player.seed, best: player.best, s1: player.stage1, s2: player.stage2, army: player.army, ...casters });
   const [attacker, defender] = match.attack.side === 'b' ? [match.blue, match.red] : [match.red, match.blue];
@@ -139,7 +163,7 @@ export function overlayStates(given) {
     'caster-desk': { ...series, ...casters, rName: match.red.name, bName: match.blue.name },
     'player-red': overview(match.red),
     'player-blue': overview(match.blue),
-    'attack-overview': { side: match.attack.side, aName: attacker.name, dName: defender.name, stars: match.attack.stars, pct: match.attack.percent, time: match.attack.time, troops: match.attack.troops },
+    'attack-overview': { ...casters, side: match.attack.side, aName: attacker.name, dName: defender.name, stars: match.attack.stars, pct: match.attack.percent, time: match.attack.time, troops: match.attack.troops },
   };
 }
 
@@ -149,7 +173,7 @@ export function overlayStates(given) {
 export const OVERLAYS = [
   { file: 'in-game', label: 'In-game', about: 'Game capture on the left, player panel on the right', under: ['Game capture: x 0, y 0, 1446 × 1080'], underTall: ['Game capture: x 0, y 124, 1080 × 1023'] },
   { file: 'caster-desk', label: 'Caster desk', about: 'Two caster cams, the matchup and the audience vote', under: ['Caster 1: x 120, y 206, 760 × 428', 'Caster 2: x 1040, y 206, 760 × 428'], underTall: ['Caster 1: x 100, y 228, 880 × 495', 'Caster 2: x 100, y 896, 880 × 495'] },
-  { file: 'attack-overview', label: 'Attack overview', about: 'Stars, destruction and troops used', under: [], underTall: [] },
+  { file: 'attack-overview', label: 'Attack overview', about: 'Stars, destruction and troops used, with caster cams on the right', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'], underTall: [] },
   { file: 'player-red', label: 'Player overview: red', about: 'Red player stats and favorite army, with caster cams', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'], underTall: [] },
   { file: 'player-blue', label: 'Player overview: blue', about: 'Blue player stats and favorite army, with caster cams', under: ['Caster 1: x 1492, y 150, 400 × 225', 'Caster 2: x 1492, y 600, 400 × 225'], underTall: [] },
 ];

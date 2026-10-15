@@ -3,8 +3,8 @@ import { saveOverlays, subscribeToOverlays } from '../api/overlays';
 import Fold from './Fold';
 import { useLeagueControl } from '../league/LeagueControl';
 import {
-  MAX_GAMES, MAX_STARS, OVERLAYS, TROOPS, blankAttack, blankMatch, blankPlayer, isOnSide, matchLabel, seriesWinner, soundLibrary, soundMatch,
-  wins, withPlayer, withSavedMatch, withSavedPlayer, withoutMatch, withoutPlayer,
+  MAX_GAMES, MAX_STARS, OVERLAYS, TROOPS, blankAttack, blankMatch, blankPlayer, isOnSide, matchLabel, seriesSlots, seriesWinner, soundLibrary, soundMatch,
+  ties, wins, withPlayer, withSavedMatch, withSavedPlayer, withoutMatch, withoutPlayer,
 } from './overlayState';
 
 // How long after the last keystroke a change is sent to the overlays.
@@ -232,12 +232,13 @@ export default function OverlayControl() {
   const score = (
     <>
       <span className={LABEL}>
-        Best of {match.bestOf}: {match.red.name} {wins(match, 'r')} - {wins(match, 'b')} {match.blue.name}
+        Best of {match.bestOf}: {match.red.name} {wins(match, 'r')} - {wins(match, 'b')} {match.blue.name}{ties(match) ? ` · ${ties(match)} tied` : ''}
         {winner && ` · ${winner === 'r' ? match.red.name : match.blue.name} wins the series`}
       </span>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={`${BIG} ${RED}`} disabled={match.games.length >= match.bestOf} onClick={() => press({ ...match, games: [...match.games, 'r'] })}>Red wins a game</button>
-        <button type="button" className={`${BIG} ${BLUE}`} disabled={match.games.length >= match.bestOf} onClick={() => press({ ...match, games: [...match.games, 'b'] })}>Blue wins a game</button>
+        <button type="button" className={`${BIG} ${RED}`} disabled={match.games.length >= seriesSlots(match)} onClick={() => press({ ...match, games: [...match.games, 'r'] })}>Red wins a game</button>
+        <button type="button" className={`${BIG} ${BLUE}`} disabled={match.games.length >= seriesSlots(match)} onClick={() => press({ ...match, games: [...match.games, 'b'] })}>Blue wins a game</button>
+        <button type="button" className={`${BIG} border-purple-400`} disabled={match.games.length >= seriesSlots(match)} onClick={() => press({ ...match, games: [...match.games, 't'] })}>Tie</button>
         <button type="button" className={`${BIG} border-gray-500`} disabled={!match.games.length} onClick={() => press({ ...match, games: match.games.slice(0, -1) })}>Undo last game</button>
         <button type="button" className={`${BIG} border-gray-500`} disabled={!match.games.length} onClick={() => press({ ...match, games: [] })}>New series</button>
       </div>

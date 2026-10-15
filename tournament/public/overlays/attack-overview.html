@@ -124,10 +124,48 @@ body.preview .slot:not(.full) .add{display:grid}
 .hidden{display:none!important}
 #help{position:absolute;left:24px;top:24px;font:16px/1.45 system-ui,sans-serif;background:rgba(5,7,31,.92);padding:12px 16px;border-radius:10px;color:#fff;max-width:560px;z-index:9}
 
+/* ---- caster cams in a column on the right, as on the player overviews ----
+   400 x 225 windows at 1492, 150 and 1492, 600; the background is cut away
+   there so the cams show through. The attack itself moves into the left. */
+#bg{clip-path:path(evenodd,"M0 0H1920V1080H0Z M1502 150H1882Q1892 150 1892 160V365Q1892 375 1882 375H1502Q1492 375 1492 365V160Q1492 150 1502 150Z M1502 600H1882Q1892 600 1892 610V815Q1892 825 1882 825H1502Q1492 825 1492 815V610Q1492 600 1502 600Z")}
+
+.camf{left:1472px;width:440px;height:265px;border-radius:24px;box-sizing:border-box;padding:20px;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.camshadow{left:1472px;width:440px;height:265px;border-radius:24px;box-shadow:0 9px 0 var(--stoneEdge),0 18px 26px rgba(0,0,0,.55)}
+.camhole{left:1492px;width:400px;height:225px;border-radius:10px;box-shadow:0 0 0 5px var(--stoneEdge),inset 0 10px 14px rgba(0,0,0,.55);pointer-events:none}
+.camph{left:1492px;width:400px;height:225px;border-radius:10px;display:none;place-items:center;
+  background:#262a40;font:700 22px system-ui,sans-serif;color:#ffffff55;letter-spacing:3px;z-index:1}
+body.preview .camph{display:grid}
+#f1,#sh1{top:130px}#f2,#sh2{top:580px}
+#h1,#p1{top:150px}#h2,#p2{top:600px}
+.cplate{left:1512px;width:360px;height:100px;box-sizing:border-box}
+#cp1{top:384px}#cp2{top:834px}
+.cin{height:100%;box-sizing:border-box;border-radius:16px;display:flex;align-items:center;padding:0 18px;
+  background:linear-gradient(180deg,#5aa0ff,#2f6fe0 48%,#1e4cb4);border:4px solid var(--ink);
+  box-shadow:inset 0 5px 0 rgba(255,255,255,.35),inset 0 -8px 0 rgba(8,20,80,.5)}
+.cinfo{min-width:0;flex:1;padding-top:8px}
+.cname{font-size:24px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 0}
+.chan{display:flex;align-items:center;gap:8px;min-width:0}
+.chan i{width:26px;height:20px;flex:none;border-radius:7px;display:grid;place-items:center;
+  background:linear-gradient(180deg,var(--gold1),var(--gold2) 40%,var(--gold3));border:3px solid var(--ink);box-shadow:inset 0 2px 0 rgba(255,255,255,.7)}
+.chan i:before{content:"";border-left:8px solid var(--ink);border-top:5px solid transparent;border-bottom:5px solid transparent;margin-left:2px}
+.chan span{font-size:15px;line-height:1.3;color:#e6f6ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;text-shadow:0 3px 0 var(--ink)}
+.ctag{position:absolute;top:-16px;right:20px;padding:1px 11px 2px;border-radius:10px;font-size:14px;color:var(--gold2);border-width:4px;
+  box-shadow:inset 0 3px 0 rgba(255,255,255,.3),inset 0 -5px 0 rgba(12,16,48,.45),0 4px 0 var(--stoneEdge)}
+
+/* the attack, in the 1416 to the left of the cams */
+body:not(.vertical) #title{left:56px;right:auto;width:1360px}
+body:not(.vertical) #atk{left:186px}
+body:not(.vertical) #stats{left:226px}
+body:not(.vertical) #troops{left:56px;width:1360px;top:620px;height:330px}
+body:not(.vertical) #trIn{gap:14px;padding:24px 26px}
+
 /* ---- vertical: ?layout=vertical, for a 1080 x 1920 canvas ----
    One column: the attacker, the stars over the destruction, and the troops
    in two rows of four. */
 body.vertical #stage{width:1080px;height:1920px}
+body.vertical #bg{clip-path:none}
+body.vertical .camph,body.vertical .camshadow,body.vertical .camf,body.vertical .camhole,body.vertical .cplate{display:none}
 body.vertical #title{top:150px;font-size:62px}
 body.vertical #atk{left:60px;width:960px;top:310px;height:130px}
 body.vertical #who{max-width:700px}
@@ -171,6 +209,26 @@ body.vertical #trIn{grid-template-columns:repeat(4,1fr);gap:20px 18px;padding:28
         <div class="sv"><div class="big txt" id="time">0:00</div></div>
       </div>
     </div>
+  </div>
+
+  <!-- caster cams: stone frames around transparent windows -->
+  <div class="camph abs" id="p1">CASTER CAM</div><div class="camph abs" id="p2">CASTER CAM</div>
+  <div class="camshadow abs z" id="sh1"></div><div class="camshadow abs z" id="sh2"></div>
+  <div class="camf stone abs z" id="f1"></div><div class="camf stone abs z" id="f2"></div>
+  <div class="camhole abs z" id="h1"></div><div class="camhole abs z" id="h2"></div>
+  <div class="cplate goldwrap abs z" id="cp1">
+    <div class="cin"><div class="cinfo">
+      <div class="cname txt" id="c1Name" data-edit="c1Name">Caster One</div>
+      <div class="chan"><i></i><span id="c1Chan" data-edit="c1Chan">ChannelName</span></div>
+    </div></div>
+    <div class="ctag stone txt">CASTER</div>
+  </div>
+  <div class="cplate goldwrap abs z" id="cp2">
+    <div class="cin"><div class="cinfo">
+      <div class="cname txt" id="c2Name" data-edit="c2Name">Caster Two</div>
+      <div class="chan"><i></i><span id="c2Chan" data-edit="c2Chan">ChannelName</span></div>
+    </div></div>
+    <div class="ctag stone txt">CASTER</div>
   </div>
 
   <div id="troops" class="goldwrap abs z">
@@ -228,7 +286,7 @@ body.vertical #trIn{grid-template-columns:repeat(4,1fr);gap:20px 18px;padding:28
 
   var KEY='bl-attack-v2';
   function blankAttack(){return {stars:0,pct:'0',time:'0:00',troops:['','','','','','','','']};}
-  var state=Object.assign({side:'r',aName:'Player One',dName:'Player Two',title:'ATTACK OVERVIEW'},blankAttack());
+  var state=Object.assign({side:'r',aName:'Player One',dName:'Player Two',title:'ATTACK OVERVIEW',c1Name:'Caster One',c1Chan:'ChannelName',c2Name:'Caster Two',c2Chan:'ChannelName'},blankAttack());
   try{var saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved)Object.assign(state,saved);}catch(e){}
   ['side','aName','dName','title','pct','time'].forEach(function(k){if(params.has(k))state[k]=params.get(k);});
   if(params.has('stars'))state.stars=parseInt(params.get('stars'),10)||0;
@@ -282,7 +340,7 @@ body.vertical #trIn{grid-template-columns:repeat(4,1fr);gap:20px 18px;padding:28
   });
 
   function render(){
-    ['aName','dName','title'].forEach(function(k){$(k).textContent=state[k];});
+    ['aName','dName','title','c1Name','c1Chan','c2Name','c2Chan'].forEach(function(k){$(k).textContent=state[k];});
     $('atk').classList.toggle('r',state.side==='r');$('atk').classList.toggle('b',state.side==='b');
     $('gem').src=GEM[state.side];
     Array.prototype.forEach.call(row.children,function(im,i){
@@ -305,7 +363,7 @@ body.vertical #trIn{grid-template-columns:repeat(4,1fr);gap:20px 18px;padding:28
     fitText();
   }
   function fitText(){
-    document.querySelectorAll('#aName,#vsline,.big,#title').forEach(function(el){
+    document.querySelectorAll('#aName,#vsline,.big,#title,.cname,.chan span').forEach(function(el){
       el.style.fontSize='';
       var fs=parseFloat(getComputedStyle(el).fontSize);
       while(el.scrollWidth>el.clientWidth+1&&fs>14){fs-=1;el.style.fontSize=fs+'px';}
@@ -328,18 +386,23 @@ body.vertical #trIn{grid-template-columns:repeat(4,1fr);gap:20px 18px;padding:28
     else if(k==='h')$('help').classList.toggle('hidden');
   });
 
+  /* keep the glimmer out of the caster cams (plus a margin) */
+  var CAMS=vertical?[]:[[1460,120,1924,500],[1460,570,1924,950]];
+  function freeSpot(pad){for(var n=0;n<200;n++){var x=Math.random()*W,y=Math.random()*H,ok=true;
+      for(var c=0;c<CAMS.length;c++){var r=CAMS[c];if(x>r[0]-pad&&x<r[2]+pad&&y>r[1]-pad&&y<r[3]+pad+30){ok=false;break;}}
+      if(ok)return[x,y];}return[20,20];}
   for(var g=0;g<34;g++){var gl=document.createElement('span');gl.className='glint';gl.innerHTML='<i></i>';
     var sc=0.5+Math.random()*1.1;gl.style.width=gl.style.height=(26*sc)+'px';gl.style.margin=(-13*sc)+'px';
-    gl.style.left=(Math.random()*100)+'%';gl.style.top=(Math.random()*100)+'%';
+    var pt=freeSpot(20);gl.style.left=pt[0]+'px';gl.style.top=pt[1]+'px';
     gl.style.animationDelay=(Math.random()*4).toFixed(2)+'s';gl.style.animationDuration=(2.2+Math.random()*2.6).toFixed(2)+'s';
     stage.appendChild(gl);}
   for(var d2=0;d2<140;d2++){var du=document.createElement('span');du.className='dust';
-    du.style.left=(Math.random()*100)+'%';du.style.top=(Math.random()*100)+'%';
+    var pd=freeSpot(6);du.style.left=pd[0]+'px';du.style.top=pd[1]+'px';
     var ds=1+Math.random()*2.2;du.style.width=du.style.height=ds+'px';
     du.style.animationDelay=(Math.random()*5).toFixed(2)+'s';du.style.animationDuration=(3+Math.random()*4).toFixed(2)+'s';
     stage.appendChild(du);}
   for(var i2=0;i2<48;i2++){var sp=document.createElement('span');sp.className='spark';
-    sp.style.left=(Math.random()*98)+'%';sp.style.top=(Math.random()*96)+'%';
+    var ps=freeSpot(14);sp.style.left=ps[0]+'px';sp.style.top=ps[1]+'px';
     sp.style.animationDelay=(Math.random()*4).toFixed(2)+'s';sp.style.animationDuration=(3+Math.random()*3).toFixed(2)+'s';
     stage.appendChild(sp);}
   render();

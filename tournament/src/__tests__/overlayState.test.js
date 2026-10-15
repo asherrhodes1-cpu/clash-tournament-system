@@ -1,4 +1,4 @@
-import { blankMatch, blankPlayer, isOnSide, matchLabel, overlayStates, seriesWinner, soundLibrary, soundMatch, wins, withPlayer, withSavedMatch, withSavedPlayer, withoutMatch, withoutPlayer } from '../overlays/overlayState';
+import { blankMatch, blankPlayer, isOnSide, matchLabel, overlayStates, seriesSlots, seriesWinner, soundLibrary, ties, soundMatch, wins, withPlayer, withSavedMatch, withSavedPlayer, withoutMatch, withoutPlayer } from '../overlays/overlayState';
 
 const match = () => ({
   ...blankMatch(),
@@ -24,7 +24,7 @@ test('one match fills every overlay under the names its page uses', () => {
 });
 
 test('the attack overview names the attacker first, whichever side that is', () => {
-  expect(overlayStates(match())['attack-overview']).toEqual({ side: 'b', aName: 'J3fri', dName: 'MrSixStar', stars: 2, pct: '87.5', time: '2:41', troops: ['12', '3', '', '', '', '', '', ''] });
+  expect(overlayStates(match())['attack-overview']).toEqual({ c1Name: 'AJ', c1Chan: 'MercifulAj', c2Name: 'Sam', c2Chan: 'SamCasts', side: 'b', aName: 'J3fri', dName: 'MrSixStar', stars: 2, pct: '87.5', time: '2:41', troops: ['12', '3', '', '', '', '', '', ''] });
   const red = { ...match(), attack: { ...match().attack, side: 'r' } };
   expect(overlayStates(red)['attack-overview']).toMatchObject({ side: 'r', aName: 'MrSixStar', dName: 'J3fri' });
 });
@@ -38,6 +38,20 @@ test('a saved match with pieces missing or out of range is put right', () => {
   expect(odd.attack).toMatchObject({ side: 'r', stars: 6, troops: ['4', '', '', '', '', '', '', ''] });
   // Fewer games than were already played: the extra ones are dropped.
   expect(soundMatch({ bestOf: 1, games: ['r', 'b'] }).games).toEqual(['r']);
+});
+
+test('a tied game counts for nobody, and adds a game when the series is still level', () => {
+  const series = soundMatch({ bestOf: 3, games: ['r', 't', 'b', 'x'] });
+  expect(series.games).toEqual(['r', 't', 'b']);
+  expect([wins(series, 'r'), wins(series, 'b'), ties(series), seriesWinner(series)]).toEqual([1, 1, 1, null]);
+  // Three played and nobody through: a fourth badge, for the decider.
+  expect(seriesSlots(series)).toBe(4);
+  const decided = soundMatch({ bestOf: 3, games: ['r', 't', 'b', 'b'] });
+  expect([seriesWinner(decided), seriesSlots(decided)]).toEqual(['b', 4]);
+  // A tie on the way to a win adds nothing.
+  expect(seriesSlots(soundMatch({ bestOf: 3, games: ['r', 't', 'r'] }))).toBe(3);
+  // No more games are kept than the series length plus its ties.
+  expect(soundMatch({ bestOf: 3, games: ['r', 'b', 'r', 'b'] }).games).toEqual(['r', 'b', 'r']);
 });
 
 test('a series is won with more than half its games', () => {

@@ -138,6 +138,14 @@ body.preview{background:#05071f}
 .hidden{display:none!important}
 #help{position:absolute;left:24px;top:24px;font:16px/1.45 system-ui,sans-serif;background:rgba(5,7,31,.92);padding:12px 16px;border-radius:10px;color:#fff;max-width:540px;z-index:9}
 
+
+/* A tied game: the badge half red, half blue. */
+.pip img.half{position:absolute;inset:0}
+.pip img.half.r{clip-path:inset(0 50% 0 0)}
+.pip img.half.b{clip-path:inset(0 0 0 50%)}
+.pip.t{animation:pop .55s cubic-bezier(.3,1.6,.5,1)}
+.pip.t img{filter:drop-shadow(0 0 14px rgba(190,120,255,.65)) drop-shadow(0 4px 0 rgba(0,0,0,.6))}
+
 /* ---- vertical: ?layout=vertical, for a 1080 x 1920 canvas ----
    The two caster cams one above the other, each 880 x 495 (at 100, 228 and
    100, 896), then the matchup with the games won beneath the names, and the
@@ -316,7 +324,6 @@ body.vertical #vote{left:60px;width:960px;top:1806px}
     else state[k]=v;
   });
   state.bo=Math.max(1,Math.min(7,(state.bo|0)||3));
-  state.games=state.games.slice(0,state.bo);
   if(params.get('help')==='1')document.getElementById('help').classList.remove('hidden');
 
   function $(id){return document.getElementById(id);}
@@ -325,12 +332,14 @@ body.vertical #vote{left:60px;width:960px;top:1806px}
 
   function renderPips(){
     var box=$('pips');box.innerHTML='';
-    var n=state.bo,size=vertical?Math.min(76,Math.floor((940-(n-1)*16)/n)):Math.min(100,Math.floor((560-(n-1)*16)/n));
+    /* the series length, plus a game when ties have left it level */
+    var n=Math.max(state.bo,state.slots|0,state.games.length),size=vertical?Math.min(76,Math.floor((940-(n-1)*16)/n)):Math.min(100,Math.floor((560-(n-1)*16)/n));
     for(var i=0;i<n;i++){
       var g=state.games[i]||'';
       var d=document.createElement('div');d.className='pip '+(g||'none');
       d.style.width=d.style.height=size+'px';
       var img=document.createElement('img');img.alt='';img.src=g==='b'?GEM.b:GEM.r;d.appendChild(img);
+      if(g==='t'){img.className='half r';var other=document.createElement('img');other.alt='';other.src=GEM.b;other.className='half b';d.appendChild(other);}
       (function(i){d.addEventListener('click',function(){
         if(i>state.games.length)return;
         var cur=state.games[i]||'';
@@ -350,7 +359,7 @@ body.vertical #vote{left:60px;width:960px;top:1806px}
     $('vR').style.flexBasis=rp+'%';$('vB').style.flexBasis=bp+'%';$('vSplit').style.left=rp+'%';
     var need=Math.floor(state.bo/2)+1;
     $('sideR').classList.toggle('won',count('r')>=need);$('sideB').classList.toggle('won',count('b')>=need);
-    var key=state.bo+':'+state.games.join('');
+    var key=state.bo+':'+(state.slots|0)+':'+state.games.join('');
     if(force||key!==lastPips){lastPips=key;renderPips();}
     fitText();
   }

@@ -120,6 +120,14 @@ body.preview #phGame{display:grid}
 .hidden{display:none!important}
 #help{position:absolute;left:24px;bottom:24px;font:16px/1.45 system-ui,sans-serif;background:rgba(5,7,31,.88);padding:12px 16px;border-radius:10px;color:#fff;max-width:540px;z-index:9}
 
+
+/* A tied game: the badge half red, half blue. */
+.pip img.half{position:absolute;inset:0}
+.pip img.half.r{clip-path:inset(0 50% 0 0)}
+.pip img.half.b{clip-path:inset(0 0 0 50%)}
+.pip.t{animation:pop .55s cubic-bezier(.3,1.6,.5,1)}
+.pip.t img{filter:drop-shadow(0 0 14px rgba(190,120,255,.65)) drop-shadow(0 4px 0 rgba(0,0,0,.6))}
+
 /* ---- vertical: ?layout=vertical, for a 1080 x 1920 canvas ----
    The game capture runs the full width from 124 down to 1147. Above it, a
    bar with the event. Below it, where it is seen best: the games won, then
@@ -306,7 +314,6 @@ body.vertical #vbar .side b{font-size:28px}
     else state[k]=v;
   });
   state.bo=Math.max(1,Math.min(7,(state.bo|0)||3));
-  state.games=state.games.slice(0,state.bo);
   if(params.get('help')==='1')document.getElementById('help').classList.remove('hidden');
 
   function $(id){return document.getElementById(id);}
@@ -315,12 +322,14 @@ body.vertical #vbar .side b{font-size:28px}
 
   function renderPips(){
     var box=$('pips');box.innerHTML='';
-    var n=state.bo,size=vertical?Math.min(92,Math.floor((1000-(n-1)*14)/n)):Math.min(84,Math.floor((420-(n-1)*10)/n));
+    /* the series length, plus a game when ties have left it level */
+    var n=Math.max(state.bo,state.slots|0,state.games.length),size=vertical?Math.min(92,Math.floor((1000-(n-1)*14)/n)):Math.min(84,Math.floor((420-(n-1)*10)/n));
     for(var i=0;i<n;i++){
       var g=state.games[i]||'';
       var d=document.createElement('div');d.className='pip '+(g||'none');
       d.style.width=d.style.height=size+'px';
       var img=document.createElement('img');img.alt='';img.src=g==='b'?GEM.b:GEM.r;d.appendChild(img);
+      if(g==='t'){img.className='half r';var other=document.createElement('img');other.alt='';other.src=GEM.b;other.className='half b';d.appendChild(other);}
       var lab=document.createElement('span');lab.className='g';lab.textContent='G'+(i+1);d.appendChild(lab);
       (function(i){d.addEventListener('click',function(){
         if(i>state.games.length)return;            /* games fill in order */
@@ -348,7 +357,7 @@ body.vertical #vbar .side b{font-size:28px}
     var rw=count('r'),bw=count('b'),need=Math.floor(state.bo/2)+1;
     ['banR','cardR'].forEach(function(id){$(id).classList.toggle('won',rw>=need);});
     ['banB','cardB'].forEach(function(id){$(id).classList.toggle('won',bw>=need);});
-    var key=state.bo+':'+state.games.join('');
+    var key=state.bo+':'+(state.slots|0)+':'+state.games.join('');
     if(force||key!==lastPips){lastPips=key;renderPips();}
   }
   function addGame(side){if(state.games.length<state.bo){state.games.push(side);render();save();}}
